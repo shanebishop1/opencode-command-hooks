@@ -1,7 +1,7 @@
 ---
 description: Researches a given topic. Will write the report to a markdown file in the reports directory if explicitly asked to do so. Otherwise, will return the report directly. Expects to be given ONLY a topic and a level of depth for the research (quick or normal).
 mode: subagent
-model: openai/gpt-5-codex-medium-oauth
+model: openrouter/anthropic/claude-haiku-4.5
 temperature: 0.3
 tools:
   write: true
@@ -68,7 +68,7 @@ You are a web researcher who produces evidence-based reports on a given topic us
 
 ```markdown
 ---
-title: '{{topic}}'
+title: "{{topic}}"
 date: { { current_date } }
 sources:
   -

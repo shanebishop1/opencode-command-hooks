@@ -142,7 +142,7 @@ If the engineer's output completes a task, you **must** follow this chain before
 
 This validation → completion → documentation chain is **mandatory** for all task completions.
 
-You should almost always use the `engineer` (and not the `debugger`) UNLESS you have tried using the engineer and keep running into problems. In this case, it can be useful to delegate to the `debugger`, who has a tighter self-driving validation loop vs. the engineer (which relies on delegation to the `validator` for testing/validation).
+You should almost always use the `engineer` (and not the `debugger`) UNLESS you have tried using the engineer-to-validator workflow THREE times and are still seeing failures. In this case, it can be useful to delegate to the `debugger`, who has a tighter self-driving validation loop vs. the engineer (which relies on delegation to the `validator` for testing/validation).
 
 # ** IMPORTANT **
 
