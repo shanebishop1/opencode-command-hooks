@@ -1,0 +1,66 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tools": {
+    "context7_*": false,
+    "brave_*": false,
+    "playwright_*": false,
+    "firecrawl_*": false,
+    "tracker_*": false,
+    "think_*": false,
+    "skills_*": false
+  },
+  "mcp": {
+    "context7": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@upstash/context7-mcp",
+        "--api-key",
+        "{env:CTX7_API_KEY}"
+      ],
+      "enabled": true
+    },
+    "brave": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-brave-search"],
+      "environment": {
+        "BRAVE_API_KEY": "{env:BRAVE_API_KEY}"
+      }
+    },
+    "playwright": {
+      "type": "local",
+      "command": [
+        "npx",
+        "@playwright/mcp@latest",
+        "--browser",
+        "chrome",
+        "--user-data-dir",
+        "__TEMP_PROFILE__",
+        "--isolated",
+        "--headless",
+        "--output-dir",
+        "./mcp-artifacts"
+      ]
+    },
+    "firecrawl": {
+      "type": "local",
+      "command": ["node", "{env:HOME}/.dotfiles/mcpo/firecrawl-wrapper.js"],
+      "environment": {
+        "FIRECRAWL_API_URL": "http://localhost:3002",
+        "FIRECRAWL_API_KEY": "{env:FIRECRAWL_API_KEY}"
+      }
+    },
+    "think": {
+      "type": "local",
+      "command": ["npx", "-y", "mcp-sequentialthinking-tools"],
+      "environment": {
+        "MAX_HISTORY_SIZE": "1000"
+      }
+    },
+    "tracker": {
+      "type": "local",
+      "command": ["npx", "-y", "mcp-tasks"]
+    }
+  }
+}
