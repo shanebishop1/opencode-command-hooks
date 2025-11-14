@@ -132,7 +132,7 @@ Instructions...
 - [ ] Session hook execution
 - [ ] Hook result injection into sessions
 - [x] Error handling and reporting
-- [ ] Deduplication of repeated events
+- [x] Deduplication of repeated events
 - [x] Debug logging support
 
 ## License
