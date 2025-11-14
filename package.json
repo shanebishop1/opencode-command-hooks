@@ -37,10 +37,12 @@
   "license": "MIT",
   "dependencies": {
     "@opencode-ai/plugin": "^1.0.0",
-    "@opencode-ai/sdk": "^1.0.65"
+    "@opencode-ai/sdk": "^1.0.65",
+    "js-yaml": "^4.1.0"
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "@types/js-yaml": "^4.0.5",
     "typescript": "5.8.2"
   },
   "engines": {
