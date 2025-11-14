@@ -1,0 +1,49 @@
+{
+  "name": "opencode-command-hooks",
+  "version": "0.1.0",
+  "description": "OpenCode plugin for declaratively attaching shell commands to agent/tool/slash-command lifecycle events",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "types"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "bun test",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "typecheck:bun": "bun --bun tsc --noEmit",
+    "typecheck:bun-build": "bun build src/index.ts --target=bun",
+    "typecheck:bun-run": "bun run src/index.ts",
+    "dev": "tsc --watch"
+  },
+  "keywords": [
+    "opencode",
+    "plugin",
+    "hooks",
+    "shell",
+    "commands",
+    "lifecycle"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@opencode-ai/plugin": "^1.0.0",
+    "@opencode-ai/sdk": "^1.0.65"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "5.8.2"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  }
+}
