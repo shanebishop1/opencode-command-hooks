@@ -5,7 +5,7 @@ An OpenCode plugin that allows users to declaratively attach shell commands to a
 ## Overview
 
 This plugin enables users to define hooks via:
-- Global configuration in `.opencode/command_hooks.jsonc`
+- Global configuration in `.opencode/command-hooks.jsonc`
 - Per-agent YAML frontmatter in agent markdown
 - Per-slash-command YAML frontmatter in command markdown
 
@@ -54,9 +54,9 @@ bun run dev
 
 ## Configuration
 
-### Global Configuration (.opencode/command_hooks.jsonc)
+### Global Configuration (.opencode/command-hooks.jsonc)
 
-Create a `.opencode/command_hooks.jsonc` file in your project root:
+Create a `.opencode/command-hooks.jsonc` file in your project root:
 
 ```jsonc
 {

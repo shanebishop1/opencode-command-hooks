@@ -32,9 +32,9 @@ describe("loadGlobalConfig", () => {
     expect(config).toEqual({ tool: [], session: [] })
   })
 
-  it("loads .opencode/command_hooks.jsonc", async () => {
-    const opencodeDirPath = join(testDir, ".opencode")
-    const configPath = join(opencodeDirPath, "command_hooks.jsonc")
+   it("loads .opencode/command-hooks.jsonc", async () => {
+     const opencodeDirPath = join(testDir, ".opencode")
+     const configPath = join(opencodeDirPath, "command-hooks.jsonc")
     const content = `
 {
   // This is a comment
@@ -64,9 +64,9 @@ describe("loadGlobalConfig", () => {
     unlinkSync(configPath)
   })
 
-  it("loads .opencode/command_hooks.jsonc with session hooks", async () => {
-    const opencodeDirPath = join(testDir, ".opencode")
-    const configPath = join(opencodeDirPath, "command_hooks.jsonc")
+   it("loads .opencode/command-hooks.jsonc with session hooks", async () => {
+     const opencodeDirPath = join(testDir, ".opencode")
+     const configPath = join(opencodeDirPath, "command-hooks.jsonc")
     const content = JSON.stringify({
       tool: [],
       session: [
@@ -93,9 +93,9 @@ describe("loadGlobalConfig", () => {
     unlinkSync(configPath)
   })
 
-  it("handles malformed JSON gracefully", async () => {
-    const opencodeDirPath = join(testDir, ".opencode")
-    const configPath = join(opencodeDirPath, "command_hooks.jsonc")
+   it("handles malformed JSON gracefully", async () => {
+     const opencodeDirPath = join(testDir, ".opencode")
+     const configPath = join(opencodeDirPath, "command-hooks.jsonc")
     try {
       mkdirSync(opencodeDirPath, { recursive: true })
     } catch {
@@ -110,9 +110,9 @@ describe("loadGlobalConfig", () => {
     unlinkSync(configPath)
   })
 
-  it("handles invalid CommandHooksConfig structure", async () => {
-    const opencodeDirPath = join(testDir, ".opencode")
-    const configPath = join(opencodeDirPath, "command_hooks.jsonc")
+   it("handles invalid CommandHooksConfig structure", async () => {
+     const opencodeDirPath = join(testDir, ".opencode")
+     const configPath = join(opencodeDirPath, "command-hooks.jsonc")
     try {
       mkdirSync(opencodeDirPath, { recursive: true })
     } catch {
@@ -127,9 +127,9 @@ describe("loadGlobalConfig", () => {
     unlinkSync(configPath)
   })
 
-  it("handles block comments in JSONC", async () => {
-    const opencodeDirPath = join(testDir, ".opencode")
-    const configPath = join(opencodeDirPath, "command_hooks.jsonc")
+   it("handles block comments in JSONC", async () => {
+     const opencodeDirPath = join(testDir, ".opencode")
+     const configPath = join(opencodeDirPath, "command-hooks.jsonc")
     const content = `
 {
   /* This is a block comment
@@ -158,12 +158,12 @@ describe("loadGlobalConfig", () => {
     unlinkSync(configPath)
   })
 
-  it("walks up directory tree to find config", async () => {
-    const subDir = join(testDir, "subdir", "nested")
-    mkdirSync(subDir, { recursive: true })
+   it("walks up directory tree to find config", async () => {
+     const subDir = join(testDir, "subdir", "nested")
+     mkdirSync(subDir, { recursive: true })
 
-    const opencodeDirPath = join(testDir, ".opencode")
-    const configPath = join(opencodeDirPath, "command_hooks.jsonc")
+     const opencodeDirPath = join(testDir, ".opencode")
+     const configPath = join(opencodeDirPath, "command-hooks.jsonc")
     try {
       mkdirSync(opencodeDirPath, { recursive: true })
     } catch {

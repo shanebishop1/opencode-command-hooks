@@ -1,7 +1,7 @@
 /**
- * Global configuration parser for loading hooks from .opencode/command_hooks.jsonc
+ * Global configuration parser for loading hooks from .opencode/command-hooks.jsonc
  *
- * Searches for .opencode/command_hooks.jsonc starting from the current working
+ * Searches for .opencode/command-hooks.jsonc starting from the current working
  * directory and walking up the directory tree. Parses JSONC format as CommandHooksConfig.
  */
 
@@ -98,18 +98,18 @@ function isValidCommandHooksConfig(
 
 /**
  * Find command hooks config file by walking up directory tree
- * Looks for .opencode/command_hooks.jsonc
+ * Looks for .opencode/command-hooks.jsonc
  */
 async function findConfigFile(startDir: string): Promise<string | null> {
-  let currentDir = startDir;
+   let currentDir = startDir;
 
-  // Limit search depth to avoid infinite loops
-  const maxDepth = 20;
-  let depth = 0;
+   // Limit search depth to avoid infinite loops
+   const maxDepth = 20;
+   let depth = 0;
 
-  while (depth < maxDepth) {
-    // Try .opencode/command_hooks.jsonc
-    const configPath = join(currentDir, ".opencode", "command_hooks.jsonc");
+   while (depth < maxDepth) {
+     // Try .opencode/command-hooks.jsonc
+     const configPath = join(currentDir, ".opencode", "command-hooks.jsonc");
     try {
       const file = Bun.file(configPath);
       if (await file.exists()) {
@@ -145,7 +145,7 @@ async function findConfigFile(startDir: string): Promise<string | null> {
 /**
  * Load and parse global command hooks configuration
  *
- * Searches for .opencode/command_hooks.jsonc starting from the current working
+ * Searches for .opencode/command-hooks.jsonc starting from the current working
  * directory and walking up. Parses the entire file as CommandHooksConfig.
  *
  * Error handling:
@@ -161,14 +161,14 @@ export async function loadGlobalConfig(): Promise<CommandHooksConfig> {
     // Find config file
     const configPath = await findConfigFile(process.cwd());
 
-    if (!configPath) {
-      if (DEBUG) {
-        console.log(
-          `${LOG_PREFIX} No .opencode/command_hooks.jsonc file found, using empty config`,
-        );
-      }
-      return { tool: [], session: [] };
-    }
+     if (!configPath) {
+       if (DEBUG) {
+         console.log(
+           `${LOG_PREFIX} No .opencode/command-hooks.jsonc file found, using empty config`,
+         );
+       }
+       return { tool: [], session: [] };
+     }
 
     // Read file
     let content: string;
