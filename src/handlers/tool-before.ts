@@ -17,18 +17,18 @@
  */
 
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import type { ToolHook, TemplateContext } from "../types/hooks"
-import { loadGlobalConfig } from "../config/global"
-import { mergeConfigs } from "../config/merge"
-import { validateConfig } from "../config/validate"
-import { matchToolHooks } from "../matching/matcher"
-import { executeCommands } from "../execution/shell"
-import { interpolateTemplate } from "../execution/template"
+import type { ToolHook, TemplateContext } from "../types/hooks.js"
+import { loadGlobalConfig } from "../config/global.js"
+import { mergeConfigs } from "../config/merge.js"
+import { validateConfig } from "../config/validate.js"
+import { matchToolHooks } from "../matching/matcher.js"
+import { executeCommands } from "../execution/shell.js"
+import { interpolateTemplate } from "../execution/template.js"
 import {
   generateToolEventId,
   hasProcessedEvent,
   markEventProcessed,
-} from "../execution/dedup"
+} from "../execution/dedup.js"
 
 const LOG_PREFIX = "[opencode-command-hooks]"
 const DEBUG = process.env.OPENCODE_HOOKS_DEBUG === "1"

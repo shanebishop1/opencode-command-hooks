@@ -5,7 +5,7 @@
  * directory and walking up the directory tree. Parses JSONC format as CommandHooksConfig.
  */
 
-import type { CommandHooksConfig } from "../types/hooks";
+import type { CommandHooksConfig } from "../types/hooks.js";
 import { join, dirname } from "path";
 
 const LOG_PREFIX = "[opencode-command-hooks]";

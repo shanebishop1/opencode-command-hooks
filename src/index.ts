@@ -1,15 +1,15 @@
 import type { Plugin } from "@opencode-ai/plugin"
-import type { OpencodeClient } from "@opencode-ai/sdk"
-import { handleToolExecuteBefore } from "./handlers/tool-before"
-import { handleToolExecuteAfter } from "./handlers/tool-after"
-import { handleSessionStart } from "./handlers/session-start"
-import { handleSessionIdle } from "./handlers/session-idle"
+import type { Config, OpencodeClient } from "@opencode-ai/sdk"
+import { handleToolExecuteBefore } from "./handlers/tool-before.js"
+import { handleToolExecuteAfter } from "./handlers/tool-after.js"
+import { handleSessionStart } from "./handlers/session-start.js"
+import { handleSessionIdle } from "./handlers/session-idle.js"
 
 // Export handlers for testing and external use
-export { handleToolExecuteBefore } from "./handlers/tool-before"
-export { handleToolExecuteAfter } from "./handlers/tool-after"
-export { handleSessionStart } from "./handlers/session-start"
-export { handleSessionIdle } from "./handlers/session-idle"
+export { handleToolExecuteBefore } from "./handlers/tool-before.js"
+export { handleToolExecuteAfter } from "./handlers/tool-after.js"
+export { handleSessionStart } from "./handlers/session-start.js"
+export { handleSessionIdle } from "./handlers/session-idle.js"
 
 const LOG_PREFIX = "[opencode-command-hooks]"
 const DEBUG = process.env.OPENCODE_HOOKS_DEBUG === "1"
@@ -26,10 +26,26 @@ const DEBUG = process.env.OPENCODE_HOOKS_DEBUG === "1"
  * - Configuration via global config or per-agent/command markdown
  * - Non-blocking error semantics
  */
-export const CommandHooksPlugin: Plugin = async ({ client }) => {
-  console.log(`${LOG_PREFIX} Initializing plugin`)
+const plugin: Plugin = async ({ client }) => {
+  try {
+    console.log(`${LOG_PREFIX} Initializing plugin`)
 
-  return {
+    const hooks = {
+    /**
+     * Config hook for plugin initialization
+     * Called by OpenCode during plugin initialization to provide configuration.
+     * We don't need to do anything with this config as we load our configuration
+     * from .opencode/command-hooks.jsonc, but we need to implement this hook
+     * to prevent OpenCode from throwing an error when it tries to call it.
+     */
+    config: async (_input: Config) => {
+      if (DEBUG) {
+        console.log(`${LOG_PREFIX} Config hook called`)
+      }
+      // No-op for now - we load config from .opencode/command-hooks.jsonc
+      // This hook is called by OpenCode during plugin initialization
+    },
+
     /**
      * Event hook for session lifecycle events
      * Supports: session.start, session.idle, session.end
@@ -78,47 +94,44 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
      * Tool execution hooks
      * Supports: tool.execute.before, tool.execute.after
      */
-    "tool.execute.before": async (input: unknown, output: unknown) => {
-      // Extract event information from input and output
-      // The event structure is based on OpenCode plugin hook conventions
-      const inputRecord = input as Record<string, unknown>
-      const outputRecord = output as Record<string, unknown>
-
+    "tool.execute.before": async (input: { tool: string; sessionID: string; callID: string }, output: { args: any }) => {
       const event = {
-        tool: String(inputRecord?.tool || "unknown"),
-        input: (inputRecord?.input as Record<string, unknown>) || {},
-        output: outputRecord,
-        sessionId: outputRecord?.sessionId as string | undefined,
-        callingAgent: outputRecord?.callingAgent as string | undefined,
-        slashCommand: outputRecord?.slashCommand as string | undefined,
-        callId: outputRecord?.callId as string | undefined,
+        tool: input.tool,
+        input: output.args || {},
+        output: output,
+        sessionId: input.sessionID,
+        callingAgent: undefined, // Not provided by OpenCode
+        slashCommand: undefined, // Not provided by OpenCode
+        callId: input.callID,
       }
 
       // Call the handler with the extracted event and client
       await handleToolExecuteBefore(event, client as OpencodeClient)
     },
 
-    "tool.execute.after": async (input: unknown, output: unknown) => {
-      // Extract event information from input and output
-      // The event structure is based on OpenCode plugin hook conventions
-      const inputRecord = input as Record<string, unknown>
-      const outputRecord = output as Record<string, unknown>
-
+    "tool.execute.after": async (input: { tool: string; sessionID: string; callID: string }, output: { title: string; output: string; metadata: any }) => {
       const event = {
-        tool: String(inputRecord?.tool || "unknown"),
-        input: (inputRecord?.input as Record<string, unknown>) || {},
-        output: outputRecord,
-        result: outputRecord?.result,
-        sessionId: outputRecord?.sessionId as string | undefined,
-        callingAgent: outputRecord?.callingAgent as string | undefined,
-        slashCommand: outputRecord?.slashCommand as string | undefined,
-        callId: outputRecord?.callId as string | undefined,
+        tool: input.tool,
+        input: {}, // Not provided by OpenCode for after hooks
+        output: output,
+        result: output.output,
+        sessionId: input.sessionID,
+        callingAgent: undefined, // Not provided by OpenCode
+        slashCommand: undefined, // Not provided by OpenCode
+        callId: input.callID,
       }
 
       // Call the handler with the extracted event and client
       await handleToolExecuteAfter(event, client as OpencodeClient)
     },
   }
+
+    console.log(`${LOG_PREFIX} Plugin returning hooks:`, Object.keys(hooks))
+    return hooks
+  } catch (error) {
+    console.error(`${LOG_PREFIX} Error in plugin initialization:`, error)
+    throw error
+  }
 }
 
-export default CommandHooksPlugin
+export default plugin

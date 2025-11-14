@@ -15,7 +15,7 @@ import type {
   SessionHookWhen,
   NormalizedToolHookWhen,
   NormalizedSessionHookWhen,
-} from "../types/hooks"
+} from "../types/hooks.js"
 
 const LOG_PREFIX = "[opencode-command-hooks]"
 const DEBUG = process.env.OPENCODE_HOOKS_DEBUG === "1"

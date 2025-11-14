@@ -6,7 +6,7 @@
  * markdown files (typically in .opencode/commands/).
  */
 
-import type { CommandHooksConfig } from "../types/hooks";
+import type { CommandHooksConfig } from "../types/hooks.js";
 import { load as parseYaml } from "js-yaml";
 
 const LOG_PREFIX = "[opencode-command-hooks]";

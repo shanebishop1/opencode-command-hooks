@@ -15,7 +15,7 @@
  * - {exitCode} - command exit code (if available)
  */
 
-import type { TemplateContext } from "../types/hooks"
+import type { TemplateContext } from "../types/hooks.js"
 
 const LOG_PREFIX = "[opencode-command-hooks]"
 

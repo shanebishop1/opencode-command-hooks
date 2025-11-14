@@ -12,8 +12,11 @@
  * - Support debug logging via OPENCODE_HOOKS_DEBUG
  */
 
-import { $ } from "bun"
-import type { HookExecutionResult } from "../types/hooks"
+import type { HookExecutionResult } from "../types/hooks.js"
+import { exec } from "child_process"
+import { promisify } from "util"
+
+const execAsync = promisify(exec)
 
 const LOG_PREFIX = "[opencode-command-hooks]"
 const DEFAULT_TRUNCATE_LIMIT = 4000
@@ -181,20 +184,50 @@ export async function executeCommands(
 async function executeShellCommand(
   command: string
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  // Use Bun's $ template literal to execute the command
-  // The nothrow() method prevents throwing on non-zero exit codes
-  // The quiet() method suppresses output and returns Buffers
-  const result = await $`sh -c ${command}`.nothrow().quiet()
+  // Check if we're running in Bun and Bun shell is available
+  const isBun = typeof Bun !== "undefined"
 
-  // Extract stdout and stderr as text
-  // result.stdout and result.stderr are Buffers, convert to string
-  const stdout = result.stdout instanceof Buffer ? result.stdout.toString() : String(result.stdout)
-  const stderr = result.stderr instanceof Buffer ? result.stderr.toString() : String(result.stderr)
-  const exitCode = result.exitCode ?? 0
+  if (isBun) {
+    try {
+      // Use Bun's $ template literal to execute the command
+      // The nothrow() method prevents throwing on non-zero exit codes
+      // The quiet() method suppresses output and returns Buffers
+      const result = await Bun.$`sh -c ${command}`.nothrow().quiet()
 
-  return {
-    stdout,
-    stderr,
-    exitCode,
+      // Extract stdout and stderr as text
+      // result.stdout and result.stderr are Buffers, convert to string
+      const stdout = result.stdout instanceof Buffer ? result.stdout.toString() : String(result.stdout)
+      const stderr = result.stderr instanceof Buffer ? result.stderr.toString() : String(result.stderr)
+      const exitCode = result.exitCode ?? 0
+
+      return {
+        stdout,
+        stderr,
+        exitCode,
+      }
+    } catch {
+      // Fall back to Node.js if Bun shell fails
+    }
+  }
+
+  // Fallback to Node.js child_process
+  try {
+    const { stdout, stderr } = await execAsync(command)
+    return {
+      stdout: stdout || "",
+      stderr: stderr || "",
+      exitCode: 0,
+    }
+  } catch (error: any) {
+    // execAsync throws on non-zero exit codes
+    const stdout = error.stdout || ""
+    const stderr = error.stderr || ""
+    const exitCode = error.code || 1
+
+    return {
+      stdout,
+      stderr,
+      exitCode,
+    }
   }
 }

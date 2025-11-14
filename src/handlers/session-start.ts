@@ -17,18 +17,18 @@
  */
 
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import type { SessionHook, TemplateContext } from "../types/hooks"
-import { loadGlobalConfig } from "../config/global"
-import { mergeConfigs } from "../config/merge"
-import { validateConfig } from "../config/validate"
-import { matchSessionHooks } from "../matching/matcher"
-import { executeCommands } from "../execution/shell"
-import { interpolateTemplate } from "../execution/template"
+import type { SessionHook, TemplateContext } from "../types/hooks.js"
+import { loadGlobalConfig } from "../config/global.js"
+import { mergeConfigs } from "../config/merge.js"
+import { validateConfig } from "../config/validate.js"
+import { matchSessionHooks } from "../matching/matcher.js"
+import { executeCommands } from "../execution/shell.js"
+import { interpolateTemplate } from "../execution/template.js"
 import {
   generateSessionEventId,
   hasProcessedEvent,
   markEventProcessed,
-} from "../execution/dedup"
+} from "../execution/dedup.js"
 
 const LOG_PREFIX = "[opencode-command-hooks]"
 const DEBUG = process.env.OPENCODE_HOOKS_DEBUG === "1"
