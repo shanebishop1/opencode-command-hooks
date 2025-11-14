@@ -5,7 +5,7 @@ An OpenCode plugin that allows users to declaratively attach shell commands to a
 ## Overview
 
 This plugin enables users to define hooks via:
-- Global configuration in `opencode.json` / `.opencode.jsonc`
+- Global configuration in `.opencode/command_hooks.jsonc`
 - Per-agent YAML frontmatter in agent markdown
 - Per-slash-command YAML frontmatter in command markdown
 
@@ -54,42 +54,42 @@ bun run dev
 
 ## Configuration
 
-### Global Configuration (opencode.json)
+### Global Configuration (.opencode/command_hooks.jsonc)
+
+Create a `.opencode/command_hooks.jsonc` file in your project root:
 
 ```jsonc
 {
-  "command_hooks": {
-    "tool": [
-      {
-        "id": "tests-after-task",
-        "when": {
-          "phase": "after",
-          "tool": ["task"],
-          "callingAgent": ["*"]
-        },
-        "run": ["pnpm test --runInBand"],
-        "inject": {
-          "target": "callingSession",
-          "as": "user",
-          "template": "Tests after {tool}: exit {exitCode}\n```sh\n{stdout}\n```"
-        }
+  "tool": [
+    {
+      "id": "tests-after-task",
+      "when": {
+        "phase": "after",
+        "tool": ["task"],
+        "callingAgent": ["*"]
+      },
+      "run": ["pnpm test --runInBand"],
+      "inject": {
+        "target": "callingSession",
+        "as": "user",
+        "template": "Tests after {tool}: exit {exitCode}\n```sh\n{stdout}\n```"
       }
-    ],
-    "session": [
-      {
-        "id": "bootstrap",
-        "when": {
-          "event": "session.start",
-          "agent": ["*"]
-        },
-        "run": ["git status --short"],
-        "inject": {
-          "as": "system",
-          "template": "Repo status:\n```sh\n{stdout}\n```"
-        }
+    }
+  ],
+  "session": [
+    {
+      "id": "bootstrap",
+      "when": {
+        "event": "session.start",
+        "agent": ["*"]
+      },
+      "run": ["git status --short"],
+      "inject": {
+        "as": "system",
+        "template": "Repo status:\n```sh\n{stdout}\n```"
       }
-    ]
-  }
+    }
+  ]
 }
 ```
 

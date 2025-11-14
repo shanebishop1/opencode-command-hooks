@@ -1,9 +1,8 @@
 /**
- * Global configuration parser for loading hooks from opencode.json/.opencode.jsonc
+ * Global configuration parser for loading hooks from .opencode/command_hooks.jsonc
  *
- * Searches for opencode.jsonc or opencode.json starting from the current working
- * directory and walking up the directory tree. Parses JSONC format and extracts
- * command_hooks configuration.
+ * Searches for .opencode/command_hooks.jsonc starting from the current working
+ * directory and walking up the directory tree. Parses JSONC format as CommandHooksConfig.
  */
 
 import type { CommandHooksConfig } from "../types/hooks";
@@ -98,8 +97,8 @@ function isValidCommandHooksConfig(
 }
 
 /**
- * Find opencode config file by walking up directory tree
- * Looks for opencode.jsonc first, then opencode.json
+ * Find command hooks config file by walking up directory tree
+ * Looks for .opencode/command_hooks.jsonc
  */
 async function findConfigFile(startDir: string): Promise<string | null> {
   let currentDir = startDir;
@@ -109,29 +108,15 @@ async function findConfigFile(startDir: string): Promise<string | null> {
   let depth = 0;
 
   while (depth < maxDepth) {
-    // Try opencode.jsonc first
-    const jsoncPath = join(currentDir, "opencode.jsonc");
+    // Try .opencode/command_hooks.jsonc
+    const configPath = join(currentDir, ".opencode", "command_hooks.jsonc");
     try {
-      const file = Bun.file(jsoncPath);
+      const file = Bun.file(configPath);
       if (await file.exists()) {
         if (DEBUG) {
-          console.log(`${LOG_PREFIX} Found config file: ${jsoncPath}`);
+          console.log(`${LOG_PREFIX} Found config file: ${configPath}`);
         }
-        return jsoncPath;
-      }
-    } catch {
-      // Continue searching
-    }
-
-    // Try opencode.json
-    const jsonPath = join(currentDir, "opencode.json");
-    try {
-      const file = Bun.file(jsonPath);
-      if (await file.exists()) {
-        if (DEBUG) {
-          console.log(`${LOG_PREFIX} Found config file: ${jsonPath}`);
-        }
-        return jsonPath;
+        return configPath;
       }
     } catch {
       // Continue searching
@@ -160,13 +145,13 @@ async function findConfigFile(startDir: string): Promise<string | null> {
 /**
  * Load and parse global command hooks configuration
  *
- * Searches for opencode.jsonc or opencode.json starting from the current working
- * directory and walking up. Extracts the command_hooks configuration.
+ * Searches for .opencode/command_hooks.jsonc starting from the current working
+ * directory and walking up. Parses the entire file as CommandHooksConfig.
  *
  * Error handling:
  * - If no config file found: returns empty config (not an error)
  * - If config file is malformed: logs warning, returns empty config
- * - If command_hooks is not an object: logs warning, returns empty config
+ * - If file is not a valid CommandHooksConfig: logs warning, returns empty config
  * - Never throws errors - always returns a valid config
  *
  * @returns Promise resolving to CommandHooksConfig (may be empty)
@@ -179,7 +164,7 @@ export async function loadGlobalConfig(): Promise<CommandHooksConfig> {
     if (!configPath) {
       if (DEBUG) {
         console.log(
-          `${LOG_PREFIX} No opencode config file found, using empty config`,
+          `${LOG_PREFIX} No .opencode/command_hooks.jsonc file found, using empty config`,
         );
       }
       return { tool: [], session: [] };
@@ -211,40 +196,18 @@ export async function loadGlobalConfig(): Promise<CommandHooksConfig> {
       return { tool: [], session: [] };
     }
 
-    // Extract command_hooks
-    if (typeof parsed !== "object" || parsed === null) {
-      if (DEBUG) {
-        console.log(
-          `${LOG_PREFIX} Config file is not an object, using empty config`,
-        );
-      }
-      return { tool: [], session: [] };
-    }
-
-    const config = parsed as Record<string, unknown>;
-    const commandHooks = config.command_hooks;
-
-    if (commandHooks === undefined) {
-      if (DEBUG) {
-        console.log(
-          `${LOG_PREFIX} No command_hooks field in config, using empty config`,
-        );
-      }
-      return { tool: [], session: [] };
-    }
-
-    // Validate command_hooks structure
-    if (!isValidCommandHooksConfig(commandHooks)) {
+    // Validate entire file as CommandHooksConfig
+    if (!isValidCommandHooksConfig(parsed)) {
       console.warn(
-        `${LOG_PREFIX} command_hooks field is not a valid object (expected { tool?: [], session?: [] }), using empty config`,
+        `${LOG_PREFIX} Config file is not a valid CommandHooksConfig (expected { tool?: [], session?: [] }), using empty config`,
       );
       return { tool: [], session: [] };
     }
 
     // Return with defaults for missing arrays
     const result: CommandHooksConfig = {
-      tool: commandHooks.tool ?? [],
-      session: commandHooks.session ?? [],
+      tool: parsed.tool ?? [],
+      session: parsed.session ?? [],
     };
 
     if (DEBUG) {

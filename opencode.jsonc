@@ -62,33 +62,5 @@
       "type": "local",
       "command": ["npx", "-y", "mcp-tasks"]
     }
-  },
-  "command_hooks": {
-    "tool": [
-      {
-        "id": "test-before-task",
-        "when": {
-          "phase": "before",
-          "tool": ["task"]
-        },
-        "run": ["echo 'Hook: Before task execution'"],
-        "inject": {
-          "as": "system",
-          "template": "🪝 Before hook executed:\n```\n{stdout}\n```"
-        }
-      },
-      {
-        "id": "test-after-task",
-        "when": {
-          "phase": "after",
-          "tool": ["task"]
-        },
-        "run": ["echo 'Hook: After task execution'"],
-        "inject": {
-          "as": "system",
-          "template": "🪝 After hook executed:\n```\n{stdout}\n```"
-        }
-      }
-    ]
   }
 }

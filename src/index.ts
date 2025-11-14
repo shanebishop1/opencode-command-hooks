@@ -2,12 +2,15 @@ import type { Plugin } from "@opencode-ai/plugin"
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import { handleToolExecuteBefore } from "./handlers/tool-before"
 import { handleToolExecuteAfter } from "./handlers/tool-after"
+import { handleSessionStart } from "./handlers/session-start"
 
 // Export handlers for testing and external use
 export { handleToolExecuteBefore } from "./handlers/tool-before"
 export { handleToolExecuteAfter } from "./handlers/tool-after"
+export { handleSessionStart } from "./handlers/session-start"
 
 const LOG_PREFIX = "[opencode-command-hooks]"
+const DEBUG = process.env.OPENCODE_HOOKS_DEBUG === "1"
 
 /**
  * OpenCode Command Hooks Plugin
@@ -28,10 +31,28 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
     /**
      * Event hook for session lifecycle events
      * Supports: session.start, session.idle, session.end
+     *
+     * Note: The Plugin type from @opencode-ai/plugin may not include session.start
+     * in its event type union, but it is documented as a supported event in the
+     * OpenCode SDK. We use a type assertion to allow this event type.
      */
-    event: async () => {
-      // Placeholder for session event hook implementation
-      // Will be implemented in subsequent tasks
+    event: async ({ event }: { event: { type: string; properties?: Record<string, unknown> } }) => {
+      // Handle session.start event
+      if (event.type === "session.start") {
+        if (DEBUG) {
+          console.log(`${LOG_PREFIX} Received session.start event`)
+        }
+
+        // Extract event data from properties
+        const sessionStartEvent = {
+          sessionId: event.properties?.sessionID as string | undefined,
+          agent: event.properties?.agent as string | undefined,
+          properties: event.properties,
+        }
+
+        // Call the handler with the extracted event and client
+        await handleSessionStart(sessionStartEvent, client as OpencodeClient)
+      }
     },
 
     /**

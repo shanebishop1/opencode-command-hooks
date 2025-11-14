@@ -32,23 +32,27 @@ describe("loadGlobalConfig", () => {
     expect(config).toEqual({ tool: [], session: [] })
   })
 
-  it("loads opencode.jsonc with command_hooks", async () => {
-    const configPath = join(testDir, "opencode.jsonc")
+  it("loads .opencode/command_hooks.jsonc", async () => {
+    const opencodeDirPath = join(testDir, ".opencode")
+    const configPath = join(opencodeDirPath, "command_hooks.jsonc")
     const content = `
 {
   // This is a comment
-  "command_hooks": {
-    "tool": [
-      {
-        "id": "test-hook",
-        "when": { "phase": "after", "tool": ["task"] },
-        "run": "echo test"
-      }
-    ],
-    "session": []
-  }
+  "tool": [
+    {
+      "id": "test-hook",
+      "when": { "phase": "after", "tool": ["task"] },
+      "run": "echo test"
+    }
+  ],
+  "session": []
 }
     `
+    try {
+      mkdirSync(opencodeDirPath, { recursive: true })
+    } catch {
+      // Directory may already exist
+    }
     writeFileSync(configPath, content)
     process.chdir(testDir)
 
@@ -60,20 +64,24 @@ describe("loadGlobalConfig", () => {
     unlinkSync(configPath)
   })
 
-  it("loads opencode.json with command_hooks", async () => {
-    const configPath = join(testDir, "opencode.json")
+  it("loads .opencode/command_hooks.jsonc with session hooks", async () => {
+    const opencodeDirPath = join(testDir, ".opencode")
+    const configPath = join(opencodeDirPath, "command_hooks.jsonc")
     const content = JSON.stringify({
-      command_hooks: {
-        tool: [],
-        session: [
-          {
-            id: "session-hook",
-            when: { event: "session.start", agent: ["*"] },
-            run: "git status",
-          },
-        ],
-      },
+      tool: [],
+      session: [
+        {
+          id: "session-hook",
+          when: { event: "session.start", agent: ["*"] },
+          run: "git status",
+        },
+      ],
     })
+    try {
+      mkdirSync(opencodeDirPath, { recursive: true })
+    } catch {
+      // Directory may already exist
+    }
     writeFileSync(configPath, content)
     process.chdir(testDir)
 
@@ -85,23 +93,14 @@ describe("loadGlobalConfig", () => {
     unlinkSync(configPath)
   })
 
-  it("prefers opencode.jsonc over opencode.json", async () => {
-    const jsoncPath = join(testDir, "opencode.jsonc")
-    const jsonPath = join(testDir, "opencode.json")
-
-    writeFileSync(jsoncPath, JSON.stringify({ command_hooks: { tool: [{ id: "jsonc" }] } }))
-    writeFileSync(jsonPath, JSON.stringify({ command_hooks: { tool: [{ id: "json" }] } }))
-
-    process.chdir(testDir)
-    const config = await loadGlobalConfig()
-    expect(config.tool?.[0]?.id).toBe("jsonc")
-
-    unlinkSync(jsoncPath)
-    unlinkSync(jsonPath)
-  })
-
   it("handles malformed JSON gracefully", async () => {
-    const configPath = join(testDir, "opencode.json")
+    const opencodeDirPath = join(testDir, ".opencode")
+    const configPath = join(opencodeDirPath, "command_hooks.jsonc")
+    try {
+      mkdirSync(opencodeDirPath, { recursive: true })
+    } catch {
+      // Directory may already exist
+    }
     writeFileSync(configPath, "{ invalid json }")
     process.chdir(testDir)
 
@@ -111,20 +110,15 @@ describe("loadGlobalConfig", () => {
     unlinkSync(configPath)
   })
 
-  it("handles invalid command_hooks structure", async () => {
-    const configPath = join(testDir, "opencode.json")
-    writeFileSync(configPath, JSON.stringify({ command_hooks: "not an object" }))
-    process.chdir(testDir)
-
-    const config = await loadGlobalConfig()
-    expect(config).toEqual({ tool: [], session: [] })
-
-    unlinkSync(configPath)
-  })
-
-  it("handles missing command_hooks field", async () => {
-    const configPath = join(testDir, "opencode.json")
-    writeFileSync(configPath, JSON.stringify({ other_field: "value" }))
+  it("handles invalid CommandHooksConfig structure", async () => {
+    const opencodeDirPath = join(testDir, ".opencode")
+    const configPath = join(opencodeDirPath, "command_hooks.jsonc")
+    try {
+      mkdirSync(opencodeDirPath, { recursive: true })
+    } catch {
+      // Directory may already exist
+    }
+    writeFileSync(configPath, JSON.stringify("not an object"))
     process.chdir(testDir)
 
     const config = await loadGlobalConfig()
@@ -134,22 +128,26 @@ describe("loadGlobalConfig", () => {
   })
 
   it("handles block comments in JSONC", async () => {
-    const configPath = join(testDir, "opencode.jsonc")
+    const opencodeDirPath = join(testDir, ".opencode")
+    const configPath = join(opencodeDirPath, "command_hooks.jsonc")
     const content = `
 {
   /* This is a block comment
      spanning multiple lines */
-  "command_hooks": {
-    "tool": [
-      {
-        "id": "test",
-        /* inline comment */ "when": { "phase": "after" },
-        "run": "echo test"
-      }
-    ]
-  }
+  "tool": [
+    {
+      "id": "test",
+      /* inline comment */ "when": { "phase": "after" },
+      "run": "echo test"
+    }
+  ]
 }
     `
+    try {
+      mkdirSync(opencodeDirPath, { recursive: true })
+    } catch {
+      // Directory may already exist
+    }
     writeFileSync(configPath, content)
     process.chdir(testDir)
 
@@ -164,8 +162,14 @@ describe("loadGlobalConfig", () => {
     const subDir = join(testDir, "subdir", "nested")
     mkdirSync(subDir, { recursive: true })
 
-    const configPath = join(testDir, "opencode.json")
-    writeFileSync(configPath, JSON.stringify({ command_hooks: { tool: [{ id: "found" }] } }))
+    const opencodeDirPath = join(testDir, ".opencode")
+    const configPath = join(opencodeDirPath, "command_hooks.jsonc")
+    try {
+      mkdirSync(opencodeDirPath, { recursive: true })
+    } catch {
+      // Directory may already exist
+    }
+    writeFileSync(configPath, JSON.stringify({ tool: [{ id: "found" }] }))
 
     process.chdir(subDir)
     const config = await loadGlobalConfig()
