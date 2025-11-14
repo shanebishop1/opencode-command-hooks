@@ -3,11 +3,13 @@ import type { OpencodeClient } from "@opencode-ai/sdk"
 import { handleToolExecuteBefore } from "./handlers/tool-before"
 import { handleToolExecuteAfter } from "./handlers/tool-after"
 import { handleSessionStart } from "./handlers/session-start"
+import { handleSessionIdle } from "./handlers/session-idle"
 
 // Export handlers for testing and external use
 export { handleToolExecuteBefore } from "./handlers/tool-before"
 export { handleToolExecuteAfter } from "./handlers/tool-after"
 export { handleSessionStart } from "./handlers/session-start"
+export { handleSessionIdle } from "./handlers/session-idle"
 
 const LOG_PREFIX = "[opencode-command-hooks]"
 const DEBUG = process.env.OPENCODE_HOOKS_DEBUG === "1"
@@ -52,6 +54,23 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
 
         // Call the handler with the extracted event and client
         await handleSessionStart(sessionStartEvent, client as OpencodeClient)
+      }
+
+      // Handle session.idle event
+      if (event.type === "session.idle") {
+        if (DEBUG) {
+          console.log(`${LOG_PREFIX} Received session.idle event`)
+        }
+
+        // Extract event data from properties
+        const sessionIdleEvent = {
+          sessionId: event.properties?.sessionID as string | undefined,
+          agent: event.properties?.agent as string | undefined,
+          properties: event.properties,
+        }
+
+        // Call the handler with the extracted event and client
+        await handleSessionIdle(sessionIdleEvent, client as OpencodeClient)
       }
     },
 
