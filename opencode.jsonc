@@ -1,7 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "tools": {
-    "context7_*": false,
     "brave_*": false,
     "playwright_*": false,
     "firecrawl_*": false,

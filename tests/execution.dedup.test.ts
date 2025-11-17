@@ -134,9 +134,20 @@ describe("generateToolEventId", () => {
     expect(id1).not.toBe(id2)
   })
 
-  it("uses correct format", () => {
+  it("generates different IDs for different callIds", () => {
+    const id1 = generateToolEventId("hook-1", "task", "session-1", "after", "call-1")
+    const id2 = generateToolEventId("hook-1", "task", "session-1", "after", "call-2")
+    expect(id1).not.toBe(id2)
+  })
+
+  it("uses correct format without callId", () => {
     const id = generateToolEventId("my-hook", "task", "sess-123", "after")
     expect(id).toBe("my-hook:task:sess-123:after")
+  })
+
+  it("uses correct format with callId", () => {
+    const id = generateToolEventId("my-hook", "task", "sess-123", "after", "call-456")
+    expect(id).toBe("my-hook:task:sess-123:after:call-456")
   })
 })
 
@@ -323,6 +334,20 @@ describe("Integration scenarios", () => {
     dedup.markProcessed(session2Id)
     expect(dedup.hasProcessed(session1Id)).toBe(true)
     expect(dedup.hasProcessed(session2Id)).toBe(true)
+    expect(dedup.getTrackedCount()).toBe(2)
+  })
+
+  it("allows same hook on different invocations to execute", () => {
+    const call1Id = generateToolEventId("my-hook", "task", "session-1", "after", "call-1")
+    const call2Id = generateToolEventId("my-hook", "task", "session-1", "after", "call-2")
+
+    dedup.markProcessed(call1Id)
+    expect(dedup.hasProcessed(call1Id)).toBe(true)
+    expect(dedup.hasProcessed(call2Id)).toBe(false)
+
+    dedup.markProcessed(call2Id)
+    expect(dedup.hasProcessed(call1Id)).toBe(true)
+    expect(dedup.hasProcessed(call2Id)).toBe(true)
     expect(dedup.getTrackedCount()).toBe(2)
   })
 

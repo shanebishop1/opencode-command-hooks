@@ -1,28 +1,13 @@
 {
   "tool": [
     {
-      "id": "test-before-task",
-      "when": {
-        "phase": "before",
-        "tool": ["task"]
-      },
-      "run": ["echo 'Hook: Before task execution'"],
-      "inject": {
-        "as": "system",
-        "template": "🪝 Before hook executed:\n```\n{stdout}\n```"
-      }
-    },
-    {
-      "id": "test-after-task",
+      "id": "task-completion-console-log",
       "when": {
         "phase": "after",
-        "tool": ["task"]
+        "tool": ["firecrawl_firecrawl_search"]
       },
-      "run": ["echo 'Hook: After task execution'"],
-      "inject": {
-        "as": "system",
-        "template": "🪝 After hook executed:\n```\n{stdout}\n```"
-      }
+      "run": ["touch ./test1/ahh.md"],
+      "consoleLog": "🎯 Task completed successfully!"
     }
   ]
 }

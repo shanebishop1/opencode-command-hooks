@@ -1,8 +1,8 @@
 ---
 description: Self-drives to write and validate code/tests when the Engineer/Validator loop proves insufficient.
 mode: subagent
-model: openrouter/anthropic/claude-haiku-4.5
-temperature: 0.3
+model: openrouter/anthropic/claude-sonnet-4.5
+temperature: 0.35
 tools:
   bash: true
 ---

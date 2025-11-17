@@ -67,6 +67,13 @@ export interface ToolHook {
    * If omitted, the hook still runs but output is only logged.
    */
   inject?: HookInjection
+
+  /**
+   * Optional message to log directly to OpenCode's console via console.log().
+   * Supports template placeholder substitution like the inject template.
+   * If omitted, no console.log is performed.
+   */
+  consoleLog?: string
 }
 
 /**
@@ -174,6 +181,13 @@ export interface SessionHook {
    * If omitted, the hook still runs but output is only logged.
    */
   inject?: HookInjection
+
+  /**
+   * Optional message to log directly to OpenCode's console via console.log().
+   * Supports template placeholder substitution like the inject template.
+   * If omitted, no console.log is performed.
+   */
+  consoleLog?: string
 }
 
 /**

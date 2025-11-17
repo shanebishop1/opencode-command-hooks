@@ -138,6 +138,10 @@ async function injectMessage(
        },
      })
 
+    // Add a small delay to ensure the message is fully processed before continuing
+    // This helps ensure "before" hook messages appear before the tool output
+    await new Promise(resolve => setTimeout(resolve, 100))
+
     if (DEBUG) {
       console.log(`${LOG_PREFIX} Message injected successfully`)
     }
@@ -337,11 +341,13 @@ export async function handleToolExecuteBefore(
     // Execute each matched hook
     for (const hook of matchedHooks) {
       // Generate event ID for deduplication
+      // Include callId to make each tool invocation unique
       const eventId = generateToolEventId(
         hook.id,
         context.toolName,
         context.sessionId,
-        "before"
+        "before",
+        context.callId
       )
 
       // Check deduplication

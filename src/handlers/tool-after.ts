@@ -146,6 +146,10 @@ async function injectMessage(
       },
     })
 
+    // Add a small delay to ensure the message is fully processed before continuing
+    // This helps ensure messages appear in the correct order
+    await new Promise(resolve => setTimeout(resolve, 100))
+
     if (DEBUG) {
       console.log(`${LOG_PREFIX} Message injected successfully`)
     }
@@ -238,6 +242,29 @@ async function executeHook(
 
       // Inject into session
       await injectMessage(client, context.sessionId, message, role)
+    }
+
+    // If consoleLog is configured, interpolate and log to console
+    if (hook.consoleLog) {
+      // Use the last command's result for template interpolation
+      const lastResult = results[results.length - 1]
+
+      // Build template context
+      const templateContext: TemplateContext = {
+        id: hook.id,
+        agent: context.callingAgent,
+        tool: context.toolName,
+        cmd: Array.isArray(hook.run) ? hook.run[0] : hook.run,
+        stdout: lastResult?.stdout,
+        stderr: lastResult?.stderr,
+        exitCode: lastResult?.exitCode,
+      }
+
+      // Interpolate consoleLog template
+      const consoleMessage = interpolateTemplate(hook.consoleLog, templateContext)
+      
+      // Log directly to OpenCode's console
+      console.log(consoleMessage)
     }
   } catch (error) {
     // Log the error but don't throw - this is non-blocking
@@ -346,11 +373,13 @@ export async function handleToolExecuteAfter(
     // Execute each matched hook
     for (const hook of matchedHooks) {
       // Generate event ID for deduplication
+      // Include callId to make each tool invocation unique
       const eventId = generateToolEventId(
         hook.id,
         context.toolName,
         context.sessionId,
-        "after"
+        "after",
+        context.callId
       )
 
       // Check deduplication

@@ -23,28 +23,34 @@ function isDebugEnabled(): boolean {
 /**
  * Generate a unique event ID for a tool hook execution
  *
- * Combines hookId, toolName, sessionId, and phase to create a deterministic,
+ * Combines hookId, toolName, sessionId, phase, and callId to create a deterministic,
  * unique identifier for a specific tool hook execution context.
  *
  * @param hookId - The hook's unique identifier
  * @param toolName - Name of the tool being executed
  * @param sessionId - ID of the session where the tool is being called
  * @param phase - Execution phase: "before" or "after"
+ * @param callId - Optional call ID for per-invocation deduplication
  * @returns Unique event ID string
  *
  * @example
  * ```typescript
- * const eventId = generateToolEventId("tests-after-task", "task", "session-123", "after")
- * // Returns: "tests-after-task:task:session-123:after"
+ * const eventId = generateToolEventId("tests-after-task", "task", "session-123", "after", "call-456")
+ * // Returns: "tests-after-task:task:session-123:after:call-456"
  * ```
  */
 export function generateToolEventId(
   hookId: string,
   toolName: string,
   sessionId: string,
-  phase: "before" | "after"
+  phase: "before" | "after",
+  callId?: string
 ): string {
-  return `${hookId}:${toolName}:${sessionId}:${phase}`
+  // Include callId if provided to make each invocation unique
+  // If callId is not provided, fall back to session-level deduplication
+  return callId 
+    ? `${hookId}:${toolName}:${sessionId}:${phase}:${callId}`
+    : `${hookId}:${toolName}:${sessionId}:${phase}`
 }
 
 /**
