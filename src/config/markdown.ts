@@ -65,7 +65,8 @@ export function extractYamlFrontmatter(content: string): string | null {
  */
 export function parseYamlFrontmatter(content: string): unknown {
   try {
-    return parseYaml(content);
+    const parsed = parseYaml(content);
+    return parsed === undefined ? null : parsed;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (DEBUG) {

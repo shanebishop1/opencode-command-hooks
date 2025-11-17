@@ -15,6 +15,130 @@ const LOG_PREFIX = "[opencode-command-hooks]"
 const DEBUG = process.env.OPENCODE_HOOKS_DEBUG === "1"
 
 /**
+ * Internal representation of an after-hook event
+ */
+type AfterHookEvent = {
+  tool: string
+  input: Record<string, unknown>
+  output?: Record<string, unknown>
+  result?: unknown
+  sessionId?: string
+  callingAgent?: string
+  slashCommand?: string
+  callId?: string
+}
+
+// Track after-hook contexts until the tool has fully completed
+const pendingAfterEvents = new Map<string, AfterHookEvent>()
+const completedAfterEvents = new Set<string>()
+
+function normalizeString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined
+}
+
+function buildAfterEventKey(
+  toolName?: string,
+  sessionId?: string,
+  callId?: string
+): string | undefined {
+  if (callId) return callId
+  if (toolName && sessionId) return `${sessionId}:${toolName}`
+  return undefined
+}
+
+function markAfterCompleted(event: AfterHookEvent): void {
+  const key = buildAfterEventKey(event.tool, event.sessionId, event.callId)
+  if (key) {
+    completedAfterEvents.add(key)
+  }
+}
+
+function hasCompletedAfterEvent(toolName?: string, sessionId?: string, callId?: string): boolean {
+  const key = buildAfterEventKey(toolName, sessionId, callId)
+  if (!key) return false
+  return completedAfterEvents.has(key)
+}
+
+function stageAfterEvent(event: AfterHookEvent): void {
+  const key = buildAfterEventKey(event.tool, event.sessionId, event.callId)
+  if (!key) return
+  pendingAfterEvents.set(key, event)
+}
+
+function isLikelyFinalOutput(output: Record<string, unknown> | undefined, result: unknown): boolean {
+  const metadata = (output as any)?.metadata ?? {}
+  const metaRecord = metadata as Record<string, unknown>
+  const status = metaRecord.status ?? metaRecord.state
+  const doneFlag =
+    metaRecord.done === true ||
+    metaRecord.isComplete === true ||
+    status === "completed" ||
+    status === "success" ||
+    status === "failed"
+
+  const hasResultPayload = result !== undefined && result !== null
+
+  return Boolean(doneFlag || hasResultPayload)
+}
+
+function consumePendingAfterEvent(
+  toolName?: string,
+  sessionId?: string,
+  callId?: string
+): AfterHookEvent | undefined {
+  const key = buildAfterEventKey(toolName, sessionId, callId)
+  if (!key) return undefined
+  const pending = pendingAfterEvents.get(key)
+  if (pending) {
+    pendingAfterEvents.delete(key)
+    return pending
+  }
+  return undefined
+}
+
+// Test helpers
+export function __clearPendingAfterEvents(): void {
+  pendingAfterEvents.clear()
+  completedAfterEvents.clear()
+}
+
+export function __getPendingAfterEventCount(): number {
+  return pendingAfterEvents.size
+}
+
+export async function handleToolResultEvent(
+  event: { properties?: Record<string, unknown> },
+  client: OpencodeClient,
+  runner: (event: AfterHookEvent, client: OpencodeClient) => Promise<void> = handleToolExecuteAfter
+): Promise<void> {
+  const props = event.properties ?? {}
+
+  const toolName = normalizeString((props as Record<string, unknown>).name ?? (props as Record<string, unknown>).tool)
+  const sessionId = normalizeString((props as Record<string, unknown>).sessionID ?? (props as Record<string, unknown>).sessionId)
+  const callId = normalizeString((props as Record<string, unknown>).callID ?? (props as Record<string, unknown>).callId)
+
+  if (hasCompletedAfterEvent(toolName, sessionId, callId)) {
+    return
+  }
+
+  const pendingContext = consumePendingAfterEvent(toolName, sessionId, callId)
+
+  const afterEvent: AfterHookEvent = {
+    tool: toolName ?? pendingContext?.tool ?? "unknown",
+    input: (props.input as Record<string, unknown>) ?? pendingContext?.input ?? {},
+    output: (props.output as Record<string, unknown>) ?? pendingContext?.output,
+    result: props.output ?? pendingContext?.result,
+    sessionId: sessionId ?? pendingContext?.sessionId ?? "unknown",
+    callingAgent: normalizeString(props.agent) ?? pendingContext?.callingAgent,
+    slashCommand: normalizeString(props.slashCommand) ?? pendingContext?.slashCommand,
+    callId: callId ?? pendingContext?.callId,
+  }
+
+  await runner(afterEvent, client)
+  markAfterCompleted(afterEvent)
+}
+
+/**
  * OpenCode Command Hooks Plugin
  *
  * Allows users to declaratively attach shell commands to agent/tool/slash-command
@@ -88,6 +212,15 @@ const plugin: Plugin = async ({ client }) => {
         // Call the handler with the extracted event and client
         await handleSessionIdle(sessionIdleEvent, client as OpencodeClient)
       }
+
+      // Handle tool.result event (fires when tool finishes)
+      if (event.type === "tool.result") {
+        if (DEBUG) {
+          console.log(`${LOG_PREFIX} Received tool.result event`)
+        }
+
+        await handleToolResultEvent(event, client as OpencodeClient)
+      }
     },
 
     /**
@@ -109,20 +242,29 @@ const plugin: Plugin = async ({ client }) => {
       await handleToolExecuteBefore(event, client as OpencodeClient)
     },
 
-    "tool.execute.after": async (input: { tool: string; sessionID: string; callID: string }, output: { title: string; output: string; metadata: any }) => {
+    "tool.execute.after": async (
+      input: { tool: string; sessionID: string; callID: string },
+      output: { title: string; output: any; metadata: any }
+    ) => {
       const event = {
         tool: input.tool,
         input: {}, // Not provided by OpenCode for after hooks
-        output: output,
+        output: output as Record<string, unknown>,
         result: output.output,
         sessionId: input.sessionID,
-        callingAgent: undefined, // Not provided by OpenCode
-        slashCommand: undefined, // Not provided by OpenCode
+        callingAgent: undefined as string | undefined, // Not provided by OpenCode
+        slashCommand: undefined as string | undefined, // Not provided by OpenCode
         callId: input.callID,
       }
 
-      // Call the handler with the extracted event and client
-      await handleToolExecuteAfter(event, client as OpencodeClient)
+      if (isLikelyFinalOutput(event.output, event.result)) {
+        markAfterCompleted(event)
+        await handleToolExecuteAfter(event, client as OpencodeClient)
+        return
+      }
+
+      // Stage after hooks until a definitive tool.result event arrives
+      stageAfterEvent(event)
     },
   }
 
