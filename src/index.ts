@@ -66,7 +66,7 @@ function stageAfterEvent(event: AfterHookEvent): void {
 }
 
 function isLikelyFinalOutput(output: Record<string, unknown> | undefined, result: unknown): boolean {
-  const metadata = (output as any)?.metadata ?? {}
+  const metadata = (output as Record<string, unknown>)?.metadata ?? {}
   const metaRecord = metadata as Record<string, unknown>
   const status = metaRecord.status ?? metaRecord.state
   const doneFlag =
@@ -227,7 +227,7 @@ const plugin: Plugin = async ({ client }) => {
      * Tool execution hooks
      * Supports: tool.execute.before, tool.execute.after
      */
-    "tool.execute.before": async (input: { tool: string; sessionID: string; callID: string }, output: { args: any }) => {
+    "tool.execute.before": async (input: { tool: string; sessionID: string; callID: string }, output: { args: Record<string, unknown> }) => {
       const event = {
         tool: input.tool,
         input: output.args || {},
@@ -244,7 +244,7 @@ const plugin: Plugin = async ({ client }) => {
 
     "tool.execute.after": async (
       input: { tool: string; sessionID: string; callID: string },
-      output: { title: string; output: any; metadata: any }
+      output: { title: string; output: string; metadata: Record<string, unknown> }
     ) => {
       const event = {
         tool: input.tool,

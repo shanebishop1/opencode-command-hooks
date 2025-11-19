@@ -134,16 +134,48 @@ async function injectMessage(
       )
     }
 
+    // Get current session info to retrieve the active model
+    // This ensures that the injection doesn't inadvertently switch the session's model
+    // to a default (e.g. GPT-5.1) when the user is using something else (e.g. Claude/Grok)
+    let currentModel: unknown
+    try {
+      // @ts-ignore - Accessing session.get which might not be fully typed in the local definition
+      const sessionInfo = await client.session.get({ path: { id: sessionId } })
+      // @ts-ignore - Accessing model property on session info
+      currentModel = sessionInfo.model
+
+      if (DEBUG && currentModel) {
+        console.log(
+          `${LOG_PREFIX} Retrieved current model from session:`,
+          JSON.stringify(currentModel)
+        )
+      }
+    } catch (err) {
+      if (DEBUG) {
+        console.error(
+          `${LOG_PREFIX} Failed to retrieve session info for model preservation:`,
+          err
+        )
+      }
+    }
+
     // Note: The role parameter is logged for debugging but the OpenCode SDK
     // doesn't currently support role specification in session.prompt()
     // Future versions may support this capability
 
+    const body: Record<string, unknown> = {
+      noReply: true,
+      parts: [{ type: "text", text: message }],
+    }
+
+    if (currentModel) {
+      body.model = currentModel
+    }
+
     await client.session.prompt({
       path: { id: sessionId },
-      body: {
-        noReply: true,
-        parts: [{ type: "text", text: message }],
-      },
+      // @ts-ignore - Type definition mismatch for dynamic body construction
+      body: body,
     })
 
     // Add a small delay to ensure the message is fully processed before continuing

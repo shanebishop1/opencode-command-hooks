@@ -218,11 +218,12 @@ async function executeShellCommand(
       stderr: stderr || "",
       exitCode: 0,
     }
-  } catch (error: any) {
-    // execAsync throws on non-zero exit codes
-    const stdout = error.stdout || ""
-    const stderr = error.stderr || ""
-    const exitCode = error.code || 1
+   } catch (error: unknown) {
+     // execAsync throws on non-zero exit codes
+     const execError = error as { stdout?: string; stderr?: string; code?: number };
+     const stdout = execError.stdout || ""
+     const stderr = execError.stderr || ""
+     const exitCode = execError.code || 1
 
     return {
       stdout,
