@@ -82,6 +82,35 @@ interface ToolExecuteAfterEvent {
   callId?: string
 }
 
+type SessionMessageInfo = {
+  role?: string
+  agent?: string
+  mode?: string
+  providerID?: string
+  modelID?: string
+  model?: {
+    providerID?: string
+    modelID?: string
+  }
+}
+
+type SessionMessageEntry = {
+  info?: SessionMessageInfo
+}
+
+type SessionPromptBody = {
+  messageID?: string
+  model?: {
+    providerID: string
+    modelID: string
+  }
+  agent?: string
+  noReply?: boolean
+  system?: string
+  tools?: Record<string, boolean>
+  parts: Array<{ type: "text"; text: string }>
+}
+
 /**
  * Extract context from a tool.execute.after event
  *
@@ -109,6 +138,18 @@ function extractEventContext(event: ToolExecuteAfterEvent): {
   }
 }
 
+function normalizeSessionMessagesResponse(response: unknown): SessionMessageEntry[] {
+  if (Array.isArray(response)) {
+    return response as SessionMessageEntry[]
+  }
+
+  if (response && typeof response === "object" && Array.isArray((response as { data?: unknown }).data)) {
+    return (response as { data?: SessionMessageEntry[] }).data ?? []
+  }
+
+  return []
+}
+
 /**
  * Inject a message into a session using the OpenCode SDK
  *
@@ -125,7 +166,8 @@ async function injectMessage(
   client: OpencodeClient,
   sessionId: string,
   message: string,
-  role: "system" | "user" | "note" = "system"
+  role: "system" | "user" | "note" = "system",
+  agentHint?: string
 ): Promise<void> {
   try {
     if (DEBUG) {
@@ -134,38 +176,79 @@ async function injectMessage(
       )
     }
 
-    // Get current session info to retrieve the active model
-    // This ensures that the injection doesn't inadvertently switch the session's model
-    // to a default (e.g. GPT-5.1) when the user is using something else (e.g. Claude/Grok)
-    let currentModel: unknown
-    try {
-      // @ts-ignore - Accessing session.get which might not be fully typed in the local definition
-      const sessionInfo = await client.session.get({ path: { id: sessionId } })
-      // @ts-ignore - Accessing model property on session info
-      currentModel = sessionInfo.model
+    // Determine the most recent agent/model so injections don't switch models
+    let currentModel: { providerID: string; modelID: string } | undefined
+    let currentAgent = agentHint
 
-      if (DEBUG && currentModel) {
+    try {
+      const messagesResponse = await client.session.messages({
+        path: { id: sessionId },
+        query: { limit: 50 },
+      })
+
+      const messages = normalizeSessionMessagesResponse(messagesResponse)
+
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const entry = messages[i]
+        const info = entry?.info
+        if (!info) {
+          continue
+        }
+
+        if (!currentAgent) {
+          if (info.role === "assistant" && info.mode) {
+            currentAgent = info.mode
+          } else if (info.agent) {
+            currentAgent = info.agent
+          }
+        }
+
+        if (!currentModel) {
+          if (info.role === "assistant" && info.providerID && info.modelID) {
+            currentModel = {
+              providerID: info.providerID,
+              modelID: info.modelID,
+            }
+          } else if (
+            info.role === "user" &&
+            info.model &&
+            info.model.providerID &&
+            info.model.modelID
+          ) {
+            currentModel = {
+              providerID: info.model.providerID,
+              modelID: info.model.modelID,
+            }
+          }
+        }
+
+        if (currentAgent && currentModel) {
+          break
+        }
+      }
+
+      if (DEBUG) {
         console.log(
-          `${LOG_PREFIX} Retrieved current model from session:`,
-          JSON.stringify(currentModel)
+          `${LOG_PREFIX} Injection context resolved`,
+          JSON.stringify({ agent: currentAgent, model: currentModel })
         )
       }
     } catch (err) {
       if (DEBUG) {
         console.error(
-          `${LOG_PREFIX} Failed to retrieve session info for model preservation:`,
+          `${LOG_PREFIX} Failed to resolve session messages for model preservation:`,
           err
         )
       }
     }
 
-    // Note: The role parameter is logged for debugging but the OpenCode SDK
-    // doesn't currently support role specification in session.prompt()
-    // Future versions may support this capability
-
-    const body: Record<string, unknown> = {
+    const body: SessionPromptBody = {
       noReply: true,
       parts: [{ type: "text", text: message }],
+    }
+
+    if (currentAgent) {
+      body.agent = currentAgent
     }
 
     if (currentModel) {
@@ -174,8 +257,7 @@ async function injectMessage(
 
     await client.session.prompt({
       path: { id: sessionId },
-      // @ts-ignore - Type definition mismatch for dynamic body construction
-      body: body,
+      body,
     })
 
     // Add a small delay to ensure the message is fully processed before continuing
@@ -273,7 +355,7 @@ async function executeHook(
       const role = (hook.inject.as || "system") as "system" | "user" | "note"
 
       // Inject into session
-      await injectMessage(client, context.sessionId, message, role)
+      await injectMessage(client, context.sessionId, message, role, context.callingAgent)
     }
 
     // If consoleLog is configured, interpolate and log to console
@@ -305,7 +387,7 @@ async function executeHook(
 
     // Optionally inject error message into session
     try {
-      await injectMessage(client, context.sessionId, errorMessage, "system")
+      await injectMessage(client, context.sessionId, errorMessage, "system", context.callingAgent)
     } catch (injectionError) {
       // If error injection fails, just log it
       const injectionErrorMsg =
@@ -379,7 +461,7 @@ export async function handleToolExecuteAfter(
       for (const error of allErrors) {
         const errorMsg = `${LOG_PREFIX} Configuration error: ${error.message}`
         try {
-          await injectMessage(client, context.sessionId, errorMsg, "system")
+          await injectMessage(client, context.sessionId, errorMsg, "system", context.callingAgent)
         } catch (injectionError) {
           console.error(
             `${LOG_PREFIX} Failed to inject validation error: ${injectionError}`

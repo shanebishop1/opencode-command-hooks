@@ -1,173 +1,120 @@
-import { describe, it, expect, mock, beforeAll, afterAll } from "bun:test";
-import { handleToolExecuteAfter } from "../src/handlers/tool-after.js";
-import { mkdirSync, writeFileSync, rmSync } from "fs";
-import { join } from "path";
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, mock } from "bun:test"
+import { mkdirSync, rmSync, writeFileSync } from "fs"
+import { join } from "path"
+import { handleToolExecuteAfter } from "../src/handlers/tool-after.js"
 
-describe("handleToolExecuteAfter", () => {
-  const testDir = "/tmp/opencode-hooks-handler-test";
-  const originalCwd = process.cwd();
+const TEST_DIR = "/tmp/opencode-hooks-tool-after"
+const ORIGINAL_CWD = process.cwd()
 
-  // Setup test environment with a config file
+describe("handleToolExecuteAfter message injection", () => {
   beforeAll(() => {
-    // Create test directory structure
-    try {
-      mkdirSync(join(testDir, ".opencode"), { recursive: true });
-    } catch {
-      // Directory may already exist
-    }
-
-    // Write config file
-    const configContent = JSON.stringify({
+    mkdirSync(join(TEST_DIR, ".opencode"), { recursive: true })
+    const config = {
       tool: [
         {
           id: "test-hook",
-          when: { phase: "after", tool: "test-tool" },
-          run: ["echo 'hello'"],
-          inject: { as: "user", template: "Output: {stdout}" }
-        }
+          when: { phase: "after", tool: ["test-tool"] },
+          run: ["echo hook"],
+          inject: {
+            as: "user",
+            template: "Result: {stdout}",
+          },
+        },
       ],
-      session: []
-    });
-    
-    writeFileSync(join(testDir, ".opencode", "command-hooks.jsonc"), configContent);
-
-    // Switch to test directory so loadGlobalConfig finds our config
-    process.chdir(testDir);
-  });
+      session: [],
+    }
+    writeFileSync(join(TEST_DIR, ".opencode", "command-hooks.jsonc"), JSON.stringify(config, null, 2))
+  })
 
   afterAll(() => {
-    // Restore CWD
-    process.chdir(originalCwd);
-    
-    // Cleanup
-    try {
-      rmSync(testDir, { recursive: true, force: true });
-    } catch {
-      // Ignore cleanup errors
+    process.chdir(ORIGINAL_CWD)
+    rmSync(TEST_DIR, { recursive: true, force: true })
+  })
+
+  beforeEach(() => {
+    process.chdir(TEST_DIR)
+  })
+
+  afterEach(() => {
+    process.chdir(ORIGINAL_CWD)
+  })
+
+  it("passes the most recent agent/model into session.prompt", async () => {
+    const mockSessionMessages = mock(async () => ({
+      data: [
+        {
+          info: {
+            role: "user",
+            agent: "build",
+            model: { providerID: "anthropic", modelID: "claude-3-5" },
+          },
+        },
+        {
+          info: {
+            role: "assistant",
+            mode: "dev",
+            providerID: "x-provider",
+            modelID: "grok-fast",
+          },
+        },
+      ],
+    }))
+    const mockSessionPrompt = mock(async () => ({}))
+
+    const client = {
+      session: {
+        messages: mockSessionMessages,
+        prompt: mockSessionPrompt,
+      },
     }
-  });
 
-  it("should pass model from session to prompt when injecting message", async () => {
-    // Mock client
-    const mockSessionGet = mock(() => Promise.resolve({ 
-      model: { providerID: "anthropic", modelID: "claude-3-5" } 
-    }));
-    
-    const mockSessionPrompt = mock(() => Promise.resolve({}));
-
-    const mockClient = {
-      session: {
-        get: mockSessionGet,
-        prompt: mockSessionPrompt
-      }
-    };
-
-    // Event data
     const event = {
       tool: "test-tool",
       input: {},
       sessionId: "session-123",
-      callId: "call-1"
-    };
+      callId: "call-a",
+    }
 
-    // Execute handler
-    await handleToolExecuteAfter(event as any, mockClient as any);
+    await handleToolExecuteAfter(event as any, client as any)
 
-    // Verify session.get was called
-    expect(mockSessionGet).toHaveBeenCalled();
-    expect(mockSessionGet).toHaveBeenCalledWith({ path: { id: "session-123" } });
+    expect(mockSessionMessages).toHaveBeenCalledTimes(1)
+    expect(mockSessionMessages).toHaveBeenCalledWith({
+      path: { id: "session-123" },
+      query: { limit: 50 },
+    })
 
-    // Verify session.prompt was called with model
-    expect(mockSessionPrompt).toHaveBeenCalled();
-    
-    // Cast to any to avoid strict tuple type checks in tests
-    const calls = mockSessionPrompt.mock.calls as any[];
-    const promptCall = calls[0];
-    const promptArg = promptCall[0];
-    
-    expect(promptArg.path.id).toBe("session-123");
-    expect(promptArg.body.noReply).toBe(true);
-    expect(promptArg.body.model).toEqual({ providerID: "anthropic", modelID: "claude-3-5" });
-  });
+    expect(mockSessionPrompt).toHaveBeenCalledTimes(1)
+    const promptCall = mockSessionPrompt.mock.calls[0]?.[0]
+    expect(promptCall?.body?.agent).toBe("dev")
+    expect(promptCall?.body?.model).toEqual({ providerID: "x-provider", modelID: "grok-fast" })
+  })
 
-  it("should gracefully handle missing model in session info", async () => {
-    // Mock client where session.get returns no model
-    const mockSessionGet = mock(() => Promise.resolve({ 
-      // No model property
-      otherData: "test"
-    }));
-    
-    const mockSessionPrompt = mock(() => Promise.resolve({}));
+  it("falls back to calling agent when message history fails", async () => {
+    const mockSessionMessages = mock(async () => {
+      throw new Error("network failure")
+    })
+    const mockSessionPrompt = mock(async () => ({}))
 
-    const mockClient = {
+    const client = {
       session: {
-        get: mockSessionGet,
-        prompt: mockSessionPrompt
-      }
-    };
+        messages: mockSessionMessages,
+        prompt: mockSessionPrompt,
+      },
+    }
 
-    // Event data
     const event = {
       tool: "test-tool",
       input: {},
-      sessionId: "session-123",
-      callId: "call-2"
-    };
+      sessionId: "session-999",
+      callId: "call-b",
+      callingAgent: "orchestrator",
+    }
 
-    // Execute handler
-    await handleToolExecuteAfter(event as any, mockClient as any);
+    await handleToolExecuteAfter(event as any, client as any)
 
-    // Verify session.get was called
-    expect(mockSessionGet).toHaveBeenCalled();
-
-    // Verify session.prompt was called WITHOUT model
-    expect(mockSessionPrompt).toHaveBeenCalled();
-    
-    // Cast to any to avoid strict tuple type checks in tests
-    const calls = mockSessionPrompt.mock.calls as any[];
-    const promptCall = calls[0];
-    const promptArg = promptCall[0];
-    
-    expect(promptArg.body.noReply).toBe(true);
-    expect(promptArg.body.model).toBeUndefined();
-  });
-
-  it("should gracefully handle session.get failure", async () => {
-    // Mock client where session.get throws
-    const mockSessionGet = mock(() => Promise.reject(new Error("Network error")));
-    
-    const mockSessionPrompt = mock(() => Promise.resolve({}));
-
-    const mockClient = {
-      session: {
-        get: mockSessionGet,
-        prompt: mockSessionPrompt
-      }
-    };
-
-    // Event data
-    const event = {
-      tool: "test-tool",
-      input: {},
-      sessionId: "session-123",
-      callId: "call-3"
-    };
-
-    // Execute handler
-    await handleToolExecuteAfter(event as any, mockClient as any);
-
-    // Verify session.get was called
-    expect(mockSessionGet).toHaveBeenCalled();
-
-    // Verify session.prompt was called WITHOUT model (fallback)
-    expect(mockSessionPrompt).toHaveBeenCalled();
-    
-    // Cast to any to avoid strict tuple type checks in tests
-    const calls = mockSessionPrompt.mock.calls as any[];
-    const promptCall = calls[0];
-    const promptArg = promptCall[0];
-    
-    expect(promptArg.body.noReply).toBe(true);
-    expect(promptArg.body.model).toBeUndefined();
-  });
-});
+    expect(mockSessionMessages).toHaveBeenCalledTimes(1)
+    const promptCall = mockSessionPrompt.mock.calls[0]?.[0]
+    expect(promptCall?.body?.agent).toBe("orchestrator")
+    expect(promptCall?.body?.model).toBeUndefined()
+  })
+})

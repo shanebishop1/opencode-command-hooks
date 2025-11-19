@@ -38,3 +38,4 @@ lerna-debug.log*
 tmp/
 temp/
 *.tmp
+opencode/

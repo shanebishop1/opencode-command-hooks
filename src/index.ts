@@ -163,6 +163,7 @@ const plugin: Plugin = async ({ client }) => {
      * to prevent OpenCode from throwing an error when it tries to call it.
      */
     config: async (_input: Config) => {
+      void _input
       if (DEBUG) {
         console.log(`${LOG_PREFIX} Config hook called`)
       }
