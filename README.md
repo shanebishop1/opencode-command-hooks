@@ -67,7 +67,6 @@ This plugin handles context injection automatically.
 
 ### 3. Reliability
 
-- **Deduplication**: Prevents commands from firing multiple times (a common issue with raw event listeners).
 - **Non-Blocking**: If a hook fails, your agent keeps working. Errors are logged gracefully.
 
 ---

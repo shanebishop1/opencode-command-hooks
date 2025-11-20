@@ -41,7 +41,7 @@
 export interface ToolHook {
   /**
    * Unique identifier for this hook within its scope (global or per-entity).
-   * Used for deduplication and error reporting.
+   * Used for error reporting and logging.
    * Must be unique within the same config source (global or markdown file).
    */
   id: string
@@ -155,7 +155,7 @@ export interface ToolHookWhen {
 export interface SessionHook {
   /**
    * Unique identifier for this hook within its scope (global or per-entity).
-   * Used for deduplication and error reporting.
+   * Used for error reporting and logging.
    * Must be unique within the same config source (global or markdown file).
    */
   id: string
@@ -573,7 +573,7 @@ export interface HookExecutionContext {
   slashCommand?: string
 
   /**
-   * Tool call ID for deduplication
+   * Tool call ID provided by OpenCode (if available)
    */
   callId?: string
 }

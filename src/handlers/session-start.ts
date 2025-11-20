@@ -7,7 +7,6 @@
  * 3. Merges and validates configurations
  * 4. Matches hooks using matchSessionHooks with event="session.start"
  * 5. For each matched hook:
- *    - Checks deduplication
  *    - Executes commands
  *    - Interpolates template (if inject configured)
  *    - Injects message into session (if inject configured)
@@ -24,11 +23,6 @@ import { validateConfig } from "../config/validate.js"
 import { matchSessionHooks } from "../matching/matcher.js"
 import { executeCommands } from "../execution/shell.js"
 import { interpolateTemplate } from "../execution/template.js"
-import {
-  generateSessionEventId,
-  hasProcessedEvent,
-  markEventProcessed,
-} from "../execution/dedup.js"
 import { getGlobalLogger } from "../logging.js"
 
 const log = getGlobalLogger()
@@ -286,25 +280,6 @@ export async function handleSessionStart(
 
     // Execute each matched hook
     for (const hook of matchedHooks) {
-      // Generate event ID for deduplication
-      const eventId = generateSessionEventId(
-        hook.id,
-        "session.start",
-        context.sessionId
-      )
-
-// Check deduplication
-      if (hasProcessedEvent(eventId)) {
-        log.debug(
-          `Hook "${hook.id}" already processed (dedup), skipping`
-        )
-        continue
-      }
-
-      // Mark as processed
-      markEventProcessed(eventId)
-
-      // Execute the hook
       await executeHook(hook, context, client)
     }
 

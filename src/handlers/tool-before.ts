@@ -7,7 +7,6 @@
  * 3. Merges and validates configurations
  * 4. Matches hooks using matchToolHooks with phase="before"
  * 5. For each matched hook:
- *    - Checks deduplication
  *    - Executes commands
  *    - Interpolates template (if inject configured)
  *    - Injects message into session (if inject configured)
@@ -24,11 +23,6 @@ import { validateConfig } from "../config/validate.js"
 import { matchToolHooks } from "../matching/matcher.js"
 import { executeCommands } from "../execution/shell.js"
 import { interpolateTemplate } from "../execution/template.js"
-import {
-  generateToolEventId,
-  hasProcessedEvent,
-  markEventProcessed,
-} from "../execution/dedup.js"
 import { getGlobalLogger } from "../logging.js"
 
 const log = getGlobalLogger()
@@ -70,10 +64,6 @@ interface ToolExecuteBeforeEvent {
    */
   slashCommand?: string
 
-  /**
-   * Tool call ID for deduplication
-   */
-  callId?: string
 }
 
 /**
@@ -90,14 +80,12 @@ function extractEventContext(event: ToolExecuteBeforeEvent): {
   sessionId: string
   callingAgent?: string
   slashCommand?: string
-  callId?: string
 } {
   return {
     toolName: event.tool || "unknown",
     sessionId: event.sessionId || "unknown",
     callingAgent: event.callingAgent,
     slashCommand: event.slashCommand,
-    callId: event.callId,
   }
 }
 
@@ -184,7 +172,6 @@ async function executeHook(
     sessionId: string
     callingAgent?: string
     slashCommand?: string
-    callId?: string
   },
   client: OpencodeClient
 ): Promise<void> {
@@ -322,30 +309,9 @@ export async function handleToolExecuteBefore(
 
      // Execute each matched hook
     for (const hook of matchedHooks) {
-      // Generate event ID for deduplication
-      // Include callId to make each tool invocation unique
-      const eventId = generateToolEventId(
-        hook.id,
-        context.toolName,
-        context.sessionId,
-        "before",
-        context.callId
-      )
+      await executeHook(hook, context, client)
+    }
 
-       // Check deduplication
-       if (hasProcessedEvent(eventId)) {
-         log.debug(
-           `Hook "${hook.id}" already processed (dedup), skipping`
-         )
-         continue
-       }
-
-      // Mark as processed
-      markEventProcessed(eventId)
-
-       // Execute the hook
-       await executeHook(hook, context, client)
-     }
 
      log.debug(`handleToolExecuteBefore completed`)
    } catch (error) {

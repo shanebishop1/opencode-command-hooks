@@ -7,7 +7,6 @@
  * 3. Merges and validates configurations
  * 4. Matches hooks using matchToolHooks with phase="after"
  * 5. For each matched hook:
- *    - Checks deduplication
  *    - Executes commands
  *    - Interpolates template (if inject configured)
  *    - Injects message into session (if inject configured)
@@ -24,11 +23,6 @@ import { validateConfig } from "../config/validate.js"
 import { matchToolHooks } from "../matching/matcher.js"
 import { executeCommands } from "../execution/shell.js"
 import { interpolateTemplate } from "../execution/template.js"
-import {
-  generateToolEventId,
-  hasProcessedEvent,
-  markEventProcessed,
-} from "../execution/dedup.js"
 import { getGlobalLogger } from "../logging.js"
 
 const log = getGlobalLogger()
@@ -77,7 +71,7 @@ interface ToolExecuteAfterEvent {
   slashCommand?: string
 
   /**
-   * Tool call ID for deduplication
+   * Tool call ID provided by OpenCode
    */
   callId?: string
 }
@@ -462,30 +456,9 @@ export async function handleToolExecuteAfter(
 
      // Execute each matched hook
     for (const hook of matchedHooks) {
-      // Generate event ID for deduplication
-      // Include callId to make each tool invocation unique
-      const eventId = generateToolEventId(
-        hook.id,
-        context.toolName,
-        context.sessionId,
-        "after",
-        context.callId
-      )
+      await executeHook(hook, context, client)
+    }
 
-       // Check deduplication
-       if (hasProcessedEvent(eventId)) {
-         log.debug(
-           `Hook "${hook.id}" already processed (dedup), skipping`
-         )
-         continue
-       }
-
-      // Mark as processed
-      markEventProcessed(eventId)
-
-       // Execute the hook
-       await executeHook(hook, context, client)
-     }
 
      log.debug(`handleToolExecuteAfter completed`)
    } catch (error) {
