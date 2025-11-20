@@ -248,15 +248,14 @@ export interface HookInjection {
    */
   target?: "callingSession"
 
-  /**
-   * Message role/type for injection.
-   * - "system": injected as system-level message (context for AI)
-   * - "user": injected as user message (visible in conversation)
-   * - "note": injected as non-disruptive note (internal metadata)
-   *
-   * Default: "system"
-   */
-  as?: "system" | "user" | "note"
+   /**
+    * Message role/type for injection.
+    * - "user": injected as user message (visible in conversation)
+    * - "assistant": injected as assistant message (appears as agent response)
+    *
+    * Default: "user"
+    */
+   as?: "user" | "assistant"
 
   /**
    * Template string for formatting the injected message.

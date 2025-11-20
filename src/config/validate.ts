@@ -108,13 +108,13 @@ function validateInjection(
         message: `Hook "${hookId}": inject.as must be a string`,
         severity: "error",
       })
-    } else if (!["system", "user", "note"].includes(inj.as)) {
-      errors.push({
-        hookId,
-        type: "invalid_injection_as",
-        message: `Hook "${hookId}": inject.as must be "system", "user", or "note", got "${inj.as}"`,
-        severity: "error",
-      })
+    } else if (!["user", "assistant"].includes(inj.as)) {
+       errors.push({
+         hookId,
+         type: "invalid_injection_as",
+         message: `Hook "${hookId}": inject.as must be "user" or "assistant", got "${inj.as}"`,
+         severity: "error",
+       })
     }
   }
 

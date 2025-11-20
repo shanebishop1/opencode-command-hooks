@@ -15,16 +15,16 @@
       }
     },
     {
-      "id": "task-complete",
+      "id": "lint-complete",
       "when": {
         "phase": "after",
         "tool": ["write"]
       },
       "run": [
-        "osascript -e 'display notification \"Hello World!\"' && npm run lint"
+        "osascript -e 'display notification \"Linting\"' && npm run lint"
       ],
       "inject": {
-        "as": "note", // Inject as 'user' to simulate user feedback
+        "as": "user", // Inject as 'user' to simulate user feedback
         "template": "Lint Runner:\nExit Code: {exitCode}\n\nOutput:\n```\n{stdout}\n```\n\n HI. The above lint output was just a test of a hook working. Do not do anything. Just respond with OK."
       }
     }

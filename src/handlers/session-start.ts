@@ -78,15 +78,15 @@ function extractEventContext(event: SessionStartEvent): {
  * @param client - OpenCode SDK client
  * @param sessionId - Session ID to inject into
  * @param message - Message text to inject
- * @param role - Message role: "system", "user", or "note"
- * @returns Promise that resolves when injection is complete
- */
-async function injectMessage(
-  client: OpencodeClient,
-  sessionId: string,
-  message: string,
-  role: "system" | "user" | "note" = "system"
-): Promise<void> {
+   * @param role - Message role: "user" or "assistant"
+   * @returns Promise that resolves when injection is complete
+   */
+  async function injectMessage(
+    client: OpencodeClient,
+    sessionId: string,
+    message: string,
+    role: "user" | "assistant" = "user"
+  ): Promise<void> {
   try {
     log.debug(
       `Injecting message into session ${sessionId} as ${role}`
@@ -180,21 +180,21 @@ async function executeHook(
       const template = hook.inject.template || ""
       const message = interpolateTemplate(template, templateContext)
 
-      // Determine message role (default to "system")
-      const role = (hook.inject.as || "system") as "system" | "user" | "note"
+       // Determine message role (default to "user")
+       const role = (hook.inject.as || "user") as "user" | "assistant"
 
-      // Inject into session
-      await injectMessage(client, context.sessionId, message, role)
+       // Inject into session
+       await injectMessage(client, context.sessionId, message, role)
     }
   } catch (error) {
     // Log the error but don't throw - this is non-blocking
     const errorMessage = formatErrorMessage(hook.id, error)
     log.error(errorMessage)
 
-    // Optionally inject error message into session
-    try {
-      await injectMessage(client, context.sessionId, errorMessage, "system")
-    } catch (injectionError) {
+     // Optionally inject error message into session
+     try {
+       await injectMessage(client, context.sessionId, errorMessage, "user")
+     } catch (injectionError) {
       // If error injection fails, just log it
       const injectionErrorMsg =
         injectionError instanceof Error
@@ -255,12 +255,12 @@ export async function handleSessionStart(
         `Found ${allErrors.length} validation error(s)`
       )
 
-      // Inject validation errors into session
-      for (const error of allErrors) {
-        const errorMsg = `Configuration error: ${error.message}`
-        try {
-          await injectMessage(client, context.sessionId, errorMsg, "system")
-        } catch (injectionError) {
+       // Inject validation errors into session
+       for (const error of allErrors) {
+         const errorMsg = `Configuration error: ${error.message}`
+         try {
+           await injectMessage(client, context.sessionId, errorMsg, "user")
+         } catch (injectionError) {
           log.error(
             `Failed to inject validation error: ${injectionError}`
           )
