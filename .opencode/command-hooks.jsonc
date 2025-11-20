@@ -1,13 +1,32 @@
 {
   "tool": [
     {
-      "id": "task-completion-console-log",
+      "id": "search-complete",
       "when": {
         "phase": "after",
         "tool": ["firecrawl_firecrawl_search"]
       },
-      "run": ["touch ./test1/ahh.md"],
-      "consoleLog": "🎯 Task completed successfully!"
+      "run": [
+        "osascript -e 'display notification \"Hello World!\"' && npm run lint"
+      ],
+      "inject": {
+        "as": "user", // Inject as 'user' to simulate user feedback
+        "template": "Lint Runner:\nExit Code: {exitCode}\n\nOutput:\n```\n{stdout}\n```\n\nIf tests failed, please fix them before proceeding."
+      }
+    },
+    {
+      "id": "task-complete",
+      "when": {
+        "phase": "after",
+        "tool": ["write"]
+      },
+      "run": [
+        "osascript -e 'display notification \"Hello World!\"' && npm run lint"
+      ],
+      "inject": {
+        "as": "note", // Inject as 'user' to simulate user feedback
+        "template": "Lint Runner:\nExit Code: {exitCode}\n\nOutput:\n```\n{stdout}\n```\n\n HI. The above lint output was just a test of a hook working. Do not do anything. Just respond with OK."
+      }
     }
   ]
 }
