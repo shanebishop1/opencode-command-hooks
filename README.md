@@ -65,7 +65,7 @@ This plugin handles context injection automatically.
 "inject": { "as": "system" } // The agent sees the command output immediately
 ```
 
-### 3. Production-Grade Reliability
+### 3. Reliability
 
 - **Deduplication**: Prevents commands from firing multiple times (a common issue with raw event listeners).
 - **Non-Blocking**: If a hook fails, your agent keeps working. Errors are logged gracefully.
