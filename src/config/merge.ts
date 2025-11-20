@@ -14,9 +14,9 @@ import type {
   SessionHook,
   HookValidationError,
 } from "../types/hooks.js"
+import { getGlobalLogger } from "../logging.js"
 
-const LOG_PREFIX = "[opencode-command-hooks]"
-const DEBUG = process.env.OPENCODE_HOOKS_DEBUG === "1"
+const log = getGlobalLogger()
 
 /**
  * Find duplicate IDs within a hook array
@@ -210,27 +210,25 @@ export function mergeConfigs(
   // Merge tool hooks
   const globalToolHooks = global.tool ?? []
   const markdownToolHooks = markdown.tool ?? []
-  const mergedToolHooks = mergeHookArrays(globalToolHooks, markdownToolHooks)
+const mergedToolHooks = mergeHookArrays(globalToolHooks, markdownToolHooks)
 
-  // Merge session hooks
-  const globalSessionHooks = global.session ?? []
-  const markdownSessionHooks = markdown.session ?? []
-  const mergedSessionHooks = mergeHookArrays(
-    globalSessionHooks,
-    markdownSessionHooks,
-  )
+   // Merge session hooks
+   const globalSessionHooks = global.session ?? []
+   const markdownSessionHooks = markdown.session ?? []
+   const mergedSessionHooks = mergeHookArrays(
+     globalSessionHooks,
+     markdownSessionHooks,
+   )
 
-  // Build merged config
-  const mergedConfig: CommandHooksConfig = {
-    tool: mergedToolHooks.length > 0 ? mergedToolHooks : [],
-    session: mergedSessionHooks.length > 0 ? mergedSessionHooks : [],
-  }
+   // Build merged config
+   const mergedConfig: CommandHooksConfig = {
+     tool: mergedToolHooks.length > 0 ? mergedToolHooks : [],
+     session: mergedSessionHooks.length > 0 ? mergedSessionHooks : [],
+   }
 
-  if (DEBUG) {
-    console.log(
-      `${LOG_PREFIX} Merged configs: ${mergedToolHooks.length} tool hooks, ${mergedSessionHooks.length} session hooks, ${errors.length} errors`,
-    )
-  }
+   log.debug(
+     `Merged configs: ${mergedToolHooks.length} tool hooks, ${mergedSessionHooks.length} session hooks, ${errors.length} errors`,
+   )
 
-  return { config: mergedConfig, errors }
+   return { config: mergedConfig, errors }
 }

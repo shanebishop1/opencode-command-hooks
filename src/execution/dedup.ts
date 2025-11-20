@@ -11,7 +11,9 @@
  * - Debug logging via OPENCODE_HOOKS_DEBUG environment variable
  */
 
-const LOG_PREFIX = "[opencode-command-hooks]"
+import { getGlobalLogger } from "../logging.js"
+
+const log = getGlobalLogger()
 
 /**
  * Check if debug logging is enabled
@@ -116,8 +118,8 @@ export class EventDeduplicator {
     const processed = this.processedEvents.has(eventId)
 
     if (isDebugEnabled()) {
-      console.log(
-        `${LOG_PREFIX} Dedup check: eventId="${eventId}" processed=${processed} (total tracked: ${this.processedEvents.size})`
+      log.debug(
+        `Dedup check: eventId="${eventId}" processed=${processed} (total tracked: ${this.processedEvents.size})`
       )
     }
 
@@ -133,8 +135,8 @@ export class EventDeduplicator {
     this.processedEvents.add(eventId)
 
     if (isDebugEnabled()) {
-      console.log(
-        `${LOG_PREFIX} Dedup mark: eventId="${eventId}" (total tracked: ${this.processedEvents.size})`
+      log.debug(
+        `Dedup mark: eventId="${eventId}" (total tracked: ${this.processedEvents.size})`
       )
     }
   }
@@ -151,7 +153,7 @@ export class EventDeduplicator {
     this.processedEvents.clear()
 
     if (isDebugEnabled()) {
-      console.log(`${LOG_PREFIX} Dedup cleared: removed ${previousSize} tracked events`)
+      log.debug(`Dedup cleared: removed ${previousSize} tracked events`)
     }
   }
 
@@ -186,7 +188,7 @@ function getGlobalDeduplicator(): EventDeduplicator {
   if (!globalDeduplicator) {
     globalDeduplicator = new EventDeduplicator()
     if (isDebugEnabled()) {
-      console.log(`${LOG_PREFIX} Dedup: initialized global deduplicator`)
+      log.debug(`Dedup: initialized global deduplicator`)
     }
   }
   return globalDeduplicator
@@ -249,7 +251,7 @@ export function getTrackedEventCount(): number {
  */
 export function resetGlobalDeduplicator(): void {
   if (globalDeduplicator && isDebugEnabled()) {
-    console.log(`${LOG_PREFIX} Dedup: reset global deduplicator`)
+    log.debug(`Dedup: reset global deduplicator`)
   }
   globalDeduplicator = null
 }

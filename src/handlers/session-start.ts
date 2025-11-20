@@ -29,9 +29,9 @@ import {
   hasProcessedEvent,
   markEventProcessed,
 } from "../execution/dedup.js"
+import { getGlobalLogger } from "../logging.js"
 
-const LOG_PREFIX = "[opencode-command-hooks]"
-const DEBUG = process.env.OPENCODE_HOOKS_DEBUG === "1"
+const log = getGlobalLogger()
 
 /**
  * Session start event structure
@@ -94,11 +94,9 @@ async function injectMessage(
   role: "system" | "user" | "note" = "system"
 ): Promise<void> {
   try {
-    if (DEBUG) {
-      console.log(
-        `${LOG_PREFIX} Injecting message into session ${sessionId} as ${role}`
-      )
-    }
+    log.debug(
+      `Injecting message into session ${sessionId} as ${role}`
+    )
 
     // Note: The role parameter is logged for debugging but the OpenCode SDK
     // doesn't currently support role specification in session.prompt()
@@ -112,13 +110,11 @@ async function injectMessage(
       },
     })
 
-    if (DEBUG) {
-      console.log(`${LOG_PREFIX} Message injected successfully`)
-    }
+    log.debug(`Message injected successfully`)
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
-    console.error(
-      `${LOG_PREFIX} Failed to inject message into session: ${errorMessage}`
+    log.error(
+      `Failed to inject message into session: ${errorMessage}`
     )
     // Don't throw - this is non-blocking
   }
@@ -137,7 +133,7 @@ async function injectMessage(
 function formatErrorMessage(hookId: string, error: unknown): string {
   const errorText =
     error instanceof Error ? error.message : String(error || "Unknown error")
-  return `${LOG_PREFIX} Hook "${hookId}" failed: ${errorText}`
+  return `Hook "${hookId}" failed: ${errorText}`
 }
 
 /**
@@ -159,21 +155,17 @@ async function executeHook(
   },
   client: OpencodeClient
 ): Promise<void> {
-  if (DEBUG) {
-    console.log(
-      `${LOG_PREFIX} Executing hook "${hook.id}" for session.start event`
-    )
-  }
+  log.debug(
+    `Executing hook "${hook.id}" for session.start event`
+  )
 
   try {
     // Execute the hook's commands
     const results = await executeCommands(hook.run, hook.id)
 
-    if (DEBUG) {
-      console.log(
-        `${LOG_PREFIX} Hook "${hook.id}" executed ${results.length} command(s)`
-      )
-    }
+    log.debug(
+      `Hook "${hook.id}" executed ${results.length} command(s)`
+    )
 
     // If inject is configured, prepare and inject the message
     if (hook.inject) {
@@ -203,7 +195,7 @@ async function executeHook(
   } catch (error) {
     // Log the error but don't throw - this is non-blocking
     const errorMessage = formatErrorMessage(hook.id, error)
-    console.error(errorMessage)
+    log.error(errorMessage)
 
     // Optionally inject error message into session
     try {
@@ -214,8 +206,8 @@ async function executeHook(
         injectionError instanceof Error
           ? injectionError.message
           : String(injectionError)
-      console.error(
-        `${LOG_PREFIX} Failed to inject error message: ${injectionErrorMsg}`
+      log.error(
+        `Failed to inject error message: ${injectionErrorMsg}`
       )
     }
   }
@@ -240,12 +232,7 @@ export async function handleSessionStart(
   client: OpencodeClient
 ): Promise<void> {
   try {
-    if (DEBUG) {
-      console.log(`${LOG_PREFIX} handleSessionStart called`, {
-        sessionId: event.sessionId,
-        agent: event.agent,
-      })
-    }
+    log.debug(`handleSessionStart called with sessionId: ${event.sessionId}, agent: ${event.agent}`)
 
     // Extract context from event
     const context = extractEventContext(event)
@@ -270,20 +257,18 @@ export async function handleSessionStart(
     const allErrors = [...mergeErrors, ...validationErrors]
 
     if (allErrors.length > 0) {
-      if (DEBUG) {
-        console.log(
-          `${LOG_PREFIX} Found ${allErrors.length} validation error(s)`
-        )
-      }
+      log.debug(
+        `Found ${allErrors.length} validation error(s)`
+      )
 
       // Inject validation errors into session
       for (const error of allErrors) {
-        const errorMsg = `${LOG_PREFIX} Configuration error: ${error.message}`
+        const errorMsg = `Configuration error: ${error.message}`
         try {
           await injectMessage(client, context.sessionId, errorMsg, "system")
         } catch (injectionError) {
-          console.error(
-            `${LOG_PREFIX} Failed to inject validation error: ${injectionError}`
+          log.error(
+            `Failed to inject validation error: ${injectionError}`
           )
         }
       }
@@ -295,11 +280,9 @@ export async function handleSessionStart(
       agent: context.agent,
     })
 
-    if (DEBUG) {
-      console.log(
-        `${LOG_PREFIX} Matched ${matchedHooks.length} hook(s) for event="session.start"`
-      )
-    }
+    log.debug(
+      `Matched ${matchedHooks.length} hook(s) for event="session.start"`
+    )
 
     // Execute each matched hook
     for (const hook of matchedHooks) {
@@ -310,13 +293,11 @@ export async function handleSessionStart(
         context.sessionId
       )
 
-      // Check deduplication
+// Check deduplication
       if (hasProcessedEvent(eventId)) {
-        if (DEBUG) {
-          console.log(
-            `${LOG_PREFIX} Hook "${hook.id}" already processed (dedup), skipping`
-          )
-        }
+        log.debug(
+          `Hook "${hook.id}" already processed (dedup), skipping`
+        )
         continue
       }
 
@@ -327,15 +308,13 @@ export async function handleSessionStart(
       await executeHook(hook, context, client)
     }
 
-    if (DEBUG) {
-      console.log(`${LOG_PREFIX} handleSessionStart completed`)
-    }
+    log.debug(`handleSessionStart completed`)
   } catch (error) {
     // Catch-all for unexpected errors
     const errorMessage =
       error instanceof Error ? error.message : String(error)
-    console.error(
-      `${LOG_PREFIX} Unexpected error in handleSessionStart: ${errorMessage}`
+    log.error(
+      `Unexpected error in handleSessionStart: ${errorMessage}`
     )
     // Don't throw - this is non-blocking
   }

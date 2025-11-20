@@ -16,9 +16,10 @@ import type {
   CommandHooksConfig,
   HookValidationError,
 } from "../types/hooks.js"
+import { getGlobalLogger } from "../logging.js"
 
-const LOG_PREFIX = "[opencode-command-hooks]"
 const DEBUG = process.env.OPENCODE_HOOKS_DEBUG === "1"
+const log = getGlobalLogger()
 
 // ============================================================================
 // VALIDATION HELPERS
@@ -300,8 +301,8 @@ export function validateToolHook(hook: unknown): HookValidationError[] {
   errors.push(...validateInjection(h.inject, hookId))
 
   if (DEBUG && errors.length > 0) {
-    console.log(
-      `${LOG_PREFIX} Tool hook "${hookId}" validation errors: ${errors.length}`,
+    log.debug(
+      `Tool hook "${hookId}" validation errors: ${errors.length}`,
     )
   }
 
@@ -428,8 +429,8 @@ export function validateSessionHook(hook: unknown): HookValidationError[] {
   errors.push(...validateInjection(h.inject, hookId))
 
   if (DEBUG && errors.length > 0) {
-    console.log(
-      `${LOG_PREFIX} Session hook "${hookId}" validation errors: ${errors.length}`,
+    log.debug(
+      `Session hook "${hookId}" validation errors: ${errors.length}`,
     )
   }
 
@@ -469,8 +470,8 @@ export function validateConfig(config: CommandHooksConfig): HookValidationError[
   }
 
   if (DEBUG && errors.length > 0) {
-    console.log(
-      `${LOG_PREFIX} Config validation found ${errors.length} error(s)`,
+    log.debug(
+      `Config validation found ${errors.length} error(s)`,
     )
   }
 

@@ -29,9 +29,9 @@ import {
   hasProcessedEvent,
   markEventProcessed,
 } from "../execution/dedup.js"
+import { getGlobalLogger } from "../logging.js"
 
-const LOG_PREFIX = "[opencode-command-hooks]"
-const DEBUG = process.env.OPENCODE_HOOKS_DEBUG === "1"
+const log = getGlobalLogger()
 
 /**
  * Tool execution before event structure
@@ -120,13 +120,11 @@ async function injectMessage(
   role: "system" | "user" | "note" = "system"
 ): Promise<void> {
    try {
-     if (DEBUG) {
-       console.log(
-         `${LOG_PREFIX} Injecting message into session ${sessionId} as ${role}`
-       )
-     }
+     log.debug(
+       `Injecting message into session ${sessionId} as ${role}`
+     )
 
-     // Note: The role parameter is logged for debugging but the OpenCode SDK
+      // Note: The role parameter is logged for debugging but the OpenCode SDK
      // doesn't currently support role specification in session.prompt()
      // Future versions may support this capability
 
@@ -138,17 +136,15 @@ async function injectMessage(
        },
      })
 
-    // Add a small delay to ensure the message is fully processed before continuing
-    // This helps ensure "before" hook messages appear before the tool output
-    await new Promise(resolve => setTimeout(resolve, 100))
+     // Add a small delay to ensure the message is fully processed before continuing
+     // This helps ensure "before" hook messages appear before the tool output
+     await new Promise(resolve => setTimeout(resolve, 100))
 
-    if (DEBUG) {
-      console.log(`${LOG_PREFIX} Message injected successfully`)
-    }
-  } catch (error) {
+     log.debug(`Message injected successfully`)
+   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
-    console.error(
-      `${LOG_PREFIX} Failed to inject message into session: ${errorMessage}`
+    log.error(
+      `Failed to inject message into session: ${errorMessage}`
     )
     // Don't throw - this is non-blocking
   }
@@ -167,7 +163,7 @@ async function injectMessage(
 function formatErrorMessage(hookId: string, error: unknown): string {
   const errorText =
     error instanceof Error ? error.message : String(error || "Unknown error")
-  return `${LOG_PREFIX} Hook "${hookId}" failed: ${errorText}`
+  return `Hook "${hookId}" failed: ${errorText}`
 }
 
 /**
@@ -192,23 +188,19 @@ async function executeHook(
   },
   client: OpencodeClient
 ): Promise<void> {
-  if (DEBUG) {
-    console.log(
-      `${LOG_PREFIX} Executing hook "${hook.id}" for tool "${context.toolName}"`
-    )
-  }
+   log.debug(
+     `Executing hook "${hook.id}" for tool "${context.toolName}"`
+   )
 
-  try {
-    // Execute the hook's commands
-    const results = await executeCommands(hook.run, hook.id)
+   try {
+     // Execute the hook's commands
+     const results = await executeCommands(hook.run, hook.id)
 
-    if (DEBUG) {
-      console.log(
-        `${LOG_PREFIX} Hook "${hook.id}" executed ${results.length} command(s)`
-      )
-    }
+     log.debug(
+       `Hook "${hook.id}" executed ${results.length} command(s)`
+     )
 
-    // If inject is configured, prepare and inject the message
+     // If inject is configured, prepare and inject the message
     if (hook.inject) {
       // Use the last command's result for template interpolation
       const lastResult = results[results.length - 1]
@@ -237,7 +229,7 @@ async function executeHook(
   } catch (error) {
     // Log the error but don't throw - this is non-blocking
     const errorMessage = formatErrorMessage(hook.id, error)
-    console.error(errorMessage)
+    log.error(errorMessage)
 
     // Optionally inject error message into session
     try {
@@ -248,8 +240,8 @@ async function executeHook(
         injectionError instanceof Error
           ? injectionError.message
           : String(injectionError)
-      console.error(
-        `${LOG_PREFIX} Failed to inject error message: ${injectionErrorMsg}`
+      log.error(
+        `Failed to inject error message: ${injectionErrorMsg}`
       )
     }
   }
@@ -273,16 +265,10 @@ export async function handleToolExecuteBefore(
   event: ToolExecuteBeforeEvent,
   client: OpencodeClient
 ): Promise<void> {
-  try {
-    if (DEBUG) {
-      console.log(`${LOG_PREFIX} handleToolExecuteBefore called`, {
-        tool: event.tool,
-        sessionId: event.sessionId,
-        callingAgent: event.callingAgent,
-      })
-    }
+   try {
+     log.debug(`handleToolExecuteBefore called with tool: ${event.tool}, sessionId: ${event.sessionId}, callingAgent: ${event.callingAgent}`)
 
-    // Extract context from event
+     // Extract context from event
     const context = extractEventContext(event)
 
     // Load global config
@@ -302,23 +288,21 @@ export async function handleToolExecuteBefore(
 
     // Validate merged config
     const validationErrors = validateConfig(mergedConfig)
-    const allErrors = [...mergeErrors, ...validationErrors]
+     const allErrors = [...mergeErrors, ...validationErrors]
 
-    if (allErrors.length > 0) {
-      if (DEBUG) {
-        console.log(
-          `${LOG_PREFIX} Found ${allErrors.length} validation error(s)`
-        )
-      }
+     if (allErrors.length > 0) {
+       log.debug(
+         `Found ${allErrors.length} validation error(s)`
+       )
 
-      // Inject validation errors into session
+       // Inject validation errors into session
       for (const error of allErrors) {
-        const errorMsg = `${LOG_PREFIX} Configuration error: ${error.message}`
+        const errorMsg = `Configuration error: ${error.message}`
         try {
           await injectMessage(client, context.sessionId, errorMsg, "system")
         } catch (injectionError) {
-          console.error(
-            `${LOG_PREFIX} Failed to inject validation error: ${injectionError}`
+          log.error(
+            `Failed to inject validation error: ${injectionError}`
           )
         }
       }
@@ -329,16 +313,14 @@ export async function handleToolExecuteBefore(
       phase: "before",
       toolName: context.toolName,
       callingAgent: context.callingAgent,
-      slashCommand: context.slashCommand,
-    })
+       slashCommand: context.slashCommand,
+     })
 
-    if (DEBUG) {
-      console.log(
-        `${LOG_PREFIX} Matched ${matchedHooks.length} hook(s) for phase="before" tool="${context.toolName}"`
-      )
-    }
+     log.debug(
+       `Matched ${matchedHooks.length} hook(s) for phase="before" tool="${context.toolName}"`
+     )
 
-    // Execute each matched hook
+     // Execute each matched hook
     for (const hook of matchedHooks) {
       // Generate event ID for deduplication
       // Include callId to make each tool invocation unique
@@ -350,32 +332,28 @@ export async function handleToolExecuteBefore(
         context.callId
       )
 
-      // Check deduplication
-      if (hasProcessedEvent(eventId)) {
-        if (DEBUG) {
-          console.log(
-            `${LOG_PREFIX} Hook "${hook.id}" already processed (dedup), skipping`
-          )
-        }
-        continue
-      }
+       // Check deduplication
+       if (hasProcessedEvent(eventId)) {
+         log.debug(
+           `Hook "${hook.id}" already processed (dedup), skipping`
+         )
+         continue
+       }
 
       // Mark as processed
       markEventProcessed(eventId)
 
-      // Execute the hook
-      await executeHook(hook, context, client)
-    }
+       // Execute the hook
+       await executeHook(hook, context, client)
+     }
 
-    if (DEBUG) {
-      console.log(`${LOG_PREFIX} handleToolExecuteBefore completed`)
-    }
-  } catch (error) {
+     log.debug(`handleToolExecuteBefore completed`)
+   } catch (error) {
     // Catch-all for unexpected errors
     const errorMessage =
       error instanceof Error ? error.message : String(error)
-    console.error(
-      `${LOG_PREFIX} Unexpected error in handleToolExecuteBefore: ${errorMessage}`
+    log.error(
+      `Unexpected error in handleToolExecuteBefore: ${errorMessage}`
     )
     // Don't throw - this is non-blocking
   }

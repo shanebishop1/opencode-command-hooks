@@ -4,15 +4,13 @@ import { handleToolExecuteBefore } from "./handlers/tool-before.js"
 import { handleToolExecuteAfter } from "./handlers/tool-after.js"
 import { handleSessionStart } from "./handlers/session-start.js"
 import { handleSessionIdle } from "./handlers/session-idle.js"
+import { createLogger, setGlobalLogger } from "./logging.js"
 
 // Export handlers for testing and external use
 export { handleToolExecuteBefore } from "./handlers/tool-before.js"
 export { handleToolExecuteAfter } from "./handlers/tool-after.js"
 export { handleSessionStart } from "./handlers/session-start.js"
 export { handleSessionIdle } from "./handlers/session-idle.js"
-
-const LOG_PREFIX = "[opencode-command-hooks]"
-const DEBUG = process.env.OPENCODE_HOOKS_DEBUG === "1"
 
 /**
  * Internal representation of an after-hook event
@@ -151,8 +149,11 @@ export async function handleToolResultEvent(
  * - Non-blocking error semantics
  */
 const plugin: Plugin = async ({ client }) => {
+  const log = createLogger(client)
+  setGlobalLogger(log)
+  
   try {
-    console.log(`${LOG_PREFIX} Initializing plugin`)
+    log.info("Initializing plugin")
 
     const hooks = {
     /**
@@ -162,14 +163,12 @@ const plugin: Plugin = async ({ client }) => {
      * from .opencode/command-hooks.jsonc, but we need to implement this hook
      * to prevent OpenCode from throwing an error when it tries to call it.
      */
-    config: async (_input: Config) => {
-      void _input
-      if (DEBUG) {
-        console.log(`${LOG_PREFIX} Config hook called`)
-      }
-      // No-op for now - we load config from .opencode/command-hooks.jsonc
-      // This hook is called by OpenCode during plugin initialization
-    },
+config: async (_input: Config) => {
+        void _input
+        log.debug("Config hook called")
+        // No-op for now - we load config from .opencode/command-hooks.jsonc
+        // This hook is called by OpenCode during plugin initialization
+      },
 
     /**
      * Event hook for session lifecycle events
@@ -179,14 +178,12 @@ const plugin: Plugin = async ({ client }) => {
      * in its event type union, but it is documented as a supported event in the
      * OpenCode SDK. We use a type assertion to allow this event type.
      */
-    event: async ({ event }: { event: { type: string; properties?: Record<string, unknown> } }) => {
-      // Handle session.start event
-      if (event.type === "session.start") {
-        if (DEBUG) {
-          console.log(`${LOG_PREFIX} Received session.start event`)
-        }
+      event: async ({ event }: { event: { type: string; properties?: Record<string, unknown> } }) => {
+// Handle session.start event
+         if (event.type === "session.start") {
+           log.debug("Received session.start event")
 
-        // Extract event data from properties
+         // Extract event data from properties
         const sessionStartEvent = {
           sessionId: event.properties?.sessionID as string | undefined,
           agent: event.properties?.agent as string | undefined,
@@ -197,13 +194,11 @@ const plugin: Plugin = async ({ client }) => {
         await handleSessionStart(sessionStartEvent, client as OpencodeClient)
       }
 
-      // Handle session.idle event
-      if (event.type === "session.idle") {
-        if (DEBUG) {
-          console.log(`${LOG_PREFIX} Received session.idle event`)
-        }
+// Handle session.idle event
+         if (event.type === "session.idle") {
+           log.debug("Received session.idle event")
 
-        // Extract event data from properties
+         // Extract event data from properties
         const sessionIdleEvent = {
           sessionId: event.properties?.sessionID as string | undefined,
           agent: event.properties?.agent as string | undefined,
@@ -214,13 +209,11 @@ const plugin: Plugin = async ({ client }) => {
         await handleSessionIdle(sessionIdleEvent, client as OpencodeClient)
       }
 
-      // Handle tool.result event (fires when tool finishes)
-      if (event.type === "tool.result") {
-        if (DEBUG) {
-          console.log(`${LOG_PREFIX} Received tool.result event`)
-        }
+// Handle tool.result event (fires when tool finishes)
+         if (event.type === "tool.result") {
+           log.debug("Received tool.result event")
 
-        await handleToolResultEvent(event, client as OpencodeClient)
+         await handleToolResultEvent(event, client as OpencodeClient)
       }
     },
 
@@ -269,10 +262,10 @@ const plugin: Plugin = async ({ client }) => {
     },
   }
 
-    console.log(`${LOG_PREFIX} Plugin returning hooks:`, Object.keys(hooks))
+    log.info(`Plugin returning hooks: ${Object.keys(hooks).join(", ")}`)
     return hooks
   } catch (error) {
-    console.error(`${LOG_PREFIX} Error in plugin initialization:`, error)
+    log.error(`Error in plugin initialization: ${error instanceof Error ? error.message : String(error)}`)
     throw error
   }
 }

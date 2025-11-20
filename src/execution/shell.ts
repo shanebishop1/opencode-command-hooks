@@ -15,11 +15,12 @@
 import type { HookExecutionResult } from "../types/hooks.js"
 import { exec } from "child_process"
 import { promisify } from "util"
+import { getGlobalLogger } from "../logging.js"
 
 const execAsync = promisify(exec)
 
-const LOG_PREFIX = "[opencode-command-hooks]"
 const DEFAULT_TRUNCATE_LIMIT = 4000
+const log = getGlobalLogger()
 
 /**
  * Check if debug logging is enabled
@@ -58,7 +59,7 @@ export async function executeCommand(
   const hookId = "command" // Will be set by caller
 
   if (isDebugEnabled()) {
-    console.log(`${LOG_PREFIX} Executing command: ${command}`)
+    log.debug(`Executing command: ${command}`)
   }
 
   try {
@@ -72,9 +73,7 @@ export async function executeCommand(
     const success = exitCode === 0
 
     if (isDebugEnabled()) {
-      console.log(
-        `${LOG_PREFIX} Command completed: exit ${exitCode}, stdout length: ${stdout.length}, stderr length: ${stderr.length}`
-      )
+      log.debug(`Command completed: exit ${exitCode}, stdout length: ${stdout.length}, stderr length: ${stderr.length}`)
     }
 
     return {
@@ -86,7 +85,7 @@ export async function executeCommand(
     }
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err)
-    console.error(`${LOG_PREFIX} Failed to execute command: ${errorMessage}`)
+    log.error(`Failed to execute command: ${errorMessage}`)
 
     return {
       hookId,
@@ -126,7 +125,7 @@ export async function executeCommands(
   const commandArray = Array.isArray(commands) ? commands : [commands]
 
   if (isDebugEnabled()) {
-    console.log(`${LOG_PREFIX} Executing ${commandArray.length} command(s) for hook "${hookId}"`)
+    log.debug(`Executing ${commandArray.length} command(s) for hook "${hookId}"`)
   }
 
   const results: HookExecutionResult[] = []
@@ -134,7 +133,7 @@ export async function executeCommands(
   for (const command of commandArray) {
     try {
       if (isDebugEnabled()) {
-        console.log(`${LOG_PREFIX} [${hookId}] Executing: ${command}`)
+        log.debug(`[${hookId}] Executing: ${command}`)
       }
 
       const result = await executeShellCommand(command)
@@ -145,9 +144,7 @@ export async function executeCommands(
       const success = exitCode === 0
 
       if (isDebugEnabled()) {
-        console.log(
-          `${LOG_PREFIX} [${hookId}] Command completed: exit ${exitCode}, stdout length: ${stdout.length}, stderr length: ${stderr.length}`
-        )
+        log.debug(`[${hookId}] Command completed: exit ${exitCode}, stdout length: ${stdout.length}, stderr length: ${stderr.length}`)
       }
 
       results.push({
@@ -159,7 +156,7 @@ export async function executeCommands(
       })
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err)
-      console.error(`${LOG_PREFIX} [${hookId}] Failed to execute command: ${errorMessage}`)
+      log.error(`[${hookId}] Failed to execute command: ${errorMessage}`)
 
       results.push({
         hookId,

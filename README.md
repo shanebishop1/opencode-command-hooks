@@ -58,7 +58,7 @@ _This configuration handles execution, captures stdout/stderr, prevents crashes 
 
 ### 2. Your Agent Actually "Sees" the Output
 
-Running a command is easy. Getting the output back to the Agent so it can _react_ to it is hard (requires specific SDK calls).
+Setting up a plugin to run commands is easy. Getting the output back to the Agent so it can _react_ to it is harder (requires specific SDK calls).
 This plugin handles context injection automatically.
 
 ```jsonc

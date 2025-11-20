@@ -7,9 +7,9 @@
 
 import type { CommandHooksConfig } from "../types/hooks.js";
 import { join, dirname } from "path";
+import { getGlobalLogger } from "../logging.js";
 
-const LOG_PREFIX = "[opencode-command-hooks]";
-const DEBUG = process.env.OPENCODE_HOOKS_DEBUG === "1";
+const log = getGlobalLogger();
 
 /**
  * Strip comments from JSONC content
@@ -112,12 +112,10 @@ async function findConfigFile(startDir: string): Promise<string | null> {
      const configPath = join(currentDir, ".opencode", "command-hooks.jsonc");
     try {
       const file = Bun.file(configPath);
-      if (await file.exists()) {
-        if (DEBUG) {
-          console.log(`${LOG_PREFIX} Found config file: ${configPath}`);
-        }
-        return configPath;
-      }
+       if (await file.exists()) {
+         log.debug(`Found config file: ${configPath}`);
+         return configPath;
+       }
     } catch {
       // Continue searching
     }
@@ -133,13 +131,11 @@ async function findConfigFile(startDir: string): Promise<string | null> {
     depth++;
   }
 
-  if (DEBUG) {
-    console.log(
-      `${LOG_PREFIX} No config file found after searching ${depth} directories`,
-    );
-  }
+   log.debug(
+     `No config file found after searching ${depth} directories`,
+   );
 
-  return null;
+   return null;
 }
 
 /**
@@ -161,14 +157,12 @@ export async function loadGlobalConfig(): Promise<CommandHooksConfig> {
     // Find config file
     const configPath = await findConfigFile(process.cwd());
 
-     if (!configPath) {
-       if (DEBUG) {
-         console.log(
-           `${LOG_PREFIX} No .opencode/command-hooks.jsonc file found, using empty config`,
-         );
-       }
-       return { tool: [], session: [] };
-     }
+      if (!configPath) {
+        log.debug(
+          `No .opencode/command-hooks.jsonc file found, using empty config`,
+        );
+        return { tool: [], session: [] };
+      }
 
     // Read file
     let content: string;
@@ -177,8 +171,8 @@ export async function loadGlobalConfig(): Promise<CommandHooksConfig> {
       content = await file.text();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.warn(
-        `${LOG_PREFIX} Failed to read config file ${configPath}: ${message}`,
+      log.info(
+        `Failed to read config file ${configPath}: ${message}`,
       );
       return { tool: [], session: [] };
     }
@@ -190,16 +184,16 @@ export async function loadGlobalConfig(): Promise<CommandHooksConfig> {
       parsed = parseJson(stripped);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.warn(
-        `${LOG_PREFIX} Failed to parse config file ${configPath}: ${message}`,
+      log.info(
+        `Failed to parse config file ${configPath}: ${message}`,
       );
       return { tool: [], session: [] };
     }
 
     // Validate entire file as CommandHooksConfig
     if (!isValidCommandHooksConfig(parsed)) {
-      console.warn(
-        `${LOG_PREFIX} Config file is not a valid CommandHooksConfig (expected { tool?: [], session?: [] }), using empty config`,
+      log.info(
+        `Config file is not a valid CommandHooksConfig (expected { tool?: [], session?: [] }), using empty config`,
       );
       return { tool: [], session: [] };
     }
@@ -210,18 +204,16 @@ export async function loadGlobalConfig(): Promise<CommandHooksConfig> {
       session: parsed.session ?? [],
     };
 
-    if (DEBUG) {
-      console.log(
-        `${LOG_PREFIX} Loaded global config: ${result.tool?.length ?? 0} tool hooks, ${result.session?.length ?? 0} session hooks`,
-      );
-    }
+     log.debug(
+       `Loaded global config: ${result.tool?.length ?? 0} tool hooks, ${result.session?.length ?? 0} session hooks`,
+     );
 
-    return result;
+     return result;
   } catch (error) {
     // Catch-all for unexpected errors
     const message = error instanceof Error ? error.message : String(error);
-    console.warn(
-      `${LOG_PREFIX} Unexpected error loading global config: ${message}`,
+    log.info(
+      `Unexpected error loading global config: ${message}`,
     );
     return { tool: [], session: [] };
   }

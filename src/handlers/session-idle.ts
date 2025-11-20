@@ -29,9 +29,9 @@ import {
   hasProcessedEvent,
   markEventProcessed,
 } from "../execution/dedup.js"
+import { getGlobalLogger } from "../logging.js"
 
-const LOG_PREFIX = "[opencode-command-hooks]"
-const DEBUG = process.env.OPENCODE_HOOKS_DEBUG === "1"
+const log = getGlobalLogger()
 
 /**
  * Session idle event structure
@@ -93,14 +93,12 @@ async function injectMessage(
   message: string,
   role: "system" | "user" | "note" = "system"
 ): Promise<void> {
-  try {
-    if (DEBUG) {
-      console.log(
-        `${LOG_PREFIX} Injecting message into session ${sessionId} as ${role}`
-      )
-    }
+   try {
+     log.debug(
+       `Injecting message into session ${sessionId} as ${role}`
+     )
 
-    // Note: The role parameter is logged for debugging but the OpenCode SDK
+     // Note: The role parameter is logged for debugging but the OpenCode SDK
     // doesn't currently support role specification in session.prompt()
     // Future versions may support this capability
 
@@ -110,15 +108,13 @@ async function injectMessage(
         noReply: true,
         parts: [{ type: "text", text: message }],
       },
-    })
+     })
 
-    if (DEBUG) {
-      console.log(`${LOG_PREFIX} Message injected successfully`)
-    }
-  } catch (error) {
+     log.debug(`Message injected successfully`)
+   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
-    console.error(
-      `${LOG_PREFIX} Failed to inject message into session: ${errorMessage}`
+    log.error(
+      `Failed to inject message into session: ${errorMessage}`
     )
     // Don't throw - this is non-blocking
   }
@@ -137,7 +133,7 @@ async function injectMessage(
 function formatErrorMessage(hookId: string, error: unknown): string {
   const errorText =
     error instanceof Error ? error.message : String(error || "Unknown error")
-  return `${LOG_PREFIX} Hook "${hookId}" failed: ${errorText}`
+  return `Hook "${hookId}" failed: ${errorText}`
 }
 
 /**
@@ -159,23 +155,19 @@ async function executeHook(
   },
   client: OpencodeClient
 ): Promise<void> {
-  if (DEBUG) {
-    console.log(
-      `${LOG_PREFIX} Executing hook "${hook.id}" for session.idle event`
-    )
-  }
+   log.debug(
+     `Executing hook "${hook.id}" for session.idle event`
+   )
 
-  try {
+   try {
     // Execute the hook's commands
-    const results = await executeCommands(hook.run, hook.id)
+     const results = await executeCommands(hook.run, hook.id)
 
-    if (DEBUG) {
-      console.log(
-        `${LOG_PREFIX} Hook "${hook.id}" executed ${results.length} command(s)`
-      )
-    }
+     log.debug(
+       `Hook "${hook.id}" executed ${results.length} command(s)`
+     )
 
-    // If inject is configured, prepare and inject the message
+     // If inject is configured, prepare and inject the message
     if (hook.inject) {
       // Use the last command's result for template interpolation
       const lastResult = results[results.length - 1]
@@ -203,7 +195,7 @@ async function executeHook(
   } catch (error) {
     // Log the error but don't throw - this is non-blocking
     const errorMessage = formatErrorMessage(hook.id, error)
-    console.error(errorMessage)
+    log.error(errorMessage)
 
     // Optionally inject error message into session
     try {
@@ -214,8 +206,8 @@ async function executeHook(
         injectionError instanceof Error
           ? injectionError.message
           : String(injectionError)
-      console.error(
-        `${LOG_PREFIX} Failed to inject error message: ${injectionErrorMsg}`
+      log.error(
+        `Failed to inject error message: ${injectionErrorMsg}`
       )
     }
   }
@@ -239,15 +231,10 @@ export async function handleSessionIdle(
   event: SessionIdleEvent,
   client: OpencodeClient
 ): Promise<void> {
-  try {
-    if (DEBUG) {
-      console.log(`${LOG_PREFIX} handleSessionIdle called`, {
-        sessionId: event.sessionId,
-        agent: event.agent,
-      })
-    }
+   try {
+     log.debug(`handleSessionIdle called with sessionId: ${event.sessionId}, agent: ${event.agent}`)
 
-    // Extract context from event
+     // Extract context from event
     const context = extractEventContext(event)
 
     // Load global config
@@ -269,21 +256,19 @@ export async function handleSessionIdle(
     const validationErrors = validateConfig(mergedConfig)
     const allErrors = [...mergeErrors, ...validationErrors]
 
-    if (allErrors.length > 0) {
-      if (DEBUG) {
-        console.log(
-          `${LOG_PREFIX} Found ${allErrors.length} validation error(s)`
-        )
-      }
+     if (allErrors.length > 0) {
+       log.debug(
+         `Found ${allErrors.length} validation error(s)`
+       )
 
-      // Inject validation errors into session
+       // Inject validation errors into session
       for (const error of allErrors) {
-        const errorMsg = `${LOG_PREFIX} Configuration error: ${error.message}`
+        const errorMsg = `Configuration error: ${error.message}`
         try {
           await injectMessage(client, context.sessionId, errorMsg, "system")
         } catch (injectionError) {
-          console.error(
-            `${LOG_PREFIX} Failed to inject validation error: ${injectionError}`
+          log.error(
+            `Failed to inject validation error: ${injectionError}`
           )
         }
       }
@@ -292,16 +277,14 @@ export async function handleSessionIdle(
     // Match hooks using matchSessionHooks with event="session.idle"
     const matchedHooks = matchSessionHooks(mergedConfig.session || [], {
       event: "session.idle",
-      agent: context.agent,
-    })
+       agent: context.agent,
+     })
 
-    if (DEBUG) {
-      console.log(
-        `${LOG_PREFIX} Matched ${matchedHooks.length} hook(s) for event="session.idle"`
-      )
-    }
+     log.debug(
+       `Matched ${matchedHooks.length} hook(s) for event="session.idle"`
+     )
 
-    // Execute each matched hook
+     // Execute each matched hook
     for (const hook of matchedHooks) {
       // Generate event ID for deduplication
       const eventId = generateSessionEventId(
@@ -310,32 +293,28 @@ export async function handleSessionIdle(
         context.sessionId
       )
 
-      // Check deduplication
-      if (hasProcessedEvent(eventId)) {
-        if (DEBUG) {
-          console.log(
-            `${LOG_PREFIX} Hook "${hook.id}" already processed (dedup), skipping`
-          )
-        }
-        continue
-      }
+       // Check deduplication
+       if (hasProcessedEvent(eventId)) {
+         log.debug(
+           `Hook "${hook.id}" already processed (dedup), skipping`
+         )
+         continue
+       }
 
       // Mark as processed
       markEventProcessed(eventId)
 
-      // Execute the hook
-      await executeHook(hook, context, client)
-    }
+       // Execute the hook
+       await executeHook(hook, context, client)
+     }
 
-    if (DEBUG) {
-      console.log(`${LOG_PREFIX} handleSessionIdle completed`)
-    }
-  } catch (error) {
+     log.debug(`handleSessionIdle completed`)
+   } catch (error) {
     // Catch-all for unexpected errors
     const errorMessage =
       error instanceof Error ? error.message : String(error)
-    console.error(
-      `${LOG_PREFIX} Unexpected error in handleSessionIdle: ${errorMessage}`
+    log.error(
+      `Unexpected error in handleSessionIdle: ${errorMessage}`
     )
     // Don't throw - this is non-blocking
   }

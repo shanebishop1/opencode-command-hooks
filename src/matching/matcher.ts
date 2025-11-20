@@ -16,9 +16,9 @@ import type {
   NormalizedToolHookWhen,
   NormalizedSessionHookWhen,
 } from "../types/hooks.js"
+import { getGlobalLogger } from "../logging.js"
 
-const LOG_PREFIX = "[opencode-command-hooks]"
-const DEBUG = process.env.OPENCODE_HOOKS_DEBUG === "1"
+const log = getGlobalLogger()
 
 // ============================================================================
 // NORMALIZATION HELPERS
@@ -171,56 +171,44 @@ export function matchToolHooks(
 
     // Check phase (must match exactly)
     if (normalized.phase !== context.phase) {
-      if (DEBUG) {
-        console.log(
-          `${LOG_PREFIX} Hook "${hook.id}": phase mismatch (${normalized.phase} !== ${context.phase})`,
-        )
-      }
+      log.debug(
+        `Hook "${hook.id}": phase mismatch (${normalized.phase} !== ${context.phase})`,
+      )
       continue
     }
 
     // Check tool name
     if (!matchesFilter(context.toolName, normalized.tool)) {
-      if (DEBUG) {
-        console.log(
-          `${LOG_PREFIX} Hook "${hook.id}": tool mismatch (${context.toolName} not in [${normalized.tool.join(", ")}])`,
-        )
-      }
+      log.debug(
+        `Hook "${hook.id}": tool mismatch (${context.toolName} not in [${normalized.tool.join(", ")}])`,
+      )
       continue
     }
 
     // Check calling agent
     if (!matchesFilter(context.callingAgent, normalized.callingAgent)) {
-      if (DEBUG) {
-        console.log(
-          `${LOG_PREFIX} Hook "${hook.id}": callingAgent mismatch (${context.callingAgent} not in [${normalized.callingAgent.join(", ")}])`,
-        )
-      }
+      log.debug(
+        `Hook "${hook.id}": callingAgent mismatch (${context.callingAgent} not in [${normalized.callingAgent.join(", ")}])`,
+      )
       continue
     }
 
     // Check slash command (if filter is specified)
     if (!matchesFilter(context.slashCommand, normalized.slashCommand)) {
-      if (DEBUG) {
-        console.log(
-          `${LOG_PREFIX} Hook "${hook.id}": slashCommand mismatch (${context.slashCommand} not in [${normalized.slashCommand.join(", ")}])`,
-        )
-      }
+      log.debug(
+        `Hook "${hook.id}": slashCommand mismatch (${context.slashCommand} not in [${normalized.slashCommand.join(", ")}])`,
+      )
       continue
     }
 
     // All conditions matched
     matched.push(hook)
-    if (DEBUG) {
-      console.log(`${LOG_PREFIX} Hook "${hook.id}" matched for tool "${context.toolName}"`)
-    }
+    log.debug(`Hook "${hook.id}" matched for tool "${context.toolName}"`)
   }
 
-  if (DEBUG) {
-    console.log(
-      `${LOG_PREFIX} matchToolHooks: ${matched.length}/${hooks.length} hooks matched for phase="${context.phase}" tool="${context.toolName}"`,
-    )
-  }
+  log.debug(
+    `matchToolHooks: ${matched.length}/${hooks.length} hooks matched for phase="${context.phase}" tool="${context.toolName}"`,
+  )
 
   return matched
 }
@@ -274,36 +262,28 @@ export function matchSessionHooks(
 
     // Check event (must match exactly)
     if (normalized.event !== context.event) {
-      if (DEBUG) {
-        console.log(
-          `${LOG_PREFIX} Hook "${hook.id}": event mismatch (${normalized.event} !== ${context.event})`,
-        )
-      }
+      log.debug(
+        `Hook "${hook.id}": event mismatch (${normalized.event} !== ${context.event})`,
+      )
       continue
     }
 
     // Check agent
     if (!matchesFilter(context.agent, normalized.agent)) {
-      if (DEBUG) {
-        console.log(
-          `${LOG_PREFIX} Hook "${hook.id}": agent mismatch (${context.agent} not in [${normalized.agent.join(", ")}])`,
-        )
-      }
+      log.debug(
+        `Hook "${hook.id}": agent mismatch (${context.agent} not in [${normalized.agent.join(", ")}])`,
+      )
       continue
     }
 
     // All conditions matched
     matched.push(hook)
-    if (DEBUG) {
-      console.log(`${LOG_PREFIX} Hook "${hook.id}" matched for event "${context.event}"`)
-    }
+    log.debug(`Hook "${hook.id}" matched for event "${context.event}"`)
   }
 
-  if (DEBUG) {
-    console.log(
-      `${LOG_PREFIX} matchSessionHooks: ${matched.length}/${hooks.length} hooks matched for event="${context.event}"`,
-    )
-  }
+  log.debug(
+    `matchSessionHooks: ${matched.length}/${hooks.length} hooks matched for event="${context.event}"`,
+  )
 
   return matched
 }

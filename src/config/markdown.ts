@@ -8,9 +8,9 @@
 
 import type { CommandHooksConfig } from "../types/hooks.js";
 import { load as parseYaml } from "js-yaml";
+import { getGlobalLogger } from "../logging.js";
 
-const LOG_PREFIX = "[opencode-command-hooks]";
-const DEBUG = process.env.OPENCODE_HOOKS_DEBUG === "1";
+const log = getGlobalLogger();
 
 /**
  * Extract YAML frontmatter from markdown content
@@ -69,9 +69,7 @@ export function parseYamlFrontmatter(content: string): unknown {
     return parsed === undefined ? null : parsed;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (DEBUG) {
-      console.log(`${LOG_PREFIX} Failed to parse YAML: ${message}`);
-    }
+    log.debug(`Failed to parse YAML: ${message}`);
     return null;
   }
 }
@@ -131,19 +129,15 @@ export async function loadMarkdownConfig(
     try {
       const file = Bun.file(filePath);
       if (!(await file.exists())) {
-        if (DEBUG) {
-          console.log(`${LOG_PREFIX} Markdown file not found: ${filePath}`);
-        }
+        log.debug(`Markdown file not found: ${filePath}`);
         return { tool: [], session: [] };
       }
       content = await file.text();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (DEBUG) {
-        console.log(
-          `${LOG_PREFIX} Failed to read markdown file ${filePath}: ${message}`,
-        );
-      }
+      log.debug(
+        `Failed to read markdown file ${filePath}: ${message}`,
+      );
       return { tool: [], session: [] };
     }
 
@@ -151,11 +145,9 @@ export async function loadMarkdownConfig(
     const yamlContent = extractYamlFrontmatter(content);
 
     if (!yamlContent) {
-      if (DEBUG) {
-        console.log(
-          `${LOG_PREFIX} No YAML frontmatter found in ${filePath}`,
-        );
-      }
+      log.debug(
+        `No YAML frontmatter found in ${filePath}`,
+      );
       return { tool: [], session: [] };
     }
 
@@ -163,19 +155,17 @@ export async function loadMarkdownConfig(
     const parsed = parseYamlFrontmatter(yamlContent);
 
     if (parsed === null) {
-      console.warn(
-        `${LOG_PREFIX} Failed to parse YAML frontmatter in ${filePath}`,
+      log.info(
+        `Failed to parse YAML frontmatter in ${filePath}`,
       );
       return { tool: [], session: [] };
     }
 
     // Extract command_hooks field
     if (typeof parsed !== "object" || parsed === null) {
-      if (DEBUG) {
-        console.log(
-          `${LOG_PREFIX} Parsed YAML is not an object in ${filePath}`,
-        );
-      }
+      log.debug(
+        `Parsed YAML is not an object in ${filePath}`,
+      );
       return { tool: [], session: [] };
     }
 
@@ -183,18 +173,16 @@ export async function loadMarkdownConfig(
     const commandHooks = config.command_hooks;
 
     if (commandHooks === undefined) {
-      if (DEBUG) {
-        console.log(
-          `${LOG_PREFIX} No command_hooks field in ${filePath}`,
-        );
-      }
+      log.debug(
+        `No command_hooks field in ${filePath}`,
+      );
       return { tool: [], session: [] };
     }
 
     // Validate command_hooks structure
     if (!isValidCommandHooksConfig(commandHooks)) {
-      console.warn(
-        `${LOG_PREFIX} command_hooks field is not a valid object in ${filePath} (expected { tool?: [], session?: [] })`,
+      log.info(
+        `command_hooks field is not a valid object in ${filePath} (expected { tool?: [], session?: [] })`,
       );
       return { tool: [], session: [] };
     }
@@ -205,18 +193,16 @@ export async function loadMarkdownConfig(
       session: commandHooks.session ?? [],
     };
 
-    if (DEBUG) {
-      console.log(
-        `${LOG_PREFIX} Loaded markdown config from ${filePath}: ${result.tool?.length ?? 0} tool hooks, ${result.session?.length ?? 0} session hooks`,
-      );
-    }
+    log.debug(
+      `Loaded markdown config from ${filePath}: ${result.tool?.length ?? 0} tool hooks, ${result.session?.length ?? 0} session hooks`,
+    );
 
     return result;
   } catch (error) {
     // Catch-all for unexpected errors
     const message = error instanceof Error ? error.message : String(error);
-    console.warn(
-      `${LOG_PREFIX} Unexpected error loading markdown config from ${filePath}: ${message}`,
+    log.info(
+      `Unexpected error loading markdown config from ${filePath}: ${message}`,
     );
     return { tool: [], session: [] };
   }

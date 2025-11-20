@@ -16,8 +16,9 @@
  */
 
 import type { TemplateContext } from "../types/hooks.js"
+import { getGlobalLogger } from "../logging.js"
 
-const LOG_PREFIX = "[opencode-command-hooks]"
+const log = getGlobalLogger()
 
 /**
  * Check if debug logging is enabled
@@ -81,7 +82,7 @@ function replacePlaceholder(template: string, placeholder: string, value: unknow
  */
 export function interpolateTemplate(template: string, context: TemplateContext): string {
   if (isDebugEnabled()) {
-    console.log(`${LOG_PREFIX} Interpolating template with context:`, {
+    log.debug(`Interpolating template with context: ${JSON.stringify({
       id: context.id,
       agent: context.agent,
       tool: context.tool,
@@ -89,7 +90,7 @@ export function interpolateTemplate(template: string, context: TemplateContext):
       stdout: context.stdout ? `${context.stdout.substring(0, 50)}...` : undefined,
       stderr: context.stderr ? `${context.stderr.substring(0, 50)}...` : undefined,
       exitCode: context.exitCode,
-    })
+    })}`)
   }
 
   let result = template
@@ -105,7 +106,7 @@ export function interpolateTemplate(template: string, context: TemplateContext):
   result = replacePlaceholder(result, "exitCode", context.exitCode)
 
   if (isDebugEnabled()) {
-    console.log(`${LOG_PREFIX} Template interpolation complete, result length: ${result.length}`)
+    log.debug(`Template interpolation complete, result length: ${result.length}`)
   }
 
   return result
