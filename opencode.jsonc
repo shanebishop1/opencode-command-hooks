@@ -44,7 +44,7 @@
     },
     "firecrawl": {
       "type": "local",
-      "command": ["node", "{env:HOME}/.dotfiles/mcpo/firecrawl-wrapper.js"],
+      "command": ["node", "{env:HOME}/.dotfiles/mcp/firecrawl-wrapper.js"],
       "environment": {
         "FIRECRAWL_API_URL": "http://localhost:3002",
         "FIRECRAWL_API_KEY": "{env:FIRECRAWL_API_KEY}"

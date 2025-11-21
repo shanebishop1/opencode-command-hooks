@@ -67,7 +67,7 @@ This plugin handles context injection automatically.
 
 ### 3. Filter Task Calls by Subagent
 
-Run different hooks based on **which subagent is being launched** via the `task` tool—without writing a custom plugin. Use `toolArgs` in your hook conditions to match on `subagentType`, `description`, or any other task input. This works for both `before` and `after` phases (the plugin caches arguments so `after` hooks can filter too).
+Run different hooks based on **which subagent is being launched** via the `task` tool—without writing a custom plugin. Use `toolArgs` in your hook conditions to match on `subagent_type`, `description`, or any other task input. This works for both `before` and `after` phases (the plugin caches arguments so `after` hooks can filter too).
 
 ```jsonc
 // Only run when a "validator" subagent completes
@@ -76,7 +76,7 @@ Run different hooks based on **which subagent is being launched** via the `task`
   "when": {
     "phase": "after",
     "tool": "task",
-    "toolArgs": { "subagentType": "validator" }
+    "toolArgs": { "subagent_type": "validator" }
   },
   "run": ["npm test"],
   "inject": "Validator finished. Tests run automatically:\n{stdout}"
@@ -187,7 +187,7 @@ Attach a hook to the `task` tool (which launches subagents). It runs _automatica
 
 #### 4. Filter Task Tool Calls by Subagent Type
 
-Run different hooks based on which subagent is being called via the `task` tool. Use `toolArgs` to match on the subagent's `subagentType` (or other tool arguments).
+Run different hooks based on which subagent is being called via the `task` tool. Use `toolArgs` to match on the subagent's `subagent_type` (or other tool arguments).
 
 ```jsonc
 {
@@ -198,7 +198,7 @@ Run different hooks based on which subagent is being called via the `task` tool.
         "phase": "before",
         "tool": "task",
         "toolArgs": {
-          "subagentType": "validator"
+          "subagent_type": "validator"
         }
       },
       "run": ["echo 'Starting validator subagent'"],
@@ -210,7 +210,7 @@ Run different hooks based on which subagent is being called via the `task` tool.
         "phase": "before",
         "tool": "task",
         "toolArgs": {
-          "subagentType": ["reviewer", "code-reviewer"]
+          "subagent_type": ["reviewer", "code-reviewer"]
         }
       },
       "run": ["echo 'Starting reviewer subagent'"],
@@ -223,7 +223,7 @@ Run different hooks based on which subagent is being called via the `task` tool.
 **Available in**: `tool.execute.before` and `tool.execute.after`. For `after` hooks, this plugin caches the tool arguments captured before execution so you can filter on the same values when the tool completes.
 
 **Supported tool argument filters**:
-- For `task` tool: `subagentType`, `description`, `prompt`
+- For `task` tool: `subagent_type`, `description`, `prompt`
 - For other tools: Any argument the tool accepts
 
 Tool argument filters also work when handling `tool.result` events.

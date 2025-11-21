@@ -28,13 +28,13 @@
         "phase": "before",
         "tool": "task",
         "toolArgs": {
-          "subagentType": "validator"
+          "subagent_type": "validator"
         }
       },
       "run": [
         "osascript -e 'display notification \"Starting validator subagent\"'"
       ],
-      "inject": "ℹ️ Starting a validator subagent (filtered by toolArgs.subagentType)"
+      "inject": "ℹ️ Starting a validator subagent (filtered by toolArgs.subagent_type)"
     },
     {
       "id": "task-after-general-subagent",
@@ -42,13 +42,13 @@
         "phase": "after",
         "tool": "task",
         "toolArgs": {
-          "subagentType": "general"
+          "subagent_type": "general"
         }
       },
       "run": [
         "osascript -e 'display notification \"General subagent completed\"' && npm run lint"
       ],
-      "inject": "✅ General subagent task completed.\n\nLint output:\n```\n{stdout}\n```\n\nThis hook only runs for task calls where subagentType is 'general'."
+      "inject": "✅ General subagent task completed.\n\nLint output:\n```\n{stdout}\n```\n\nThis hook only runs for task calls where subagent_type is 'general'."
     }
   ],
   "session": [
@@ -65,9 +65,7 @@
       "when": {
         "event": "session.idle"
       },
-      "run": [
-        "osascript -e 'display notification \"Turn complete\"' && npm run lint"
-      ],
+      "run": ["echo 'hi'"],
       "inject": "⏸ Agent turn complete.\n\nLint Output:\nExit Code: {exitCode}\n\n```\n{stdout}\n```"
     }
   ]
