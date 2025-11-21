@@ -80,7 +80,12 @@ function replacePlaceholder(template: string, placeholder: string, value: unknow
  * // Result: "Hook tests-after-task for task completed: exit 0\n```\n✓ All tests passed\n```"
  * ```
  */
-export function interpolateTemplate(template: string, context: TemplateContext): string {
+export function interpolateTemplate(template: string | undefined, context: TemplateContext): string {
+  // Handle null/undefined template
+  if (!template) {
+    return ""
+  }
+
   if (isDebugEnabled()) {
     log.debug(`Interpolating template with context: ${JSON.stringify({
       id: context.id,

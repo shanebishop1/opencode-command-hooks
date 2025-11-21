@@ -19,9 +19,7 @@ describe("tool.result event listener", () => {
           id: "after-hook",
           when: { phase: "after", tool: ["bash", "task", "firecrawl"] },
           run: ["echo 'Hook executed'"],
-          inject: {
-            template: "Tool result: {stdout}",
-          },
+          inject: "Tool result: {stdout}",
         },
       ],
       session: [],

@@ -1,12 +1,10 @@
 import type { Plugin } from "@opencode-ai/plugin"
 import type { Config, OpencodeClient } from "@opencode-ai/sdk"
-import type { HookExecutionContext } from "./types/hooks.js"
+import type { HookExecutionContext, ToolHook, SessionHook } from "./types/hooks.js"
 import { createLogger, setGlobalLogger } from "./logging.js"
 import { executeHooks } from "./executor.js"
 import { loadGlobalConfig } from "./config/global.js"
 import { mergeConfigs } from "./config/merge.js"
-import { validateConfig } from "./config/validate.js"
-import { matchToolHooks, matchSessionHooks } from "./matching/matcher.js"
 
 // Export unified executor
 export { executeHooks } from "./executor.js"
@@ -16,6 +14,50 @@ export { executeHooks } from "./executor.js"
  */
 function normalizeString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined
+}
+
+/**
+ * Check if a value matches a pattern (string, array of strings, or wildcard)
+ */
+function matches(pattern: string | string[] | undefined, value: string | undefined): boolean {
+  if (!pattern) return true // Omitted pattern matches all
+  if (pattern === "*") return true // Wildcard matches all
+  if (Array.isArray(pattern)) return value ? pattern.includes(value) : false
+  return value === pattern
+}
+
+/**
+ * Filter session hooks that match the given criteria
+ */
+function filterSessionHooks(
+  hooks: SessionHook[],
+  criteria: { event: string; agent: string | undefined }
+): SessionHook[] {
+  return hooks.filter((hook) => {
+    if (hook.when.event !== criteria.event) return false
+    return matches(hook.when.agent, criteria.agent)
+  })
+}
+
+/**
+ * Filter tool hooks that match the given criteria
+ */
+function filterToolHooks(
+  hooks: ToolHook[],
+  criteria: {
+    phase: "before" | "after"
+    toolName: string | undefined
+    callingAgent: string | undefined
+    slashCommand: string | undefined
+  }
+): ToolHook[] {
+  return hooks.filter((hook) => {
+    if (hook.when.phase !== criteria.phase) return false
+    if (!matches(hook.when.tool, criteria.toolName)) return false
+    if (!matches(hook.when.callingAgent, criteria.callingAgent)) return false
+    if (!matches(hook.when.slashCommand, criteria.slashCommand)) return false
+    return true
+  })
 }
 
 /**
@@ -78,21 +120,20 @@ const plugin: Plugin = async ({ client }) => {
             return
           }
 
-          try {
-            // Load config
-            const globalConfig = await loadGlobalConfig()
-            const markdownConfig = { tool: [], session: [] }
-            const { config: mergedConfig } = mergeConfigs(
-              globalConfig,
-              markdownConfig
-            )
-            validateConfig(mergedConfig)
+           try {
+             // Load config
+             const globalConfig = await loadGlobalConfig()
+             const markdownConfig = { tool: [], session: [] }
+             const { config: mergedConfig } = mergeConfigs(
+               globalConfig,
+               markdownConfig
+             )
 
-            // Match session hooks for session.start
-            const matchedHooks = matchSessionHooks(mergedConfig.session || [], {
-              event: "session.start",
-              agent,
-            })
+             // Filter session hooks for session.start
+             const matchedHooks = filterSessionHooks(mergedConfig.session || [], {
+               event: "session.start",
+               agent,
+             })
 
             pluginLog.debug(
               `Matched ${matchedHooks.length} hook(s) for session.start`
@@ -127,21 +168,20 @@ const plugin: Plugin = async ({ client }) => {
             return
           }
 
-          try {
-            // Load config
-            const globalConfig = await loadGlobalConfig()
-            const markdownConfig = { tool: [], session: [] }
-            const { config: mergedConfig } = mergeConfigs(
-              globalConfig,
-              markdownConfig
-            )
-            validateConfig(mergedConfig)
+           try {
+             // Load config
+             const globalConfig = await loadGlobalConfig()
+             const markdownConfig = { tool: [], session: [] }
+             const { config: mergedConfig } = mergeConfigs(
+               globalConfig,
+               markdownConfig
+             )
 
-            // Match session hooks for session.idle
-            const matchedHooks = matchSessionHooks(mergedConfig.session || [], {
-              event: "session.idle",
-              agent,
-            })
+             // Filter session hooks for session.idle
+             const matchedHooks = filterSessionHooks(mergedConfig.session || [], {
+               event: "session.idle",
+               agent,
+             })
 
             pluginLog.debug(
               `Matched ${matchedHooks.length} hook(s) for session.idle`
@@ -183,23 +223,22 @@ const plugin: Plugin = async ({ client }) => {
             return
           }
 
-          try {
-            // Load config
-            const globalConfig = await loadGlobalConfig()
-            const markdownConfig = { tool: [], session: [] }
-            const { config: mergedConfig } = mergeConfigs(
-              globalConfig,
-              markdownConfig
-            )
-            validateConfig(mergedConfig)
+           try {
+             // Load config
+             const globalConfig = await loadGlobalConfig()
+             const markdownConfig = { tool: [], session: [] }
+             const { config: mergedConfig } = mergeConfigs(
+               globalConfig,
+               markdownConfig
+             )
 
-            // Match tool hooks for after phase
-            const matchedHooks = matchToolHooks(mergedConfig.tool || [], {
-              phase: "after",
-              toolName,
-              callingAgent: agent,
-              slashCommand: normalizeString(event.properties?.slashCommand),
-            })
+             // Filter tool hooks for after phase
+             const matchedHooks = filterToolHooks(mergedConfig.tool || [], {
+               phase: "after",
+               toolName,
+               callingAgent: agent,
+               slashCommand: normalizeString(event.properties?.slashCommand),
+             })
 
             pluginLog.debug(
               `Matched ${matchedHooks.length} hook(s) for tool.result (after phase)`
@@ -238,23 +277,22 @@ const plugin: Plugin = async ({ client }) => {
           `Received tool.execute.before for tool: ${input.tool}`
         )
 
-        try {
-          // Load config
-          const globalConfig = await loadGlobalConfig()
-          const markdownConfig = { tool: [], session: [] }
-          const { config: mergedConfig } = mergeConfigs(
-            globalConfig,
-            markdownConfig
-          )
-          validateConfig(mergedConfig)
+         try {
+           // Load config
+           const globalConfig = await loadGlobalConfig()
+           const markdownConfig = { tool: [], session: [] }
+           const { config: mergedConfig } = mergeConfigs(
+             globalConfig,
+             markdownConfig
+           )
 
-          // Match tool hooks for before phase
-          const matchedHooks = matchToolHooks(mergedConfig.tool || [], {
-            phase: "before",
-            toolName: input.tool,
-            callingAgent: undefined,
-            slashCommand: undefined,
-          })
+           // Filter tool hooks for before phase
+           const matchedHooks = filterToolHooks(mergedConfig.tool || [], {
+             phase: "before",
+             toolName: input.tool,
+             callingAgent: undefined,
+             slashCommand: undefined,
+           })
 
           pluginLog.debug(
             `Matched ${matchedHooks.length} hook(s) for tool.execute.before`
@@ -299,23 +337,22 @@ const plugin: Plugin = async ({ client }) => {
           return
         }
 
-        try {
-          // Load config
-          const globalConfig = await loadGlobalConfig()
-          const markdownConfig = { tool: [], session: [] }
-          const { config: mergedConfig } = mergeConfigs(
-            globalConfig,
-            markdownConfig
-          )
-          validateConfig(mergedConfig)
+         try {
+           // Load config
+           const globalConfig = await loadGlobalConfig()
+           const markdownConfig = { tool: [], session: [] }
+           const { config: mergedConfig } = mergeConfigs(
+             globalConfig,
+             markdownConfig
+           )
 
-          // Match tool hooks for after phase
-          const matchedHooks = matchToolHooks(mergedConfig.tool || [], {
-            phase: "after",
-            toolName: input.tool,
-            callingAgent: undefined,
-            slashCommand: undefined,
-          })
+           // Filter tool hooks for after phase
+           const matchedHooks = filterToolHooks(mergedConfig.tool || [], {
+             phase: "after",
+             toolName: input.tool,
+             callingAgent: undefined,
+             slashCommand: undefined,
+           })
 
           pluginLog.debug(
             `Matched ${matchedHooks.length} hook(s) for tool.execute.after`
