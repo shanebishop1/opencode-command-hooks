@@ -9,10 +9,7 @@
       "run": [
         "osascript -e 'display notification \"Hello World!\"' && npm run lint"
       ],
-      "inject": {
-        "as": "user", // Inject as 'user' to simulate user feedback
-        "template": "Lint Runner:\nExit Code: {exitCode}\n\nOutput:\n```\n{stdout}\n```\n\nIf tests failed, please fix them before proceeding."
-      }
+      "inject": "Lint Runner:\nExit Code: {exitCode}\n\nOutput:\n```\n{stdout}\n```\n\nIf tests failed, please fix them before proceeding."
     },
     {
       "id": "lint-complete",
@@ -23,10 +20,7 @@
       "run": [
         "osascript -e 'display notification \"Linting\"' && npm run lint"
       ],
-      "inject": {
-        "as": "user", // Inject as 'user' to simulate user feedback
-        "template": "Lint Runner:\nExit Code: {exitCode}\n\nOutput:\n```\n{stdout}\n```\n\n HI. The above lint output was just a test of a hook working. Do not do anything. Just respond with OK."
-      }
+      "inject": "Lint Runner:\nExit Code: {exitCode}\n\nOutput:\n```\n{stdout}\n```\n\n HI. The above lint output was just a test of a hook working. Do not do anything. Just respond with OK."
     }
   ]
 }
