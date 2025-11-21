@@ -21,6 +21,20 @@
         "osascript -e 'display notification \"Linting\"' && npm run lint"
       ],
       "inject": "Lint Runner:\nExit Code: {exitCode}\n\nOutput:\n```\n{stdout}\n```\n\nHI. The above lint output was just a test of a hook working. Do not do anything. Just respond with OK."
+    },
+    {
+      "id": "task-before-validator-subagent",
+      "when": {
+        "phase": "before",
+        "tool": "task",
+        "toolArgs": {
+          "subagentType": "validator"
+        }
+      },
+      "run": [
+        "osascript -e 'display notification \"Starting validator subagent\"'"
+      ],
+      "inject": "ℹ️ Starting a validator subagent (filtered by toolArgs.subagentType)"
     }
   ],
   "session": [

@@ -167,6 +167,49 @@ Attach a hook to the `task` tool (which launches subagents). It runs _automatica
 
 ---
 
+#### 4. Filter Task Tool Calls by Subagent Type
+
+Run different hooks based on which subagent is being called via the `task` tool. Use `toolArgs` to match on the subagent's `subagentType` (or other tool arguments).
+
+```jsonc
+{
+  "tool": [
+    {
+      "id": "validator-subagent-hook",
+      "when": {
+        "phase": "before",
+        "tool": "task",
+        "toolArgs": {
+          "subagentType": "validator"
+        }
+      },
+      "run": ["echo 'Starting validator subagent'"],
+      "inject": "ℹ️ A validator subagent is being called"
+    },
+    {
+      "id": "reviewer-subagent-hook",
+      "when": {
+        "phase": "before",
+        "tool": "task",
+        "toolArgs": {
+          "subagentType": ["reviewer", "code-reviewer"]
+        }
+      },
+      "run": ["echo 'Starting reviewer subagent'"],
+      "inject": "🔍 A reviewer subagent is being called"
+    }
+  ]
+}
+```
+
+**Available in**: `tool.execute.before` only (tool arguments are only available before the tool runs).
+
+**Supported tool argument filters**:
+- For `task` tool: `subagentType`, `description`, `prompt`
+- For other tools: Any argument the tool accepts
+
+---
+
 ## Known Limitations
 
 ### Session Hooks Cannot Filter by Agent

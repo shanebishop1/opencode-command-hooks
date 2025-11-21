@@ -132,6 +132,16 @@ export interface ToolHookWhen {
    * Note: Slash command detection may not be available for all tool types.
    */
   slashCommand?: string | string[]
+
+  /**
+   * Tool argument filters (optional, only available in tool.execute.before).
+   * Match based on the tool's input arguments.
+   * Useful for filtering task tool calls by subagentType.
+   *
+   * Example: { "subagentType": "validator" } matches only task calls with subagentType="validator"
+   * Example: { "subagentType": ["validator", "reviewer"] } matches multiple values
+   */
+  toolArgs?: Record<string, string | string[]>
 }
 
 // ============================================================================
@@ -533,8 +543,14 @@ export interface HookExecutionContext {
    */
   slashCommand?: string
 
-  /**
-   * Tool call ID provided by OpenCode (if available)
-   */
-  callId?: string
+   /**
+    * Tool call ID provided by OpenCode (if available)
+    */
+   callId?: string
+
+   /**
+    * Tool arguments (available for tool.execute.before hooks)
+    * For task tool, this includes: description, prompt, subagentType
+    */
+   toolArgs?: Record<string, unknown>
 }

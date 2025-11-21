@@ -49,6 +49,7 @@ function filterToolHooks(
     toolName: string | undefined
     callingAgent: string | undefined
     slashCommand: string | undefined
+    toolArgs?: Record<string, unknown>
   }
 ): ToolHook[] {
   return hooks.filter((hook) => {
@@ -56,6 +57,17 @@ function filterToolHooks(
     if (!matches(hook.when.tool, criteria.toolName)) return false
     if (!matches(hook.when.callingAgent, criteria.callingAgent)) return false
     if (!matches(hook.when.slashCommand, criteria.slashCommand)) return false
+    
+    // Match tool args if specified in the hook
+    if (hook.when.toolArgs && criteria.toolArgs) {
+      for (const [key, expectedValue] of Object.entries(hook.when.toolArgs)) {
+        const actualValue = criteria.toolArgs[key]
+        if (!matches(expectedValue, actualValue as string | undefined)) {
+          return false
+        }
+      }
+    }
+    
     return true
   })
 }
@@ -271,7 +283,8 @@ const plugin: Plugin = async ({ client }) => {
        * Runs before a tool is executed
        */
       "tool.execute.before": async (
-        input: { tool: string; sessionID: string; callID: string }
+        input: { tool: string; sessionID: string; callID: string },
+        output: { args: any }
       ) => {
         pluginLog.debug(
           `Received tool.execute.before for tool: ${input.tool}`
@@ -292,6 +305,7 @@ const plugin: Plugin = async ({ client }) => {
              toolName: input.tool,
              callingAgent: undefined,
              slashCommand: undefined,
+             toolArgs: output.args,
            })
 
           pluginLog.debug(
@@ -304,6 +318,7 @@ const plugin: Plugin = async ({ client }) => {
             agent: "unknown",
             tool: input.tool,
             callId: input.callID,
+            toolArgs: output.args,
           }
 
           // Execute hooks
