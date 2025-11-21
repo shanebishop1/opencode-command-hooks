@@ -51,10 +51,10 @@ function isOptionalStringOrStringArray(value: unknown): boolean {
 /**
  * Validate injection configuration structure
  *
- * Checks that inject object (if present) has valid field values.
+ * Checks that inject (if present) is a string template.
  * Returns array of validation errors (empty if valid).
  *
- * @param inject - Injection configuration to validate
+ * @param inject - Injection template to validate
  * @param hookId - Hook ID for error reporting
  * @returns Array of validation errors
  */
@@ -68,45 +68,12 @@ function validateInjection(
     return errors
   }
 
-  if (typeof inject !== "object" || inject === null) {
+  // Inject must be a string (the template)
+  if (typeof inject !== "string") {
     errors.push({
       hookId,
       type: "unknown",
-      message: `Hook "${hookId}": inject must be an object`,
-      severity: "error",
-    })
-    return errors
-  }
-
-  const inj = inject as Record<string, unknown>
-
-  // Validate target if present
-  if (inj.target !== undefined) {
-    if (typeof inj.target !== "string") {
-      errors.push({
-        hookId,
-        type: "invalid_injection_target",
-        message: `Hook "${hookId}": inject.target must be a string`,
-        severity: "error",
-      })
-    } else if (inj.target !== "callingSession") {
-      errors.push({
-        hookId,
-        type: "invalid_injection_target",
-        message: `Hook "${hookId}": inject.target must be "callingSession", got "${inj.target}"`,
-        severity: "error",
-      })
-    }
-  }
-
-  
-
-  // Validate template if present (just check it's a string)
-  if (inj.template !== undefined && typeof inj.template !== "string") {
-    errors.push({
-      hookId,
-      type: "unknown",
-      message: `Hook "${hookId}": inject.template must be a string`,
+      message: `Hook "${hookId}": inject must be a string template`,
       severity: "error",
     })
   }

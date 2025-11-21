@@ -107,7 +107,6 @@ export const ConfigSchema = z.object({
  */
 export type ToolHookWhen = z.infer<typeof ToolHookWhenSchema>;
 export type SessionHookWhen = z.infer<typeof SessionHookWhenSchema>;
-export type HookInjection = z.infer<typeof HookInjectionSchema>;
 export type ToolHook = z.infer<typeof ToolHookSchema>;
 export type SessionHook = z.infer<typeof SessionHookSchema>;
 export type CommandHooksConfig = z.infer<typeof ConfigSchema>;

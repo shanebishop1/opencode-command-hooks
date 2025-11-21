@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from
 import { mkdirSync, rmSync, writeFileSync } from "fs"
 import { join } from "path"
 import { handleToolExecuteAfter } from "../src/handlers/tool-after.js"
+import { clearGlobalConfigCache } from "../src/config/global.js"
 
 const TEST_DIR = "/tmp/opencode-hooks-tool-after"
 const ORIGINAL_CWD = process.cwd()
@@ -15,9 +16,7 @@ describe("handleToolExecuteAfter message injection", () => {
           id: "test-hook",
           when: { phase: "after", tool: ["test-tool"] },
           run: ["echo hook"],
-          inject: {
-            template: "Result: {stdout}",
-          },
+          inject: "Result: {stdout}",
         },
       ],
       session: [],
@@ -32,10 +31,12 @@ describe("handleToolExecuteAfter message injection", () => {
 
   beforeEach(() => {
     process.chdir(TEST_DIR)
+    clearGlobalConfigCache()
   })
 
   afterEach(() => {
     process.chdir(ORIGINAL_CWD)
+    clearGlobalConfigCache()
   })
 
   it("calls session.prompt with simplified format", async () => {
