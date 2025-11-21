@@ -232,30 +232,20 @@ export interface SessionHookWhen {
  * ```json
  * {
  *   "target": "callingSession",
- *   "as": "user",
  *   "template": "Hook {id} completed:\nexit {exitCode}\n```\n{stdout}\n```"
  * }
  * ```
  */
 export interface HookInjection {
-  /**
-   * Target for message injection.
-   * - "callingSession" (default): inject into the current session
-   *
-   * Future expansion may support:
-   * - "subagentSession": inject into a subagent's session (when available)
-   * - "parentSession": inject into the parent session
-   */
-  target?: "callingSession"
-
-   /**
-    * Message role/type for injection.
-    * - "user": injected as user message (visible in conversation)
-    * - "assistant": injected as assistant message (appears as agent response)
+/**
+    * Target for message injection.
+    * - "callingSession" (default): inject into the current session
     *
-    * Default: "user"
+    * Future expansion may support:
+    * - "subagentSession": inject into a subagent's session (when available)
+    * - "parentSession": inject into the parent session
     */
-   as?: "user" | "assistant"
+   target?: "callingSession"
 
   /**
    * Template string for formatting the injected message.

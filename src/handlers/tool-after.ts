@@ -76,34 +76,7 @@ interface ToolExecuteAfterEvent {
   callId?: string
 }
 
-type SessionMessageInfo = {
-  role?: string
-  agent?: string
-  mode?: string
-  providerID?: string
-  modelID?: string
-  model?: {
-    providerID?: string
-    modelID?: string
-  }
-}
 
-type SessionMessageEntry = {
-  info?: SessionMessageInfo
-}
-
-type SessionPromptBody = {
-  messageID?: string
-  model?: {
-    providerID: string
-    modelID: string
-  }
-  agent?: string
-  noReply?: boolean
-  system?: string
-  tools?: Record<string, boolean>
-  parts: Array<{ type: "text"; text: string }>
-}
 
 /**
  * Extract context from a tool.execute.after event
@@ -132,131 +105,28 @@ function extractEventContext(event: ToolExecuteAfterEvent): {
   }
 }
 
-function normalizeSessionMessagesResponse(response: unknown): SessionMessageEntry[] {
-  if (Array.isArray(response)) {
-    return response as SessionMessageEntry[]
-  }
 
-  if (response && typeof response === "object" && Array.isArray((response as { data?: unknown }).data)) {
-    return (response as { data?: SessionMessageEntry[] }).data ?? []
-  }
 
-  return []
-}
-
-/**
- * Inject a message into a session using the OpenCode SDK
- *
- * Uses client.session.prompt() with noReply: true to inject context
- * without triggering an AI response.
- *
- * @param client - OpenCode SDK client
- * @param sessionId - Session ID to inject into
- * @param message - Message text to inject
-   * @param role - Message role: "user" or "assistant"
-   * @returns Promise that resolves when injection is complete
-   */
-  async function injectMessage(
-    client: OpencodeClient,
-    sessionId: string,
-    message: string,
-    role: "user" | "assistant" = "user",
-    agentHint?: string
-  ): Promise<void> {
-   try {
-     log.debug(
-       `Injecting message into session ${sessionId} as ${role}`
-     )
-
-     // Determine the most recent agent/model so injections don't switch models
-    let currentModel: { providerID: string; modelID: string } | undefined
-    let currentAgent = agentHint
-
-    try {
-      const messagesResponse = await client.session.messages({
-        path: { id: sessionId },
-        query: { limit: 50 },
-      })
-
-      const messages = normalizeSessionMessagesResponse(messagesResponse)
-
-      for (let i = messages.length - 1; i >= 0; i--) {
-        const entry = messages[i]
-        const info = entry?.info
-        if (!info) {
-          continue
-        }
-
-        if (!currentAgent) {
-          if (info.role === "assistant" && info.mode) {
-            currentAgent = info.mode
-          } else if (info.agent) {
-            currentAgent = info.agent
-          }
-        }
-
-        if (!currentModel) {
-          if (info.role === "assistant" && info.providerID && info.modelID) {
-            currentModel = {
-              providerID: info.providerID,
-              modelID: info.modelID,
-            }
-          } else if (
-            info.role === "user" &&
-            info.model &&
-            info.model.providerID &&
-            info.model.modelID
-          ) {
-            currentModel = {
-              providerID: info.model.providerID,
-              modelID: info.model.modelID,
-            }
-          }
-        }
-
-        if (currentAgent && currentModel) {
-          break
-        }
-      }
-
-       log.debug(
-         `Injection context resolved: ${JSON.stringify({ agent: currentAgent, model: currentModel })}`
-       )
-      } catch (err) {
-       log.error(
-         `Failed to resolve session messages for model preservation: ${err}`
-       )
-     }
-
-    const body: SessionPromptBody = {
-      noReply: true,
-      parts: [{ type: "text", text: message }],
-    }
-
-    if (currentAgent) {
-      body.agent = currentAgent
-    }
-
-    if (currentModel) {
-      body.model = currentModel
-    }
-
+async function injectMessage(
+  client: OpencodeClient,
+  sessionId: string,
+  message: string
+): Promise<void> {
+  try {
+    log.debug(`Injecting message into session ${sessionId}`)
+    
     await client.session.prompt({
       path: { id: sessionId },
-      body,
+      body: {
+        noReply: true,
+        parts: [{ type: "text", text: message }],
+      },
     })
-
-     // Add a small delay to ensure the message is fully processed before continuing
-     // This helps ensure messages appear in the correct order
-     await new Promise(resolve => setTimeout(resolve, 100))
-
-     log.debug(`Message injected successfully`)
-   } catch (error) {
+    
+    log.debug(`Message injected successfully`)
+  } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
-    log.error(
-      `Failed to inject message into session: ${errorMessage}`
-    )
-    // Don't throw - this is non-blocking
+    log.error(`Failed to inject message into session: ${errorMessage}`)
   }
 }
 
@@ -331,11 +201,8 @@ async function executeHook(
       const template = hook.inject.template || ""
       const message = interpolateTemplate(template, templateContext)
 
-      // Determine message role (default to "user")
-      const role = (hook.inject.as || "user") as "user" | "assistant"
-
       // Inject into session
-      await injectMessage(client, context.sessionId, message, role, context.callingAgent)
+      await injectMessage(client, context.sessionId, message)
     }
 
     // If consoleLog is configured, interpolate and log to console
@@ -365,10 +232,10 @@ async function executeHook(
     const errorMessage = formatErrorMessage(hook.id, error)
     log.error(errorMessage)
 
-     // Optionally inject error message into session
-     try {
-       await injectMessage(client, context.sessionId, errorMessage, "user", context.callingAgent)
-     } catch (injectionError) {
+// Optionally inject error message into session
+      try {
+        await injectMessage(client, context.sessionId, errorMessage)
+      } catch (injectionError) {
       // If error injection fails, just log it
       const injectionErrorMsg =
         injectionError instanceof Error
@@ -433,7 +300,7 @@ export async function handleToolExecuteAfter(
        for (const error of allErrors) {
          const errorMsg = `Configuration error: ${error.message}`
          try {
-           await injectMessage(client, context.sessionId, errorMsg, "user", context.callingAgent)
+           await injectMessage(client, context.sessionId, errorMsg)
          } catch (injectionError) {
           log.error(
             `Failed to inject validation error: ${injectionError}`

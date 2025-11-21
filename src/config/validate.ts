@@ -99,24 +99,7 @@ function validateInjection(
     }
   }
 
-  // Validate as if present
-  if (inj.as !== undefined) {
-    if (typeof inj.as !== "string") {
-      errors.push({
-        hookId,
-        type: "invalid_injection_as",
-        message: `Hook "${hookId}": inject.as must be a string`,
-        severity: "error",
-      })
-    } else if (!["user", "assistant"].includes(inj.as)) {
-       errors.push({
-         hookId,
-         type: "invalid_injection_as",
-         message: `Hook "${hookId}": inject.as must be "user" or "assistant", got "${inj.as}"`,
-         severity: "error",
-       })
-    }
-  }
+  
 
   // Validate template if present (just check it's a string)
   if (inj.template !== undefined && typeof inj.template !== "string") {

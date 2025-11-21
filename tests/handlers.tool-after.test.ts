@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, mock } from "bun:test"
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "bun:test"
 import { mkdirSync, rmSync, writeFileSync } from "fs"
 import { join } from "path"
 import { handleToolExecuteAfter } from "../src/handlers/tool-after.js"
@@ -16,7 +16,6 @@ describe("handleToolExecuteAfter message injection", () => {
           when: { phase: "after", tool: ["test-tool"] },
           run: ["echo hook"],
           inject: {
-            as: "user",
             template: "Result: {stdout}",
           },
         },
@@ -39,32 +38,14 @@ describe("handleToolExecuteAfter message injection", () => {
     process.chdir(ORIGINAL_CWD)
   })
 
-  it("passes the most recent agent/model into session.prompt", async () => {
-    const mockSessionMessages = mock(async () => ({
-      data: [
-        {
-          info: {
-            role: "user",
-            agent: "build",
-            model: { providerID: "anthropic", modelID: "claude-3-5" },
-          },
-        },
-        {
-          info: {
-            role: "assistant",
-            mode: "dev",
-            providerID: "x-provider",
-            modelID: "grok-fast",
-          },
-        },
-      ],
-    }))
-    const mockSessionPrompt = mock(async () => ({}))
-
-    const client = {
+  it("calls session.prompt with simplified format", async () => {
+    const mockCalls: any[] = []
+    const mockClient = {
       session: {
-        messages: mockSessionMessages,
-        prompt: mockSessionPrompt,
+        prompt: async (args: any) => {
+          mockCalls.push(args)
+          return {}
+        },
       },
     }
 
@@ -75,30 +56,26 @@ describe("handleToolExecuteAfter message injection", () => {
       callId: "call-a",
     }
 
-    await handleToolExecuteAfter(event as any, client as any)
+    await handleToolExecuteAfter(event as any, mockClient as any)
 
-    expect(mockSessionMessages).toHaveBeenCalledTimes(1)
-    expect(mockSessionMessages).toHaveBeenCalledWith({
+    expect(mockCalls).toHaveLength(1)
+    expect(mockCalls[0]).toEqual({
       path: { id: "session-123" },
-      query: { limit: 50 },
+      body: {
+        noReply: true,
+        parts: [{ type: "text", text: "Result: hook\n" }],
+      },
     })
-
-    expect(mockSessionPrompt).toHaveBeenCalledTimes(1)
-    const promptCall = mockSessionPrompt.mock.calls[0]?.[0]
-    expect(promptCall?.body?.agent).toBe("dev")
-    expect(promptCall?.body?.model).toEqual({ providerID: "x-provider", modelID: "grok-fast" })
   })
 
-  it("falls back to calling agent when message history fails", async () => {
-    const mockSessionMessages = mock(async () => {
-      throw new Error("network failure")
-    })
-    const mockSessionPrompt = mock(async () => ({}))
-
-    const client = {
+  it("calls session.prompt with simplified format for different session", async () => {
+    const mockCalls: any[] = []
+    const mockClient = {
       session: {
-        messages: mockSessionMessages,
-        prompt: mockSessionPrompt,
+        prompt: async (args: any) => {
+          mockCalls.push(args)
+          return {}
+        },
       },
     }
 
@@ -107,14 +84,17 @@ describe("handleToolExecuteAfter message injection", () => {
       input: {},
       sessionId: "session-999",
       callId: "call-b",
-      callingAgent: "orchestrator",
     }
 
-    await handleToolExecuteAfter(event as any, client as any)
+    await handleToolExecuteAfter(event as any, mockClient as any)
 
-    expect(mockSessionMessages).toHaveBeenCalledTimes(1)
-    const promptCall = mockSessionPrompt.mock.calls[0]?.[0]
-    expect(promptCall?.body?.agent).toBe("orchestrator")
-    expect(promptCall?.body?.model).toBeUndefined()
+    expect(mockCalls).toHaveLength(1)
+    expect(mockCalls[0]).toEqual({
+      path: { id: "session-999" },
+      body: {
+        noReply: true,
+        parts: [{ type: "text", text: "Result: hook\n" }],
+      },
+    })
   })
 })

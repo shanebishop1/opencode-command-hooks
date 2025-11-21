@@ -23,6 +23,7 @@ import { validateConfig } from "../config/validate.js"
 import { matchSessionHooks } from "../matching/matcher.js"
 import { executeCommands } from "../execution/shell.js"
 import { interpolateTemplate } from "../execution/template.js"
+
 import { getGlobalLogger } from "../logging.js"
 
 const log = getGlobalLogger()
@@ -69,50 +70,7 @@ function extractEventContext(event: SessionStartEvent): {
   }
 }
 
-/**
- * Inject a message into a session using the OpenCode SDK
- *
- * Uses client.session.prompt() with noReply: true to inject context
- * without triggering an AI response.
- *
- * @param client - OpenCode SDK client
- * @param sessionId - Session ID to inject into
- * @param message - Message text to inject
-   * @param role - Message role: "user" or "assistant"
-   * @returns Promise that resolves when injection is complete
-   */
-  async function injectMessage(
-    client: OpencodeClient,
-    sessionId: string,
-    message: string,
-    role: "user" | "assistant" = "user"
-  ): Promise<void> {
-  try {
-    log.debug(
-      `Injecting message into session ${sessionId} as ${role}`
-    )
 
-    // Note: The role parameter is logged for debugging but the OpenCode SDK
-    // doesn't currently support role specification in session.prompt()
-    // Future versions may support this capability
-
-    await client.session.prompt({
-      path: { id: sessionId },
-      body: {
-        noReply: true,
-        parts: [{ type: "text", text: message }],
-      },
-    })
-
-    log.debug(`Message injected successfully`)
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    log.error(
-      `Failed to inject message into session: ${errorMessage}`
-    )
-    // Don't throw - this is non-blocking
-  }
-}
 
 /**
  * Format an error message for injection into the session
@@ -180,21 +138,30 @@ async function executeHook(
       const template = hook.inject.template || ""
       const message = interpolateTemplate(template, templateContext)
 
-       // Determine message role (default to "user")
-       const role = (hook.inject.as || "user") as "user" | "assistant"
-
-       // Inject into session
-       await injectMessage(client, context.sessionId, message, role)
+// Inject into session
+        await client.session.prompt({
+          path: { id: context.sessionId },
+          body: {
+            noReply: true,
+            parts: [{ type: "text", text: message }],
+          },
+        })
     }
   } catch (error) {
     // Log the error but don't throw - this is non-blocking
     const errorMessage = formatErrorMessage(hook.id, error)
     log.error(errorMessage)
 
-     // Optionally inject error message into session
-     try {
-       await injectMessage(client, context.sessionId, errorMessage, "user")
-     } catch (injectionError) {
+// Optionally inject error message into session
+      try {
+        await client.session.prompt({
+          path: { id: context.sessionId },
+          body: {
+            noReply: true,
+            parts: [{ type: "text", text: errorMessage }],
+          },
+        })
+      } catch (injectionError) {
       // If error injection fails, just log it
       const injectionErrorMsg =
         injectionError instanceof Error
@@ -255,17 +222,23 @@ export async function handleSessionStart(
         `Found ${allErrors.length} validation error(s)`
       )
 
-       // Inject validation errors into session
-       for (const error of allErrors) {
-         const errorMsg = `Configuration error: ${error.message}`
-         try {
-           await injectMessage(client, context.sessionId, errorMsg, "user")
-         } catch (injectionError) {
-          log.error(
-            `Failed to inject validation error: ${injectionError}`
-          )
-        }
-      }
+// Inject validation errors into session
+        for (const error of allErrors) {
+          const errorMsg = `Configuration error: ${error.message}`
+          try {
+            await client.session.prompt({
+              path: { id: context.sessionId },
+              body: {
+                noReply: true,
+                parts: [{ type: "text", text: errorMsg }],
+              },
+            })
+          } catch (injectionError) {
+           log.error(
+             `Failed to inject validation error: ${injectionError}`
+           )
+         }
+       }
     }
 
     // Match hooks using matchSessionHooks with event="session.start"
