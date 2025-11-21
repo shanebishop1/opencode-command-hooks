@@ -167,6 +167,18 @@ Attach a hook to the `task` tool (which launches subagents). It runs _automatica
 
 ---
 
+## Known Limitations
+
+### Session Hooks Cannot Filter by Agent
+
+Session lifecycle events (`session.start`, `session.idle`, `session.end`) from OpenCode do not currently include the calling agent name in their event properties. This means you **cannot** use the `agent` filter field in session hook `when` conditions—it will match all agents but the agent field will be unavailable.
+
+**Why?** The `session.idle` event fires at the session level, not the agent level. To implement agent filtering for session events, OpenCode would need to pass the current agent context in the event properties.
+
+**Workaround:** If you need agent-specific behavior on session lifecycle events, you can listen to `tool.execute.after` events instead, which do provide the calling agent.
+
+---
+
 ## Development
 
 _Instructions for building this plugin._

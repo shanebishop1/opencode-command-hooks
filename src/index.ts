@@ -159,11 +159,9 @@ const plugin: Plugin = async ({ client }) => {
         // Handle session.idle event
         if (event.type === "session.idle") {
           pluginLog.debug("Received session.idle event")
-          pluginLog.debug(`session.idle event properties: ${JSON.stringify(event.properties)}`)
 
           const sessionId = normalizeString(event.properties?.sessionID)
           const agent = normalizeString(event.properties?.agent)
-          pluginLog.debug(`Extracted agent: ${agent}, sessionId: ${sessionId}`)
 
           if (!sessionId) {
             pluginLog.debug("session.idle event missing sessionID")

@@ -42,7 +42,7 @@
       "run": [
         "osascript -e 'display notification \"Turn complete\"' && npm run lint"
       ],
-      "inject": "⏸️ Agent turn complete (agent: {agent}).\n\nLint Output:\nExit Code: {exitCode}\n\n```\n{stdout}\n```\n\nNote: Agent name comes from event properties - may show 'unknown' if not provided by OpenCode"
+      "inject": "⏸️ Agent turn complete.\n\nLint Output:\nExit Code: {exitCode}\n\n```\n{stdout}\n```"
     }
   ]
 }
