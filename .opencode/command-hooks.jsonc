@@ -35,25 +35,14 @@
       "inject": "🚀 Session started! This message only appears on session.start event."
     },
     {
-      "id": "session-idle-for-build",
-      "when": {
-        "event": "session.idle",
-        "agent": "build"
-      },
-      "run": [
-        "osascript -e 'display notification \"Build agent turn complete\"' && npm run lint"
-      ],
-      "inject": "✅ BUILD agent turn complete.\n\nLint Output:\nExit Code: {exitCode}\n\n```\n{stdout}\n```\n\nTest: build agent message (should only show for build agent)"
-    },
-    {
-      "id": "session-idle-for-other-agents",
+      "id": "session-idle-notify",
       "when": {
         "event": "session.idle"
       },
       "run": [
-        "osascript -e 'display notification \"Agent turn complete: {agent}\"' && npm run lint"
+        "osascript -e 'display notification \"Turn complete\"' && npm run lint"
       ],
-      "inject": "⏸️ {agent} agent turn complete.\n\nLint Output:\nExit Code: {exitCode}\n\n```\n{stdout}\n```\n\nTest: generic agent message (will show for all agents)"
+      "inject": "⏸️ Agent turn complete (agent: {agent}).\n\nLint Output:\nExit Code: {exitCode}\n\n```\n{stdout}\n```\n\nNote: Agent name comes from event properties - may show 'unknown' if not provided by OpenCode"
     }
   ]
 }
