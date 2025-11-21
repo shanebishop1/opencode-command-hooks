@@ -63,7 +63,7 @@
     }
   },
   "plugin": [
-    // "/Users/shane/Desktop/csp/opencode-command-hooks/index.ts",
+    "/Users/shane/Desktop/csp/opencode-command-hooks/index.ts",
     "opencode-openai-codex-auth"
   ]
 }

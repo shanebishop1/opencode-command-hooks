@@ -65,7 +65,25 @@ This plugin handles context injection automatically.
 "inject": { "as": "system" } // The agent sees the command output immediately
 ```
 
-### 3. Reliability
+### 3. Filter Task Calls by Subagent
+
+Run different hooks based on **which subagent is being launched** via the `task` tool—without writing a custom plugin. Use `toolArgs` in your hook conditions to match on `subagentType`, `description`, or any other task input. This works for both `before` and `after` phases (the plugin caches arguments so `after` hooks can filter too).
+
+```jsonc
+// Only run when a "validator" subagent completes
+{
+  "id": "validate-subagent",
+  "when": {
+    "phase": "after",
+    "tool": "task",
+    "toolArgs": { "subagentType": "validator" }
+  },
+  "run": ["npm test"],
+  "inject": "Validator finished. Tests run automatically:\n{stdout}"
+}
+```
+
+### 4. Reliability
 
 - **Non-Blocking**: If a hook fails, your agent keeps working. Errors are logged gracefully.
 

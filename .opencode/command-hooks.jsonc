@@ -35,6 +35,20 @@
         "osascript -e 'display notification \"Starting validator subagent\"'"
       ],
       "inject": "ℹ️ Starting a validator subagent (filtered by toolArgs.subagentType)"
+    },
+    {
+      "id": "task-after-general-subagent",
+      "when": {
+        "phase": "after",
+        "tool": "task",
+        "toolArgs": {
+          "subagentType": "general"
+        }
+      },
+      "run": [
+        "osascript -e 'display notification \"General subagent completed\"' && npm run lint"
+      ],
+      "inject": "✅ General subagent task completed.\n\nLint output:\n```\n{stdout}\n```\n\nThis hook only runs for task calls where subagentType is 'general'."
     }
   ],
   "session": [
@@ -43,9 +57,7 @@
       "when": {
         "event": "session.start"
       },
-      "run": [
-        "osascript -e 'display notification \"Session started\"'"
-      ],
+      "run": ["osascript -e 'display notification \"Session started\"'"],
       "inject": "🚀 Session started! This message only appears on session.start event."
     },
     {
@@ -56,7 +68,7 @@
       "run": [
         "osascript -e 'display notification \"Turn complete\"' && npm run lint"
       ],
-      "inject": "⏸️ Agent turn complete.\n\nLint Output:\nExit Code: {exitCode}\n\n```\n{stdout}\n```"
+      "inject": "⏸ Agent turn complete.\n\nLint Output:\nExit Code: {exitCode}\n\n```\n{stdout}\n```"
     }
   ]
 }
