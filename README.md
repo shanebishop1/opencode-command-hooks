@@ -202,11 +202,13 @@ Run different hooks based on which subagent is being called via the `task` tool.
 }
 ```
 
-**Available in**: `tool.execute.before` only (tool arguments are only available before the tool runs).
+**Available in**: `tool.execute.before` and `tool.execute.after`. For `after` hooks, this plugin caches the tool arguments captured before execution so you can filter on the same values when the tool completes.
 
 **Supported tool argument filters**:
 - For `task` tool: `subagentType`, `description`, `prompt`
 - For other tools: Any argument the tool accepts
+
+Tool argument filters also work when handling `tool.result` events.
 
 ---
 

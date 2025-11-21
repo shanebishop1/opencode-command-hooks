@@ -16,6 +16,38 @@ function normalizeString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined
 }
 
+const TOOL_ARGS_TTL_MS = 5 * 60 * 1000
+const toolCallArgsCache = new Map<
+  string,
+  { args: Record<string, unknown>; cleanup?: ReturnType<typeof setTimeout> }
+>()
+
+function storeToolArgs(callId: string | undefined, args: Record<string, unknown> | undefined): void {
+  if (!callId || !args) return
+  const existing = toolCallArgsCache.get(callId)
+  if (existing?.cleanup) {
+    clearTimeout(existing.cleanup)
+  }
+  const cleanup = setTimeout(() => {
+    toolCallArgsCache.delete(callId)
+  }, TOOL_ARGS_TTL_MS)
+  toolCallArgsCache.set(callId, { args, cleanup })
+}
+
+function getToolArgs(callId: string | undefined): Record<string, unknown> | undefined {
+  if (!callId) return undefined
+  return toolCallArgsCache.get(callId)?.args
+}
+
+function deleteToolArgs(callId: string | undefined): void {
+  if (!callId) return
+  const entry = toolCallArgsCache.get(callId)
+  if (entry?.cleanup) {
+    clearTimeout(entry.cleanup)
+  }
+  toolCallArgsCache.delete(callId)
+}
+
 /**
  * Check if a value matches a pattern (string, array of strings, or wildcard)
  */
@@ -227,6 +259,10 @@ const plugin: Plugin = async ({ client }) => {
             event.properties?.sessionID ?? event.properties?.sessionId
           )
           const agent = normalizeString(event.properties?.agent)
+          const callId = normalizeString(
+            event.properties?.callID ?? event.properties?.callId
+          )
+          const storedToolArgs = getToolArgs(callId)
 
           if (!sessionId || !toolName) {
             pluginLog.debug(
@@ -250,6 +286,7 @@ const plugin: Plugin = async ({ client }) => {
                toolName,
                callingAgent: agent,
                slashCommand: normalizeString(event.properties?.slashCommand),
+               toolArgs: storedToolArgs,
              })
 
             pluginLog.debug(
@@ -261,13 +298,14 @@ const plugin: Plugin = async ({ client }) => {
               sessionId,
               agent: agent || "unknown",
               tool: toolName,
-              callId: normalizeString(
-                event.properties?.callID ?? event.properties?.callId
-              ),
+              callId,
+              toolArgs: storedToolArgs,
             }
 
             // Execute hooks
             await executeHooks(matchedHooks, context, client as OpencodeClient)
+
+            deleteToolArgs(callId)
           } catch (error) {
             const errorMessage =
               error instanceof Error ? error.message : String(error)
@@ -284,7 +322,7 @@ const plugin: Plugin = async ({ client }) => {
        */
       "tool.execute.before": async (
         input: { tool: string; sessionID: string; callID: string },
-        output: { args: any }
+        output: { args: Record<string, unknown> }
       ) => {
         pluginLog.debug(
           `Received tool.execute.before for tool: ${input.tool}`
@@ -321,6 +359,8 @@ const plugin: Plugin = async ({ client }) => {
             toolArgs: output.args,
           }
 
+          storeToolArgs(input.callID, output.args)
+
           // Execute hooks
           await executeHooks(matchedHooks, context, client as OpencodeClient)
         } catch (error) {
@@ -352,6 +392,8 @@ const plugin: Plugin = async ({ client }) => {
           return
         }
 
+        const storedToolArgs = getToolArgs(input.callID)
+
          try {
            // Load config
            const globalConfig = await loadGlobalConfig()
@@ -367,6 +409,7 @@ const plugin: Plugin = async ({ client }) => {
              toolName: input.tool,
              callingAgent: undefined,
              slashCommand: undefined,
+             toolArgs: storedToolArgs,
            })
 
           pluginLog.debug(
@@ -379,6 +422,7 @@ const plugin: Plugin = async ({ client }) => {
             agent: "unknown",
             tool: input.tool,
             callId: input.callID,
+            toolArgs: storedToolArgs,
           }
 
           // Execute hooks
