@@ -30,22 +30,12 @@
         "event": "session.start"
       },
       "run": [
-        "osascript -e 'display notification \"OpenCode session started for agent: {agent}\"'"
+        "osascript -e 'display notification \"Session started\"'"
       ],
-      "inject": "Session started! Agent: {agent} - This is just a test notification."
+      "inject": "🚀 Session started! This message only appears on session.start event."
     },
     {
-      "id": "session-idle-notify",
-      "when": {
-        "event": "session.idle"
-      },
-      "run": [
-        "osascript -e 'display notification \"Agent turn complete\"' && npm run lint"
-      ],
-      "inject": "Session idle notification received.\n\nLint Output:\nExit Code: {exitCode}\n\nOutput:\n```\n{stdout}\n```\n\nThis is just a test of session.idle hook. Do not do anything."
-    },
-    {
-      "id": "session-idle-for-build-agent",
+      "id": "session-idle-for-build",
       "when": {
         "event": "session.idle",
         "agent": "build"
@@ -53,7 +43,17 @@
       "run": [
         "osascript -e 'display notification \"Build agent turn complete\"' && npm run lint"
       ],
-      "inject": "Build agent session idle.\n\nLint Output:\nExit Code: {exitCode}\n\nOutput:\n```\n{stdout}\n```\n\nThis is a test of session.idle hook filtered to build agent only. Do not do anything."
+      "inject": "✅ BUILD agent turn complete.\n\nLint Output:\nExit Code: {exitCode}\n\n```\n{stdout}\n```\n\nTest: build agent message (should only show for build agent)"
+    },
+    {
+      "id": "session-idle-for-other-agents",
+      "when": {
+        "event": "session.idle"
+      },
+      "run": [
+        "osascript -e 'display notification \"Agent turn complete: {agent}\"' && npm run lint"
+      ],
+      "inject": "⏸️ {agent} agent turn complete.\n\nLint Output:\nExit Code: {exitCode}\n\n```\n{stdout}\n```\n\nTest: generic agent message (will show for all agents)"
     }
   ]
 }
