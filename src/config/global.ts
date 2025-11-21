@@ -12,6 +12,13 @@ import { getGlobalLogger } from "../logging.js";
 const log = getGlobalLogger();
 
 /**
+ * In-memory cache for global configuration
+ * Stores the loaded config to avoid repeated file system reads on every tool call.
+ * Set to null to force a reload on the next loadGlobalConfig() call.
+ */
+let cachedConfig: CommandHooksConfig | null = null;
+
+/**
  * Strip comments from JSONC content
  * Handles both line comments and block comments
  */
@@ -144,6 +151,10 @@ async function findConfigFile(startDir: string): Promise<string | null> {
  * Searches for .opencode/command-hooks.jsonc starting from the current working
  * directory and walking up. Parses the entire file as CommandHooksConfig.
  *
+ * **Caching:** This function implements in-memory caching to avoid repeated file
+ * system reads on every tool call. The cache is checked first; if null, the config
+ * is loaded from disk and cached for subsequent calls.
+ *
  * Error handling:
  * - If no config file found: returns empty config (not an error)
  * - If config file is malformed: logs warning, returns empty config
@@ -153,68 +164,99 @@ async function findConfigFile(startDir: string): Promise<string | null> {
  * @returns Promise resolving to CommandHooksConfig (may be empty)
  */
 export async function loadGlobalConfig(): Promise<CommandHooksConfig> {
-  try {
-    // Find config file
-    const configPath = await findConfigFile(process.cwd());
+   // Check cache first
+   if (cachedConfig !== null) {
+     log.debug(`Returning cached global config: ${cachedConfig.tool?.length ?? 0} tool hooks, ${cachedConfig.session?.length ?? 0} session hooks`);
+     return cachedConfig;
+   }
 
-      if (!configPath) {
-        log.debug(
-          `No .opencode/command-hooks.jsonc file found, using empty config`,
-        );
-        return { tool: [], session: [] };
-      }
+   try {
+     // Find config file
+     const configPath = await findConfigFile(process.cwd());
 
-    // Read file
-    let content: string;
-    try {
-      const file = Bun.file(configPath);
-      content = await file.text();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      log.info(
-        `Failed to read config file ${configPath}: ${message}`,
+       if (!configPath) {
+         log.debug(
+           `No .opencode/command-hooks.jsonc file found, using empty config`,
+         );
+         const emptyConfig = { tool: [], session: [] };
+         cachedConfig = emptyConfig;
+         return emptyConfig;
+       }
+
+     // Read file
+     let content: string;
+     try {
+       const file = Bun.file(configPath);
+       content = await file.text();
+     } catch (error) {
+       const message = error instanceof Error ? error.message : String(error);
+       log.info(
+         `Failed to read config file ${configPath}: ${message}`,
+       );
+       const emptyConfig = { tool: [], session: [] };
+       cachedConfig = emptyConfig;
+       return emptyConfig;
+     }
+
+     // Parse JSONC
+     let parsed: unknown;
+     try {
+       const stripped = stripJsoncComments(content);
+       parsed = parseJson(stripped);
+     } catch (error) {
+       const message = error instanceof Error ? error.message : String(error);
+       log.info(
+         `Failed to parse config file ${configPath}: ${message}`,
+       );
+       const emptyConfig = { tool: [], session: [] };
+       cachedConfig = emptyConfig;
+       return emptyConfig;
+     }
+
+     // Validate entire file as CommandHooksConfig
+     if (!isValidCommandHooksConfig(parsed)) {
+       log.info(
+         `Config file is not a valid CommandHooksConfig (expected { tool?: [], session?: [] }), using empty config`,
+       );
+       const emptyConfig = { tool: [], session: [] };
+       cachedConfig = emptyConfig;
+       return emptyConfig;
+     }
+
+     // Return with defaults for missing arrays
+     const result: CommandHooksConfig = {
+       tool: parsed.tool ?? [],
+       session: parsed.session ?? [],
+     };
+
+      log.debug(
+        `Loaded global config: ${result.tool?.length ?? 0} tool hooks, ${result.session?.length ?? 0} session hooks`,
       );
-      return { tool: [], session: [] };
-    }
 
-    // Parse JSONC
-    let parsed: unknown;
-    try {
-      const stripped = stripJsoncComments(content);
-      parsed = parseJson(stripped);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      log.info(
-        `Failed to parse config file ${configPath}: ${message}`,
-      );
-      return { tool: [], session: [] };
-    }
-
-    // Validate entire file as CommandHooksConfig
-    if (!isValidCommandHooksConfig(parsed)) {
-      log.info(
-        `Config file is not a valid CommandHooksConfig (expected { tool?: [], session?: [] }), using empty config`,
-      );
-      return { tool: [], session: [] };
-    }
-
-    // Return with defaults for missing arrays
-    const result: CommandHooksConfig = {
-      tool: parsed.tool ?? [],
-      session: parsed.session ?? [],
-    };
-
-     log.debug(
-       `Loaded global config: ${result.tool?.length ?? 0} tool hooks, ${result.session?.length ?? 0} session hooks`,
+      // Cache the result
+      cachedConfig = result;
+      return result;
+   } catch (error) {
+     // Catch-all for unexpected errors
+     const message = error instanceof Error ? error.message : String(error);
+     log.info(
+       `Unexpected error loading global config: ${message}`,
      );
+     const emptyConfig = { tool: [], session: [] };
+     cachedConfig = emptyConfig;
+     return emptyConfig;
+   }
+}
 
-     return result;
-  } catch (error) {
-    // Catch-all for unexpected errors
-    const message = error instanceof Error ? error.message : String(error);
-    log.info(
-      `Unexpected error loading global config: ${message}`,
-    );
-    return { tool: [], session: [] };
-  }
+/**
+ * Clear the global config cache
+ *
+ * Forces the next call to loadGlobalConfig() to reload from disk.
+ * Useful for testing or when config files may have changed.
+ *
+ * @internal For testing purposes
+ */
+export function clearGlobalConfigCache(): void {
+  log.debug("Clearing global config cache");
+  cachedConfig = null;
 }

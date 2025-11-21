@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeAll, afterAll } from "bun:test";
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from "bun:test";
 import {
-  loadMarkdownConfig,
-  parseYamlFrontmatter,
-  extractYamlFrontmatter,
+   loadMarkdownConfig,
+   parseYamlFrontmatter,
+   extractYamlFrontmatter,
+   clearMarkdownConfigCache,
 } from "../src/config/markdown.js";
 import { writeFileSync, unlinkSync, mkdirSync, rmSync } from "fs";
 import { join } from "path";
@@ -143,25 +144,30 @@ description: A test agent`;
 });
 
 describe("loadMarkdownConfig", () => {
-  const testDir = "/tmp/opencode-markdown-test";
-  const originalCwd = process.cwd();
+   const testDir = "/tmp/opencode-markdown-test";
+   const originalCwd = process.cwd();
 
-  beforeAll(() => {
-    try {
-      mkdirSync(testDir, { recursive: true });
-    } catch {
-      // Directory may already exist
-    }
-  });
+   beforeAll(() => {
+     try {
+       mkdirSync(testDir, { recursive: true });
+     } catch {
+       // Directory may already exist
+     }
+   });
 
-  afterAll(() => {
-    try {
-      rmSync(testDir, { recursive: true, force: true });
-    } catch {
-      // Ignore cleanup errors
-    }
-    process.chdir(originalCwd);
-  });
+   beforeEach(() => {
+     // Clear cache before each test to ensure fresh loads
+     clearMarkdownConfigCache();
+   });
+
+   afterAll(() => {
+     try {
+       rmSync(testDir, { recursive: true, force: true });
+     } catch {
+       // Ignore cleanup errors
+     }
+     process.chdir(originalCwd);
+   });
 
   it("returns empty config when file doesn't exist", async () => {
     const config = await loadMarkdownConfig(
@@ -330,15 +336,12 @@ command_hooks:
         callingAgent: ["build"]
       run:
         - pnpm test --runInBand
-      inject:
-        target: callingSession
-        as: user
-        template: |
-          Tests completed:
-          exit {exitCode}
-          \`\`\`
-          {stdout}
-          \`\`\`
+      inject: |
+        Tests completed:
+        exit {exitCode}
+        \`\`\`
+        {stdout}
+        \`\`\`
     - id: lint-before-write
       when:
         phase: before
@@ -350,9 +353,7 @@ command_hooks:
         event: session.start
         agent: ["build", "validator"]
       run: git status --short
-      inject:
-        as: system
-        template: "Repo status: {stdout}"
+      inject: "Repo status: {stdout}"
 ---
 
 # Complex Agent`;
@@ -363,10 +364,10 @@ command_hooks:
     expect(config.tool).toHaveLength(2);
     expect(config.session).toHaveLength(1);
 
-    const toolHook = config.tool?.[0];
-    expect(toolHook?.id).toBe("tests-after-task");
-    expect(toolHook?.run).toEqual(["pnpm test --runInBand"]);
-    expect(toolHook?.inject?.template).toContain("Tests completed:");
+     const toolHook = config.tool?.[0];
+     expect(toolHook?.id).toBe("tests-after-task");
+     expect(toolHook?.run).toEqual(["pnpm test --runInBand"]);
+     expect(toolHook?.inject).toContain("Tests completed:");
 
     const sessionHook = config.session?.[0];
     expect(sessionHook?.id).toBe("bootstrap");
@@ -508,6 +509,99 @@ Content`;
       "echo step3",
     ]);
 
-    unlinkSync(filePath);
-  });
+     unlinkSync(filePath);
+   });
+
+   it("caches config per file path", async () => {
+     const filePath = join(testDir, "cache-test.md");
+     const content = `---
+name: test
+command_hooks:
+   tool:
+     - id: cached-hook
+       run: echo cached
+---
+
+Content`;
+
+     writeFileSync(filePath, content);
+
+     // First load
+     const config1 = await loadMarkdownConfig(filePath);
+     expect(config1.tool).toHaveLength(1);
+     expect(config1.tool?.[0]?.id).toBe("cached-hook");
+
+     // Modify the file
+     const newContent = `---
+name: test
+command_hooks:
+   tool:
+     - id: new-hook
+       run: echo new
+---
+
+Content`;
+     writeFileSync(filePath, newContent);
+
+     // Second load should return cached version (not the modified file)
+     const config2 = await loadMarkdownConfig(filePath);
+     expect(config2.tool).toHaveLength(1);
+     expect(config2.tool?.[0]?.id).toBe("cached-hook");
+
+     // After clearing cache for this file, should load the new version
+     clearMarkdownConfigCache(filePath);
+     const config3 = await loadMarkdownConfig(filePath);
+     expect(config3.tool).toHaveLength(1);
+     expect(config3.tool?.[0]?.id).toBe("new-hook");
+
+     unlinkSync(filePath);
+   });
+
+   it("clears all markdown cache when called without arguments", async () => {
+     const filePath1 = join(testDir, "cache-test-1.md");
+     const filePath2 = join(testDir, "cache-test-2.md");
+     const content = `---
+name: test
+command_hooks:
+   tool:
+     - id: hook1
+       run: echo test
+---
+
+Content`;
+
+     writeFileSync(filePath1, content);
+     writeFileSync(filePath2, content);
+
+     // Load both files
+     const config1 = await loadMarkdownConfig(filePath1);
+     const config2 = await loadMarkdownConfig(filePath2);
+     expect(config1.tool).toHaveLength(1);
+     expect(config2.tool).toHaveLength(1);
+
+     // Clear all cache
+     clearMarkdownConfigCache();
+
+     // Modify both files
+     const newContent = `---
+name: test
+command_hooks:
+   tool:
+     - id: hook2
+       run: echo new
+---
+
+Content`;
+     writeFileSync(filePath1, newContent);
+     writeFileSync(filePath2, newContent);
+
+     // Both should load new versions
+     const config3 = await loadMarkdownConfig(filePath1);
+     const config4 = await loadMarkdownConfig(filePath2);
+     expect(config3.tool?.[0]?.id).toBe("hook2");
+     expect(config4.tool?.[0]?.id).toBe("hook2");
+
+     unlinkSync(filePath1);
+     unlinkSync(filePath2);
+   });
 });

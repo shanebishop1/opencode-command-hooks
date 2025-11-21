@@ -13,11 +13,7 @@
  */
 
 import type { HookExecutionResult } from "../types/hooks.js"
-import { exec } from "child_process"
-import { promisify } from "util"
 import { getGlobalLogger } from "../logging.js"
-
-const execAsync = promisify(exec)
 
 const DEFAULT_TRUNCATE_LIMIT = 4000
 const log = getGlobalLogger()
@@ -173,7 +169,8 @@ export async function executeCommands(
  * Internal helper to execute a shell command using Bun's $ API
  *
  * This function handles the actual shell execution with proper error handling.
- * We use a helper function to work around TypeScript's template literal typing.
+ * Uses Bun's $ template literal with .nothrow() to prevent throwing on non-zero
+ * exit codes and .quiet() to capture output without printing to console.
  *
  * @param command - Shell command to execute
  * @returns Object with stdout, stderr, and exitCode
@@ -181,51 +178,32 @@ export async function executeCommands(
 async function executeShellCommand(
   command: string
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  // Check if we're running in Bun and Bun shell is available
-  const isBun = typeof Bun !== "undefined"
-
-  if (isBun) {
-    try {
-      // Use Bun's $ template literal to execute the command
-      // The nothrow() method prevents throwing on non-zero exit codes
-      // The quiet() method suppresses output and returns Buffers
-      const result = await Bun.$`sh -c ${command}`.nothrow().quiet()
-
-      // Extract stdout and stderr as text
-      // result.stdout and result.stderr are Buffers, convert to string
-      const stdout = result.stdout instanceof Buffer ? result.stdout.toString() : String(result.stdout)
-      const stderr = result.stderr instanceof Buffer ? result.stderr.toString() : String(result.stderr)
-      const exitCode = result.exitCode ?? 0
-
-      return {
-        stdout,
-        stderr,
-        exitCode,
-      }
-    } catch {
-      // Fall back to Node.js if Bun shell fails
-    }
-  }
-
-  // Fallback to Node.js child_process
   try {
-    const { stdout, stderr } = await execAsync(command)
-    return {
-      stdout: stdout || "",
-      stderr: stderr || "",
-      exitCode: 0,
-    }
-   } catch (error: unknown) {
-     // execAsync throws on non-zero exit codes
-     const execError = error as { stdout?: string; stderr?: string; code?: number };
-     const stdout = execError.stdout || ""
-     const stderr = execError.stderr || ""
-     const exitCode = execError.code || 1
+    // Use Bun's $ template literal to execute the command
+    // The nothrow() method prevents throwing on non-zero exit codes
+    // The quiet() method suppresses output and returns Buffers
+    const result = await Bun.$`sh -c ${command}`.nothrow().quiet()
+
+    // Extract stdout and stderr as text
+    // result.stdout and result.stderr are Buffers, convert to string
+    const stdout = result.stdout instanceof Buffer ? result.stdout.toString() : String(result.stdout)
+    const stderr = result.stderr instanceof Buffer ? result.stderr.toString() : String(result.stderr)
+    const exitCode = result.exitCode ?? 0
 
     return {
       stdout,
       stderr,
       exitCode,
+    }
+  } catch (error: unknown) {
+    // If Bun shell execution fails unexpectedly, return error details
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    log.error(`Unexpected error executing command: ${errorMessage}`)
+
+    return {
+      stdout: "",
+      stderr: errorMessage,
+      exitCode: 1,
     }
   }
 }

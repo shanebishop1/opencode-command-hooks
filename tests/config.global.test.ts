@@ -1,30 +1,35 @@
-import { describe, it, expect, beforeAll, afterAll } from "bun:test"
-import { loadGlobalConfig } from "../src/config/global.js"
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from "bun:test"
+import { loadGlobalConfig, clearGlobalConfigCache } from "../src/config/global.js"
 import { writeFileSync, unlinkSync, mkdirSync, rmSync } from "fs"
 import { join } from "path"
 
 describe("loadGlobalConfig", () => {
-  const testDir = "/tmp/opencode-hooks-test"
-  const originalCwd = process.cwd()
+   const testDir = "/tmp/opencode-hooks-test"
+   const originalCwd = process.cwd()
 
-  beforeAll(() => {
-    // Create test directory
-    try {
-      mkdirSync(testDir, { recursive: true })
-    } catch {
-      // Directory may already exist
-    }
-  })
+   beforeAll(() => {
+     // Create test directory
+     try {
+       mkdirSync(testDir, { recursive: true })
+     } catch {
+       // Directory may already exist
+     }
+   })
 
-  afterAll(() => {
-    // Cleanup
-    try {
-      rmSync(testDir, { recursive: true, force: true })
-    } catch {
-      // Ignore cleanup errors
-    }
-    process.chdir(originalCwd)
-  })
+   beforeEach(() => {
+     // Clear cache before each test to ensure fresh loads
+     clearGlobalConfigCache()
+   })
+
+   afterAll(() => {
+     // Cleanup
+     try {
+       rmSync(testDir, { recursive: true, force: true })
+     } catch {
+       // Ignore cleanup errors
+     }
+     process.chdir(originalCwd)
+   })
 
   it("returns empty config when no config file exists", async () => {
     process.chdir(testDir)
@@ -177,5 +182,46 @@ describe("loadGlobalConfig", () => {
 
     unlinkSync(configPath)
     rmSync(join(testDir, "subdir"), { recursive: true })
-  })
+   })
+
+   it("caches config after first load", async () => {
+     const opencodeDirPath = join(testDir, ".opencode")
+     const configPath = join(opencodeDirPath, "command-hooks.jsonc")
+     const content = JSON.stringify({
+       tool: [{ id: "cached-hook", when: { phase: "after" }, run: "echo cached" }],
+       session: [],
+     })
+     try {
+       mkdirSync(opencodeDirPath, { recursive: true })
+     } catch {
+       // Directory may already exist
+     }
+     writeFileSync(configPath, content)
+     process.chdir(testDir)
+
+     // First load
+     const config1 = await loadGlobalConfig()
+     expect(config1.tool).toHaveLength(1)
+     expect(config1.tool?.[0]?.id).toBe("cached-hook")
+
+     // Modify the file
+     const newContent = JSON.stringify({
+       tool: [{ id: "new-hook", when: { phase: "before" }, run: "echo new" }],
+       session: [],
+     })
+     writeFileSync(configPath, newContent)
+
+     // Second load should return cached version (not the modified file)
+     const config2 = await loadGlobalConfig()
+     expect(config2.tool).toHaveLength(1)
+     expect(config2.tool?.[0]?.id).toBe("cached-hook")
+
+     // After clearing cache, should load the new version
+     clearGlobalConfigCache()
+     const config3 = await loadGlobalConfig()
+     expect(config3.tool).toHaveLength(1)
+     expect(config3.tool?.[0]?.id).toBe("new-hook")
+
+     unlinkSync(configPath)
+   })
 })

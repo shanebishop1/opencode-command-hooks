@@ -20,24 +20,22 @@
  * by tool name, calling agent, and slash command context. Results can optionally
  * be injected into the session as messages.
  *
- * @example
- * ```json
- * {
- *   "id": "global-tests-after-task",
- *   "when": {
- *     "phase": "after",
- *     "tool": ["task"],
- *     "callingAgent": ["*"]
- *   },
- *   "run": ["pnpm test --runInBand"],
- *   "inject": {
- *     "target": "callingSession",
- *     "as": "user",
- *     "template": "Tests after {tool}: exit {exitCode}\n```sh\n{stdout}\n```"
- *   }
- * }
- * ```
- */
+  * @example
+  * ```json
+  * {
+  *   "id": "global-tests-after-task",
+  *   "when": {
+  *     "phase": "after",
+  *     "tool": ["task"],
+  *     "callingAgent": ["*"]
+  *   },
+  *   "run": ["pnpm test --runInBand"],
+  *   "inject": {
+  *     "template": "Tests after {tool}: exit {exitCode}\n```sh\n{stdout}\n```"
+  *   }
+  * }
+  * ```
+  */
 export interface ToolHook {
   /**
    * Unique identifier for this hook within its scope (global or per-entity).
@@ -52,28 +50,39 @@ export interface ToolHook {
    */
   when: ToolHookWhen
 
-  /**
-   * Shell command(s) to execute when this hook matches.
-   * - Single string: executed as-is
-   * - Array of strings: executed sequentially, even if earlier commands fail
-   *
-   * Commands are executed via Bun's shell API ($) with proper error handling.
-   * Non-zero exit codes do not block subsequent commands or normal tool execution.
-   */
-  run: string | string[]
+   /**
+    * Shell command(s) to execute when this hook matches.
+    * - Single string: executed as-is
+    * - Array of strings: executed sequentially, even if earlier commands fail
+    *
+    * Commands are executed via Bun's shell API ($) with proper error handling.
+    * Non-zero exit codes do not block subsequent commands or normal tool execution.
+    */
+   run: string | string[]
 
-  /**
-   * Optional configuration for injecting hook results into the session.
-   * If omitted, the hook still runs but output is only logged.
-   */
-  inject?: HookInjection
+   /**
+    * Optional template string for injecting hook results into the calling session.
+    * If omitted, the hook still runs but output is only logged.
+    * 
+    * Supports placeholder substitution with the following variables:
+    * - {id}: hook ID
+    * - {agent}: agent name (if available)
+    * - {tool}: tool name (for tool hooks)
+    * - {cmd}: command string that was executed
+    * - {stdout}: captured standard output (truncated to limit)
+    * - {stderr}: captured standard error (truncated to limit)
+    * - {exitCode}: command exit code (integer)
+    * 
+    * Placeholders for unavailable values are replaced with empty string.
+    */
+   inject?: string
 
-  /**
-   * Optional message to log directly to OpenCode's console via console.log().
-   * Supports template placeholder substitution like the inject template.
-   * If omitted, no console.log is performed.
-   */
-  consoleLog?: string
+   /**
+    * Optional message to log directly to OpenCode's console via console.log().
+    * Supports template placeholder substitution like the inject template.
+    * If omitted, no console.log is performed.
+    */
+   consoleLog?: string
 }
 
 /**
@@ -136,22 +145,21 @@ export interface ToolHookWhen {
  * Can be filtered by agent name. Results can optionally be injected into
  * the session as messages.
  *
- * @example
- * ```json
- * {
- *   "id": "global-bootstrap",
- *   "when": {
- *     "event": "session.start",
- *     "agent": ["build", "validator", "*"]
- *   },
- *   "run": ["git status --short"],
- *   "inject": {
- *     "as": "system",
- *     "template": "Repo status for {agent}:\n```sh\n{stdout}\n```"
- *   }
- * }
- * ```
- */
+  * @example
+  * ```json
+  * {
+  *   "id": "global-bootstrap",
+  *   "when": {
+  *     "event": "session.start",
+  *     "agent": ["build", "validator", "*"]
+  *   },
+  *   "run": ["git status --short"],
+  *   "inject": {
+  *     "template": "Repo status for {agent}:\n```sh\n{stdout}\n```"
+  *   }
+  * }
+  * ```
+  */
 export interface SessionHook {
   /**
    * Unique identifier for this hook within its scope (global or per-entity).
@@ -166,28 +174,38 @@ export interface SessionHook {
    */
   when: SessionHookWhen
 
-  /**
-   * Shell command(s) to execute when this hook matches.
-   * - Single string: executed as-is
-   * - Array of strings: executed sequentially, even if earlier commands fail
-   *
-   * Commands are executed via Bun's shell API ($) with proper error handling.
-   * Non-zero exit codes do not block subsequent commands or normal session flow.
-   */
-  run: string | string[]
+   /**
+    * Shell command(s) to execute when this hook matches.
+    * - Single string: executed as-is
+    * - Array of strings: executed sequentially, even if earlier commands fail
+    *
+    * Commands are executed via Bun's shell API ($) with proper error handling.
+    * Non-zero exit codes do not block subsequent commands or normal session flow.
+    */
+   run: string | string[]
 
-  /**
-   * Optional configuration for injecting hook results into the session.
-   * If omitted, the hook still runs but output is only logged.
-   */
-  inject?: HookInjection
+   /**
+    * Optional template string for injecting hook results into the calling session.
+    * If omitted, the hook still runs but output is only logged.
+    * 
+    * Supports placeholder substitution with the following variables:
+    * - {id}: hook ID
+    * - {agent}: agent name (if available)
+    * - {cmd}: command string that was executed
+    * - {stdout}: captured standard output (truncated to limit)
+    * - {stderr}: captured standard error (truncated to limit)
+    * - {exitCode}: command exit code (integer)
+    * 
+    * Placeholders for unavailable values are replaced with empty string.
+    */
+   inject?: string
 
-  /**
-   * Optional message to log directly to OpenCode's console via console.log().
-   * Supports template placeholder substitution like the inject template.
-   * If omitted, no console.log is performed.
-   */
-  consoleLog?: string
+   /**
+    * Optional message to log directly to OpenCode's console via console.log().
+    * Supports template placeholder substitution like the inject template.
+    * If omitted, no console.log is performed.
+    */
+   consoleLog?: string
 }
 
 /**
@@ -222,53 +240,7 @@ export interface SessionHookWhen {
 // MESSAGE INJECTION
 // ============================================================================
 
-/**
- * Configuration for injecting hook execution results into a session
- *
- * When a hook executes, its output can be injected as a message into the
- * session. The message is formatted using a template with placeholder substitution.
- *
- * @example
- * ```json
- * {
- *   "target": "callingSession",
- *   "template": "Hook {id} completed:\nexit {exitCode}\n```\n{stdout}\n```"
- * }
- * ```
- */
-export interface HookInjection {
-/**
-    * Target for message injection.
-    * - "callingSession" (default): inject into the current session
-    *
-    * Future expansion may support:
-    * - "subagentSession": inject into a subagent's session (when available)
-    * - "parentSession": inject into the parent session
-    */
-   target?: "callingSession"
 
-  /**
-   * Template string for formatting the injected message.
-   * Supports placeholder substitution with the following variables:
-   *
-   * - {id}: hook ID
-   * - {agent}: agent name (if available)
-   * - {tool}: tool name (for tool hooks)
-   * - {cmd}: command string that was executed
-   * - {stdout}: captured standard output (truncated to limit)
-   * - {stderr}: captured standard error (truncated to limit)
-   * - {exitCode}: command exit code (integer)
-   *
-   * Placeholders for unavailable values are replaced with empty string.
-   * Multi-line templates are supported.
-   *
-   * @example
-   * ```
-   * "Hook {id} for {tool} completed with exit code {exitCode}\n```\n{stdout}\n```"
-   * ```
-   */
-  template?: string
-}
 
 // ============================================================================
 // TOP-LEVEL CONFIGURATION
