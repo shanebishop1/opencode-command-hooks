@@ -76,10 +76,10 @@ Run different hooks based on **which subagent is being launched** via the `task`
   "when": {
     "phase": "after",
     "tool": "task",
-    "toolArgs": { "subagent_type": "validator" }
+    "toolArgs": { "subagent_type": "validator" },
   },
   "run": ["npm test"],
-  "inject": "Validator finished. Tests run automatically:\n{stdout}"
+  "inject": "Validator finished. Tests run automatically:\n{stdout}",
 }
 ```
 
@@ -150,7 +150,7 @@ Prevent broken code from accumulating by running a linter every time a file is w
 
 ---
 
-#### 3. The "Orchestrator" Pattern (Save Money & Reduce Errors)
+#### 3. Orchestrator/Subagent Pattern w/ Validation
 
 **Scenario**: You have an Orchestrator Agent that spins up Subagents to write code. You want to ensure every Subagent's work is valid before accepting it.
 
@@ -198,11 +198,11 @@ Run different hooks based on which subagent is being called via the `task` tool.
         "phase": "before",
         "tool": "task",
         "toolArgs": {
-          "subagent_type": "validator"
-        }
+          "subagent_type": "validator",
+        },
       },
       "run": ["echo 'Starting validator subagent'"],
-      "inject": "ℹ️ A validator subagent is being called"
+      "inject": "ℹ️ A validator subagent is being called",
     },
     {
       "id": "reviewer-subagent-hook",
@@ -210,19 +210,20 @@ Run different hooks based on which subagent is being called via the `task` tool.
         "phase": "before",
         "tool": "task",
         "toolArgs": {
-          "subagent_type": ["reviewer", "code-reviewer"]
-        }
+          "subagent_type": ["reviewer", "code-reviewer"],
+        },
       },
       "run": ["echo 'Starting reviewer subagent'"],
-      "inject": "🔍 A reviewer subagent is being called"
-    }
-  ]
+      "inject": "🔍 A reviewer subagent is being called",
+    },
+  ],
 }
 ```
 
 **Available in**: `tool.execute.before` and `tool.execute.after`. For `after` hooks, this plugin caches the tool arguments captured before execution so you can filter on the same values when the tool completes.
 
 **Supported tool argument filters**:
+
 - For `task` tool: `subagent_type`, `description`, `prompt`
 - For other tools: Any argument the tool accepts
 
