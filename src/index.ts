@@ -121,8 +121,8 @@ function filterToolHooks(
  * - No state tracking (pendingAfterEvents, completedAfterEvents removed)
  * - Unified executor handles all hook matching and execution
  */
-const plugin: Plugin = async ({ client }) => {
-  const pluginLog = createLogger(client)
+const plugin: Plugin = async ({ client, directory }) => {
+  const pluginLog = createLogger(client, directory)
   setGlobalLogger(pluginLog)
   
   try {
