@@ -1,7 +1,7 @@
 import type { Plugin } from "@opencode-ai/plugin"
 import type { Config, OpencodeClient } from "@opencode-ai/sdk"
 import type { HookExecutionContext, ToolHook, SessionHook } from "./types/hooks.js"
-import { createLogger, setGlobalLogger } from "./logging.js"
+import { createLogger, setGlobalLogger, logger } from "./logging.js"
 import { executeHooks } from "./executor.js"
 import { loadGlobalConfig } from "./config/global.js"
 import { mergeConfigs } from "./config/merge.js"
@@ -121,14 +121,15 @@ function filterToolHooks(
  * - No state tracking (pendingAfterEvents, completedAfterEvents removed)
  * - Unified executor handles all hook matching and execution
  */
-const plugin: Plugin = async ({ client, directory }) => {
-  const pluginLog = createLogger(client, directory)
-  setGlobalLogger(pluginLog)
+const plugin: Plugin = async ({ client }) => {
+    const clientLogger = createLogger(client)
+   setGlobalLogger(clientLogger)
   
-  try {
-    pluginLog.info("Initializing plugin")
+   try {
+     logger.info("Initializing plugin")
+     logger.info("[SMOKE-TEST] opencode-command-hooks plugin loaded successfully")
 
-    const hooks = {
+     const hooks = {
       /**
        * Config hook for plugin initialization
        * Called by OpenCode during plugin initialization to provide configuration.
@@ -138,7 +139,7 @@ const plugin: Plugin = async ({ client, directory }) => {
        */
       config: async (_input: Config) => {
         void _input
-        pluginLog.debug("Config hook called")
+        logger.debug("Config hook called")
         // No-op for now - we load config from .opencode/command-hooks.jsonc
         // This hook is called by OpenCode during plugin initialization
       },
@@ -154,13 +155,13 @@ const plugin: Plugin = async ({ client, directory }) => {
       event: async ({ event }: { event: { type: string; properties?: Record<string, unknown> } }) => {
         // Handle session.start event
         if (event.type === "session.start") {
-          pluginLog.debug("Received session.start event")
+          logger.debug("Received session.start event")
 
           const sessionId = normalizeString(event.properties?.sessionID)
           const agent = normalizeString(event.properties?.agent)
 
           if (!sessionId) {
-            pluginLog.debug("session.start event missing sessionID")
+            logger.debug("session.start event missing sessionID")
             return
           }
 
@@ -179,7 +180,7 @@ const plugin: Plugin = async ({ client, directory }) => {
                agent,
              })
 
-            pluginLog.debug(
+            logger.debug(
               `Matched ${matchedHooks.length} hook(s) for session.start`
             )
 
@@ -194,7 +195,7 @@ const plugin: Plugin = async ({ client, directory }) => {
           } catch (error) {
             const errorMessage =
               error instanceof Error ? error.message : String(error)
-            pluginLog.error(
+            logger.error(
               `Error handling session.start event: ${errorMessage}`
             )
           }
@@ -202,13 +203,13 @@ const plugin: Plugin = async ({ client, directory }) => {
 
         // Handle session.idle event
         if (event.type === "session.idle") {
-          pluginLog.debug("Received session.idle event")
+          logger.debug("Received session.idle event")
 
           const sessionId = normalizeString(event.properties?.sessionID)
           const agent = normalizeString(event.properties?.agent)
 
           if (!sessionId) {
-            pluginLog.debug("session.idle event missing sessionID")
+            logger.debug("session.idle event missing sessionID")
             return
           }
 
@@ -227,7 +228,7 @@ const plugin: Plugin = async ({ client, directory }) => {
                agent,
              })
 
-            pluginLog.debug(
+            logger.debug(
               `Matched ${matchedHooks.length} hook(s) for session.idle`
             )
 
@@ -242,7 +243,7 @@ const plugin: Plugin = async ({ client, directory }) => {
           } catch (error) {
             const errorMessage =
               error instanceof Error ? error.message : String(error)
-            pluginLog.error(
+            logger.error(
               `Error handling session.idle event: ${errorMessage}`
             )
           }
@@ -250,7 +251,7 @@ const plugin: Plugin = async ({ client, directory }) => {
 
         // Handle tool.result event (fires when tool finishes)
         if (event.type === "tool.result") {
-          pluginLog.debug("Received tool.result event")
+          logger.debug("Received tool.result event")
 
           const toolName = normalizeString(
             event.properties?.name ?? event.properties?.tool
@@ -265,7 +266,7 @@ const plugin: Plugin = async ({ client, directory }) => {
           const storedToolArgs = getToolArgs(callId)
 
           if (!sessionId || !toolName) {
-            pluginLog.debug(
+            logger.debug(
               "tool.result event missing sessionID or tool name"
             )
             return
@@ -289,7 +290,7 @@ const plugin: Plugin = async ({ client, directory }) => {
                toolArgs: storedToolArgs,
              })
 
-            pluginLog.debug(
+            logger.debug(
               `Matched ${matchedHooks.length} hook(s) for tool.result (after phase)`
             )
 
@@ -309,7 +310,7 @@ const plugin: Plugin = async ({ client, directory }) => {
           } catch (error) {
             const errorMessage =
               error instanceof Error ? error.message : String(error)
-            pluginLog.error(
+            logger.error(
               `Error handling tool.result event: ${errorMessage}`
             )
           }
@@ -324,7 +325,7 @@ const plugin: Plugin = async ({ client, directory }) => {
         input: { tool: string; sessionID: string; callID: string },
         output: { args: Record<string, unknown> }
       ) => {
-        pluginLog.debug(
+        logger.debug(
           `Received tool.execute.before for tool: ${input.tool}`
         )
 
@@ -346,7 +347,7 @@ const plugin: Plugin = async ({ client, directory }) => {
              toolArgs: output.args,
            })
 
-          pluginLog.debug(
+          logger.debug(
             `Matched ${matchedHooks.length} hook(s) for tool.execute.before`
           )
 
@@ -366,7 +367,7 @@ const plugin: Plugin = async ({ client, directory }) => {
         } catch (error) {
           const errorMessage =
             error instanceof Error ? error.message : String(error)
-          pluginLog.error(
+          logger.error(
             `Error handling tool.execute.before: ${errorMessage}`
           )
         }
@@ -380,13 +381,13 @@ const plugin: Plugin = async ({ client, directory }) => {
         input: { tool: string; sessionID: string; callID: string },
         toolOutput?: { title: string; output: string; metadata: Record<string, unknown> }
       ) => {
-        pluginLog.debug(
+        logger.debug(
           `Received tool.execute.after for tool: ${input.tool}`
         )
 
         // Only process if output is present (sync tools)
         if (!toolOutput) {
-          pluginLog.debug(
+          logger.debug(
             `Skipping tool.execute.after for ${input.tool}: no output (async tool)`
           )
           return
@@ -412,7 +413,7 @@ const plugin: Plugin = async ({ client, directory }) => {
              toolArgs: storedToolArgs,
            })
 
-          pluginLog.debug(
+          logger.debug(
             `Matched ${matchedHooks.length} hook(s) for tool.execute.after`
           )
 
@@ -430,17 +431,17 @@ const plugin: Plugin = async ({ client, directory }) => {
         } catch (error) {
           const errorMessage =
             error instanceof Error ? error.message : String(error)
-          pluginLog.error(
+          logger.error(
             `Error handling tool.execute.after: ${errorMessage}`
           )
         }
       },
     }
 
-    pluginLog.info(`Plugin returning hooks: ${Object.keys(hooks).join(", ")}`)
+    logger.info(`Plugin returning hooks: ${Object.keys(hooks).join(", ")}`)
     return hooks
   } catch (error) {
-    pluginLog.error(
+    logger.error(
       `Error in plugin initialization: ${error instanceof Error ? error.message : String(error)}`
     )
     throw error

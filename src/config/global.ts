@@ -7,9 +7,7 @@
 
 import type { CommandHooksConfig } from "../types/hooks.js";
 import { join, dirname } from "path";
-import { getGlobalLogger } from "../logging.js";
-
-const log = getGlobalLogger();
+import { logger } from "../logging.js";
 
 /**
  * In-memory cache for global configuration
@@ -120,7 +118,7 @@ async function findConfigFile(startDir: string): Promise<string | null> {
     try {
       const file = Bun.file(configPath);
        if (await file.exists()) {
-         log.debug(`Found config file: ${configPath}`);
+         logger.debug(`Found config file: ${configPath}`);
          return configPath;
        }
     } catch {
@@ -138,9 +136,9 @@ async function findConfigFile(startDir: string): Promise<string | null> {
     depth++;
   }
 
-   log.debug(
-     `No config file found after searching ${depth} directories`,
-   );
+    logger.debug(
+      `No config file found after searching ${depth} directories`,
+    );
 
    return null;
 }
@@ -166,7 +164,7 @@ async function findConfigFile(startDir: string): Promise<string | null> {
 export async function loadGlobalConfig(): Promise<CommandHooksConfig> {
    // Check cache first
    if (cachedConfig !== null) {
-     log.debug(`Returning cached global config: ${cachedConfig.tool?.length ?? 0} tool hooks, ${cachedConfig.session?.length ?? 0} session hooks`);
+      logger.debug(`Returning cached global config: ${cachedConfig.tool?.length ?? 0} tool hooks, ${cachedConfig.session?.length ?? 0} session hooks`);
      return cachedConfig;
    }
 
@@ -175,9 +173,9 @@ export async function loadGlobalConfig(): Promise<CommandHooksConfig> {
      const configPath = await findConfigFile(process.cwd());
 
        if (!configPath) {
-         log.debug(
-           `No .opencode/command-hooks.jsonc file found, using empty config`,
-         );
+          logger.debug(
+            `No .opencode/command-hooks.jsonc file found, using empty config`,
+          );
          const emptyConfig = { tool: [], session: [] };
          cachedConfig = emptyConfig;
          return emptyConfig;
@@ -190,9 +188,9 @@ export async function loadGlobalConfig(): Promise<CommandHooksConfig> {
        content = await file.text();
      } catch (error) {
        const message = error instanceof Error ? error.message : String(error);
-       log.info(
-         `Failed to read config file ${configPath}: ${message}`,
-       );
+        logger.info(
+          `Failed to read config file ${configPath}: ${message}`,
+        );
        const emptyConfig = { tool: [], session: [] };
        cachedConfig = emptyConfig;
        return emptyConfig;
@@ -205,9 +203,9 @@ export async function loadGlobalConfig(): Promise<CommandHooksConfig> {
        parsed = parseJson(stripped);
      } catch (error) {
        const message = error instanceof Error ? error.message : String(error);
-       log.info(
-         `Failed to parse config file ${configPath}: ${message}`,
-       );
+        logger.info(
+          `Failed to parse config file ${configPath}: ${message}`,
+        );
        const emptyConfig = { tool: [], session: [] };
        cachedConfig = emptyConfig;
        return emptyConfig;
@@ -215,9 +213,9 @@ export async function loadGlobalConfig(): Promise<CommandHooksConfig> {
 
      // Validate entire file as CommandHooksConfig
      if (!isValidCommandHooksConfig(parsed)) {
-       log.info(
-         `Config file is not a valid CommandHooksConfig (expected { tool?: [], session?: [] }), using empty config`,
-       );
+        logger.info(
+          `Config file is not a valid CommandHooksConfig (expected { tool?: [], session?: [] }), using empty config`,
+        );
        const emptyConfig = { tool: [], session: [] };
        cachedConfig = emptyConfig;
        return emptyConfig;
@@ -229,9 +227,9 @@ export async function loadGlobalConfig(): Promise<CommandHooksConfig> {
        session: parsed.session ?? [],
      };
 
-      log.debug(
-        `Loaded global config: ${result.tool?.length ?? 0} tool hooks, ${result.session?.length ?? 0} session hooks`,
-      );
+       logger.debug(
+         `Loaded global config: ${result.tool?.length ?? 0} tool hooks, ${result.session?.length ?? 0} session hooks`,
+       );
 
       // Cache the result
       cachedConfig = result;
@@ -239,9 +237,9 @@ export async function loadGlobalConfig(): Promise<CommandHooksConfig> {
    } catch (error) {
      // Catch-all for unexpected errors
      const message = error instanceof Error ? error.message : String(error);
-     log.info(
-       `Unexpected error loading global config: ${message}`,
-     );
+      logger.info(
+        `Unexpected error loading global config: ${message}`,
+      );
      const emptyConfig = { tool: [], session: [] };
      cachedConfig = emptyConfig;
      return emptyConfig;
@@ -257,6 +255,6 @@ export async function loadGlobalConfig(): Promise<CommandHooksConfig> {
  * @internal For testing purposes
  */
 export function clearGlobalConfigCache(): void {
-  log.debug("Clearing global config cache");
-  cachedConfig = null;
+   logger.debug("Clearing global config cache");
+   cachedConfig = null;
 }

@@ -9,14 +9,12 @@
  */
 
 import type {
-  CommandHooksConfig,
-  ToolHook,
-  SessionHook,
-  HookValidationError,
+    CommandHooksConfig,
+    ToolHook,
+    SessionHook,
+    HookValidationError,
 } from "../types/hooks.js"
-import { getGlobalLogger } from "../logging.js"
-
-const log = getGlobalLogger()
+import { logger } from "../logging.js"
 
 /**
  * Find duplicate IDs within a hook array
@@ -38,18 +36,18 @@ const log = getGlobalLogger()
  * ```
  */
 export function findDuplicateIds(hooks: (ToolHook | SessionHook)[]): string[] {
-  const idCounts = new Map<string, number>()
+   const idCounts = new Map<string, number>()
 
-  // Count occurrences of each ID
-  for (const hook of hooks) {
-    const count = idCounts.get(hook.id) ?? 0
-    idCounts.set(hook.id, count + 1)
-  }
+   // Count occurrences of each ID
+   for (const hook of hooks) {
+     const count = idCounts.get(hook.id) ?? 0
+     idCounts.set(hook.id, count + 1)
+   }
 
-  // Return IDs that appear more than once
-  return Array.from(idCounts.entries())
-    .filter(([, count]) => count > 1)
-    .map(([id]) => id)
+   // Return IDs that appear more than once
+   return Array.from(idCounts.entries())
+     .filter(([, count]) => count > 1)
+     .map(([id]) => id)
 }
 
 /**
@@ -63,38 +61,38 @@ export function findDuplicateIds(hooks: (ToolHook | SessionHook)[]): string[] {
  * @returns Array of validation errors (empty if no duplicates)
  */
 function validateConfigForDuplicates(
-  config: CommandHooksConfig,
-  source: string,
+   config: CommandHooksConfig,
+   source: string,
 ): HookValidationError[] {
-  const errors: HookValidationError[] = []
+   const errors: HookValidationError[] = []
 
-  // Check tool hooks for duplicates
-  if (config.tool && config.tool.length > 0) {
-    const toolDuplicates = findDuplicateIds(config.tool)
-    for (const id of toolDuplicates) {
-      errors.push({
-        hookId: id,
-        type: "duplicate_id",
-        message: `Duplicate hook ID "${id}" found in ${source} tool hooks`,
-        severity: "error",
-      })
-    }
-  }
+   // Check tool hooks for duplicates
+   if (config.tool && config.tool.length > 0) {
+     const toolDuplicates = findDuplicateIds(config.tool)
+     for (const id of toolDuplicates) {
+       errors.push({
+         hookId: id,
+         type: "duplicate_id",
+         message: `Duplicate hook ID "${id}" found in ${source} tool hooks`,
+         severity: "error",
+       })
+     }
+   }
 
-  // Check session hooks for duplicates
-  if (config.session && config.session.length > 0) {
-    const sessionDuplicates = findDuplicateIds(config.session)
-    for (const id of sessionDuplicates) {
-      errors.push({
-        hookId: id,
-        type: "duplicate_id",
-        message: `Duplicate hook ID "${id}" found in ${source} session hooks`,
-        severity: "error",
-      })
-    }
-  }
+   // Check session hooks for duplicates
+   if (config.session && config.session.length > 0) {
+     const sessionDuplicates = findDuplicateIds(config.session)
+     for (const id of sessionDuplicates) {
+       errors.push({
+         hookId: id,
+         type: "duplicate_id",
+         message: `Duplicate hook ID "${id}" found in ${source} session hooks`,
+         severity: "error",
+       })
+     }
+   }
 
-  return errors
+   return errors
 }
 
 /**
@@ -124,41 +122,41 @@ function validateConfigForDuplicates(
  * ```
  */
 function mergeHookArrays<T extends ToolHook | SessionHook>(
-  globalHooks: T[],
-  markdownHooks: T[],
+   globalHooks: T[],
+   markdownHooks: T[],
 ): T[] {
-  // Create a map of markdown hooks by ID for quick lookup
-  const markdownMap = new Map<string, T>()
-  const markdownIds = new Set<string>()
+   // Create a map of markdown hooks by ID for quick lookup
+   const markdownMap = new Map<string, T>()
+   const markdownIds = new Set<string>()
 
-  for (const hook of markdownHooks) {
-    markdownMap.set(hook.id, hook)
-    markdownIds.add(hook.id)
-  }
+   for (const hook of markdownHooks) {
+     markdownMap.set(hook.id, hook)
+     markdownIds.add(hook.id)
+   }
 
-  // Start with global hooks, replacing those that appear in markdown
-  const result: T[] = []
-  const processedIds = new Set<string>()
+   // Start with global hooks, replacing those that appear in markdown
+   const result: T[] = []
+   const processedIds = new Set<string>()
 
-  for (const hook of globalHooks) {
-    if (markdownMap.has(hook.id)) {
-      // Replace with markdown version
-      result.push(markdownMap.get(hook.id)!)
-    } else {
-      // Keep global hook
-      result.push(hook)
-    }
-    processedIds.add(hook.id)
-  }
+   for (const hook of globalHooks) {
+     if (markdownMap.has(hook.id)) {
+       // Replace with markdown version
+       result.push(markdownMap.get(hook.id)!)
+     } else {
+       // Keep global hook
+       result.push(hook)
+     }
+     processedIds.add(hook.id)
+   }
 
-  // Add markdown hooks that weren't replacements
-  for (const hook of markdownHooks) {
-    if (!processedIds.has(hook.id)) {
-      result.push(hook)
-    }
-  }
+   // Add markdown hooks that weren't replacements
+   for (const hook of markdownHooks) {
+     if (!processedIds.has(hook.id)) {
+       result.push(hook)
+     }
+   }
 
-  return result
+   return result
 }
 
 /**
@@ -194,41 +192,41 @@ function mergeHookArrays<T extends ToolHook | SessionHook>(
  * ```
  */
 export function mergeConfigs(
-  global: CommandHooksConfig,
-  markdown: CommandHooksConfig,
+   global: CommandHooksConfig,
+   markdown: CommandHooksConfig,
 ): { config: CommandHooksConfig; errors: HookValidationError[] } {
-  const errors: HookValidationError[] = []
+   const errors: HookValidationError[] = []
 
-  // Validate global config for duplicates
-  const globalErrors = validateConfigForDuplicates(global, "global")
-  errors.push(...globalErrors)
+   // Validate global config for duplicates
+   const globalErrors = validateConfigForDuplicates(global, "global")
+   errors.push(...globalErrors)
 
-  // Validate markdown config for duplicates
-  const markdownErrors = validateConfigForDuplicates(markdown, "markdown")
-  errors.push(...markdownErrors)
+   // Validate markdown config for duplicates
+   const markdownErrors = validateConfigForDuplicates(markdown, "markdown")
+   errors.push(...markdownErrors)
 
-  // Merge tool hooks
-  const globalToolHooks = global.tool ?? []
-  const markdownToolHooks = markdown.tool ?? []
-const mergedToolHooks = mergeHookArrays(globalToolHooks, markdownToolHooks)
+   // Merge tool hooks
+   const globalToolHooks = global.tool ?? []
+   const markdownToolHooks = markdown.tool ?? []
+   const mergedToolHooks = mergeHookArrays(globalToolHooks, markdownToolHooks)
 
-   // Merge session hooks
-   const globalSessionHooks = global.session ?? []
-   const markdownSessionHooks = markdown.session ?? []
-   const mergedSessionHooks = mergeHookArrays(
-     globalSessionHooks,
-     markdownSessionHooks,
-   )
+    // Merge session hooks
+    const globalSessionHooks = global.session ?? []
+    const markdownSessionHooks = markdown.session ?? []
+    const mergedSessionHooks = mergeHookArrays(
+      globalSessionHooks,
+      markdownSessionHooks,
+    )
 
-   // Build merged config
-   const mergedConfig: CommandHooksConfig = {
-     tool: mergedToolHooks.length > 0 ? mergedToolHooks : [],
-     session: mergedSessionHooks.length > 0 ? mergedSessionHooks : [],
-   }
+    // Build merged config
+    const mergedConfig: CommandHooksConfig = {
+      tool: mergedToolHooks.length > 0 ? mergedToolHooks : [],
+      session: mergedSessionHooks.length > 0 ? mergedSessionHooks : [],
+    }
 
-   log.debug(
-     `Merged configs: ${mergedToolHooks.length} tool hooks, ${mergedSessionHooks.length} session hooks, ${errors.length} errors`,
-   )
+     logger.debug(
+       `Merged configs: ${mergedToolHooks.length} tool hooks, ${mergedSessionHooks.length} session hooks, ${errors.length} errors`,
+     )
 
-   return { config: mergedConfig, errors }
+    return { config: mergedConfig, errors }
 }

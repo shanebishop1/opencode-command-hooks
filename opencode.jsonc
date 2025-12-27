@@ -6,7 +6,7 @@
     "firecrawl_*": false,
     "tracker_*": false,
     "think_*": false,
-    "skills_*": false
+    "skill": false
   },
   "mcp": {
     "context7": {
@@ -62,8 +62,5 @@
       "command": ["npx", "-y", "mcp-tasks"]
     }
   },
-  "plugin": [
-    "/Users/shane/Desktop/csp/opencode-command-hooks/index.ts",
-    "opencode-openai-codex-auth"
-  ]
+  "plugin": ["/Users/shane/projects/opencode-command-hooks/index.ts"]
 }

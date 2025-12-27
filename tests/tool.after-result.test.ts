@@ -28,7 +28,7 @@ describe("tool.result event listener", () => {
     process.chdir(TEST_DIR)
   })
 
-  afterEach(() => {
+  afterEach(async () => {
     process.chdir(ORIGINAL_CWD)
     try {
       rmSync(TEST_DIR, { recursive: true, force: true })

@@ -16,9 +16,7 @@
  */
 
 import type { TemplateContext } from "../types/hooks.js"
-import { getGlobalLogger } from "../logging.js"
-
-const log = getGlobalLogger()
+import { logger } from "../logging.js"
 
 /**
  * Check if debug logging is enabled
@@ -86,17 +84,17 @@ export function interpolateTemplate(template: string | undefined, context: Templ
     return ""
   }
 
-  if (isDebugEnabled()) {
-    log.debug(`Interpolating template with context: ${JSON.stringify({
-      id: context.id,
-      agent: context.agent,
-      tool: context.tool,
-      cmd: context.cmd ? `${context.cmd.substring(0, 50)}...` : undefined,
-      stdout: context.stdout ? `${context.stdout.substring(0, 50)}...` : undefined,
-      stderr: context.stderr ? `${context.stderr.substring(0, 50)}...` : undefined,
-      exitCode: context.exitCode,
-    })}`)
-  }
+    if (isDebugEnabled()) {
+      logger.debug(`Interpolating template with context: ${JSON.stringify({
+        id: context.id,
+        agent: context.agent,
+        tool: context.tool,
+        cmd: context.cmd ? `${context.cmd.substring(0, 50)}...` : undefined,
+        stdout: context.stdout ? `${context.stdout.substring(0, 50)}...` : undefined,
+        stderr: context.stderr ? `${context.stderr.substring(0, 50)}...` : undefined,
+        exitCode: context.exitCode,
+      })}`)
+    }
 
   let result = template
 
@@ -110,9 +108,9 @@ export function interpolateTemplate(template: string | undefined, context: Templ
   result = replacePlaceholder(result, "stderr", context.stderr)
   result = replacePlaceholder(result, "exitCode", context.exitCode)
 
-  if (isDebugEnabled()) {
-    log.debug(`Template interpolation complete, result length: ${result.length}`)
-  }
+    if (isDebugEnabled()) {
+      logger.debug(`Template interpolation complete, result length: ${result.length}`)
+    }
 
   return result
 }
