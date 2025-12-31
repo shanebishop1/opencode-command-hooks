@@ -34,7 +34,7 @@
       "run": [
         "osascript -e 'display notification \"Starting validator subagent\"'"
       ],
-      "inject": "ℹ️ Starting a validator subagent (filtered by toolArgs.subagent_type)"
+      "inject": "Starting a validator subagent (filtered by toolArgs.subagent_type)"
     },
     {
       "id": "task-after-general-subagent",
@@ -65,8 +65,7 @@
       "when": {
         "event": "session.idle"
       },
-      "run": ["echo 'hi'"],
-      "inject": "⏸ Agent turn complete.\n\nLint Output:\nExit Code: {exitCode}\n\n```\n{stdout}\n```"
+      "run": ["osascript -e 'display notification \"⏸ Agent turn complete.\"'"]
     }
   ]
 }
