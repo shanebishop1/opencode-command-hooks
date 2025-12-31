@@ -1,7 +1,7 @@
 ---
 description: Analyzes the codebase and implements code changes.
 mode: subagent
-model: opencode/minimax-free
+model: opencode/minimax-m2.1-free
 temperature: 0.3
 tools:
   bash: false
