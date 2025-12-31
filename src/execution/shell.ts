@@ -7,7 +7,7 @@
  * Key features:
  * - Execute single or multiple commands sequentially
  * - Capture stdout, stderr, and exit codes
- * - Truncate output to configurable limit
+ * - Truncate output to configurable limit (default: 30,000 chars, matching OpenCode)
  * - Never throw errors - always return results
  * - Support debug logging via OPENCODE_HOOKS_DEBUG
  */
@@ -15,7 +15,7 @@
 import type { HookExecutionResult } from "../types/hooks.js"
 import { logger } from "../logging.js"
 
-const DEFAULT_TRUNCATE_LIMIT = 4000
+const DEFAULT_TRUNCATE_LIMIT = 30_000
 
 /**
  * Check if debug logging is enabled
@@ -25,12 +25,22 @@ function isDebugEnabled(): boolean {
 }
 
 /**
- * Truncate text to a maximum length
+ * Truncate text to a maximum length, matching OpenCode's bash tool behavior
  */
 function truncateText(text: string | undefined, limit: number): string {
   if (!text) return ""
   if (text.length <= limit) return text
-  return text.slice(0, limit) + `\n... (truncated, ${text.length - limit} more chars)`
+  
+  const truncated = text.slice(0, limit)
+  const metadata = [
+    "",
+    "",
+    "<bash_metadata>",
+    `bash tool truncated output as it exceeded ${limit} char limit`,
+    "</bash_metadata>"
+  ].join("\n")
+  
+  return truncated + metadata
 }
 
 /**

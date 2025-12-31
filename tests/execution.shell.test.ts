@@ -46,8 +46,11 @@ describe("Shell command execution", () => {
       const result = await executeCommand(`echo '${longOutput}'`, { truncateOutput: 100 })
 
       expect(result.success).toBe(true)
-      expect(result.stdout!.length).toBeLessThan(200) // Should be truncated
-      expect(result.stdout).toContain("truncated")
+      expect(result.stdout).toContain("<bash_metadata>")
+      expect(result.stdout).toContain("bash tool truncated output as it exceeded 100 char limit")
+      expect(result.stdout).toContain("</bash_metadata>")
+      // Output should be truncated to 100 chars + metadata
+      expect(result.stdout!.split("<bash_metadata>")[0].length).toBeLessThanOrEqual(102) // 100 + 2 newlines
     })
 
     it("handles commands with pipes", async () => {
@@ -121,8 +124,9 @@ describe("Shell command execution", () => {
 
       expect(results).toHaveLength(2)
       results.forEach(result => {
-        expect(result.stdout!.length).toBeLessThan(200)
-        expect(result.stdout).toContain("truncated")
+        expect(result.stdout).toContain("<bash_metadata>")
+        expect(result.stdout).toContain("bash tool truncated output as it exceeded 100 char limit")
+        expect(result.stdout).toContain("</bash_metadata>")
       })
     })
 
