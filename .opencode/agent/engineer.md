@@ -1,7 +1,7 @@
 ---
 description: Analyzes the codebase and implements code changes.
 mode: subagent
-model: openrouter/anthropic/claude-haiku-4.5
+model: opencode/minimax-free
 temperature: 0.3
 tools:
   bash: false
