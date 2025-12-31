@@ -41,6 +41,16 @@ const ToolHookWhenSchema = z.object({
 });
 
 /**
+ * Toast notification configuration
+ */
+const ToastSchema = z.object({
+   title: z.string().optional(),
+   message: z.string(),
+   variant: z.enum(["info", "success", "warning", "error"]).optional(),
+   duration: z.number().optional(),
+}).optional();
+
+/**
  * Tool hook configuration
  *
  * Runs shell command(s) before or after a tool execution. Hooks can be filtered
@@ -48,11 +58,11 @@ const ToolHookWhenSchema = z.object({
  * be injected into the session as messages.
  */
 export const ToolHookSchema = z.object({
-  id: z.string().min(1, "Hook ID must not be empty"),
-  when: ToolHookWhenSchema,
-  run: z.union([z.string(), z.array(z.string())]),
-  inject: z.string().optional(),
-  consoleLog: z.string().optional(),
+    id: z.string().min(1, "Hook ID must not be empty"),
+    when: ToolHookWhenSchema,
+    run: z.union([z.string(), z.array(z.string())]),
+    inject: z.string().optional(),
+    toast: ToastSchema,
 });
 
 // ============================================================================
@@ -75,11 +85,11 @@ const SessionHookWhenSchema = z.object({
  * the session as messages.
  */
 export const SessionHookSchema = z.object({
-  id: z.string().min(1, "Hook ID must not be empty"),
-  when: SessionHookWhenSchema,
-  run: z.union([z.string(), z.array(z.string())]),
-  inject: z.string().optional(),
-  consoleLog: z.string().optional(),
+    id: z.string().min(1, "Hook ID must not be empty"),
+    when: SessionHookWhenSchema,
+    run: z.union([z.string(), z.array(z.string())]),
+    inject: z.string().optional(),
+    toast: ToastSchema,
 });
 
 // ============================================================================

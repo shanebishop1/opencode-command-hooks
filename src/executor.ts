@@ -37,15 +37,57 @@ import { logger } from "./logging.js"
  * @returns Formatted error message
  */
 function formatErrorMessage(hookId: string, error: unknown): string {
-   const errorText =
-     error instanceof Error ? error.message : String(error || "Unknown error")
-   return `[opencode-command-hooks] Hook "${hookId}" failed: ${errorText}`
+    const errorText =
+      error instanceof Error ? error.message : String(error || "Unknown error")
+    return `[opencode-command-hooks] Hook "${hookId}" failed: ${errorText}`
+}
+
+/**
+ * Show a toast notification to the user
+ *
+ * Uses client.tui.showToast() to display a toast notification with the
+ * provided title, message, variant, and duration.
+ *
+ * @param client - OpenCode SDK client
+ * @param title - Optional title for the toast (defaults to "OpenCode Command Hook")
+ * @param message - Message text for the toast
+ * @param variant - Visual variant (info, success, warning, error)
+ * @param duration - Optional duration in milliseconds
+ * @returns Promise that resolves when toast is shown
+ */
+async function showToast(
+    client: OpencodeClient,
+    title: string | undefined,
+    message: string,
+    variant: "info" | "success" | "warning" | "error" = "info",
+    duration?: number
+): Promise<void> {
+    try {
+        const finalTitle = title || "OpenCode Command Hook"
+        logger.debug(`Showing toast: title="${finalTitle}", message="${message.substring(0, 50)}...", variant="${variant}", duration=${duration}`)
+
+        await client.tui.showToast({
+            body: {
+                title: finalTitle,
+                message,
+                variant,
+                duration,
+            },
+        })
+
+        logger.info(`[toast] ${finalTitle}: ${message}`)
+    } catch (error) {
+        const errorMessage =
+            error instanceof Error ? error.message : String(error)
+        logger.error(`Failed to show toast: ${errorMessage}`)
+        // Don't throw - this is non-blocking
+    }
 }
 
 /**
  * Inject a message into a session using the OpenCode SDK
  *
- * Uses client.session.prompt() with noReply: true to inject context
+ * Uses client.session.promptAsync() with noReply: true to inject context
  * without triggering an AI response.
  *
  * @param client - OpenCode SDK client
@@ -61,7 +103,7 @@ async function injectMessage(
     try {
        logger.debug(`Injecting message into session ${sessionId}`)
 
-     await client.session.prompt({
+     await client.session.promptAsync({
        path: { id: sessionId },
        body: {
          noReply: true,
@@ -69,7 +111,7 @@ async function injectMessage(
        },
      })
 
-       logger.debug(`Message injected successfully`)
+       logger.info(`[inject] Message injected into session ${sessionId}: ${message.substring(0, 100)}${message.length > 100 ? '...' : ''}`)
      } catch (error) {
        const errorMessage =
          error instanceof Error ? error.message : String(error)
@@ -106,8 +148,31 @@ async function executeToolHook(
          `Hook "${hook.id}" executed ${results.length} command(s)`
        )
 
-      // If inject is configured, prepare and inject the message
-      if (hook.inject) {
+       // If inject is configured, prepare and inject the message
+       if (hook.inject) {
+         // Use the last command's result for template interpolation
+         const lastResult = results[results.length - 1]
+
+          // Build template context
+          const templateContext: TemplateContext = {
+            id: hook.id,
+            agent: context.agent,
+            tool: context.tool,
+            cmd: Array.isArray(hook.run) ? hook.run[0] : hook.run,
+            stdout: lastResult?.stdout,
+            stderr: lastResult?.stderr,
+            exitCode: lastResult?.exitCode,
+          }
+
+          // Interpolate template
+          const message = interpolateTemplate(hook.inject, templateContext)
+
+          // Inject into session
+          await injectMessage(client, context.sessionId, message)
+        }
+
+      // If toast is configured, interpolate and show toast notification
+      if (hook.toast) {
         // Use the last command's result for template interpolation
         const lastResult = results[results.length - 1]
 
@@ -122,54 +187,38 @@ async function executeToolHook(
           exitCode: lastResult?.exitCode,
         }
 
-        // Interpolate template
-        const message = interpolateTemplate(hook.inject, templateContext)
+        // Interpolate toast title and message templates
+        const toastTitle = hook.toast.title ? interpolateTemplate(hook.toast.title, templateContext) : undefined
+        const toastMessage = interpolateTemplate(hook.toast.message, templateContext)
 
-        // Inject into session
-        await injectMessage(client, context.sessionId, message)
-      }
-
-     // If consoleLog is configured, interpolate and log to console
-     if (hook.consoleLog) {
-       // Use the last command's result for template interpolation
-       const lastResult = results[results.length - 1]
-
-       // Build template context
-       const templateContext: TemplateContext = {
-         id: hook.id,
-         agent: context.agent,
-         tool: context.tool,
-         cmd: Array.isArray(hook.run) ? hook.run[0] : hook.run,
-         stdout: lastResult?.stdout,
-         stderr: lastResult?.stderr,
-         exitCode: lastResult?.exitCode,
-       }
-
-       // Interpolate consoleLog template
-       const consoleMessage = interpolateTemplate(hook.consoleLog, templateContext)
-
-       // Log directly to OpenCode's console
-        logger.info(consoleMessage)
-     }
-   } catch (error) {
-     // Log the error but don't throw - this is non-blocking
-     const errorMessage = formatErrorMessage(hook.id, error)
-      logger.error(errorMessage)
-
-     // Optionally inject error message into session
-     try {
-       await injectMessage(client, context.sessionId, errorMessage)
-     } catch (injectionError) {
-       // If error injection fails, just log it
-       const injectionErrorMsg =
-         injectionError instanceof Error
-           ? injectionError.message
-           : String(injectionError)
-        logger.error(
-          `Failed to inject error message for hook "${hook.id}": ${injectionErrorMsg}`
+        // Show toast notification
+        await showToast(
+          client,
+          toastTitle,
+          toastMessage,
+          hook.toast.variant || "info",
+          hook.toast.duration
         )
+      }
+     } catch (error) {
+       // Log the error but don't throw - this is non-blocking
+       const errorMessage = formatErrorMessage(hook.id, error)
+        logger.error(errorMessage)
+
+       // Optionally inject error message into session
+       try {
+         await injectMessage(client, context.sessionId, errorMessage)
+       } catch (injectionError) {
+         // If error injection fails, just log it
+         const injectionErrorMsg =
+           injectionError instanceof Error
+             ? injectionError.message
+             : String(injectionError)
+          logger.error(
+            `Failed to inject error message for hook "${hook.id}": ${injectionErrorMsg}`
+          )
+       }
      }
-   }
 }
 
 /**
@@ -200,8 +249,30 @@ async function executeSessionHook(
          `Hook "${hook.id}" executed ${results.length} command(s)`
        )
 
-      // If inject is configured, prepare and inject the message
-      if (hook.inject) {
+       // If inject is configured, prepare and inject the message
+       if (hook.inject) {
+         // Use the last command's result for template interpolation
+         const lastResult = results[results.length - 1]
+
+          // Build template context
+          const templateContext: TemplateContext = {
+            id: hook.id,
+            agent: context.agent,
+            cmd: Array.isArray(hook.run) ? hook.run[0] : hook.run,
+            stdout: lastResult?.stdout,
+            stderr: lastResult?.stderr,
+            exitCode: lastResult?.exitCode,
+          }
+
+          // Interpolate template
+          const message = interpolateTemplate(hook.inject, templateContext)
+
+          // Inject into session
+          await injectMessage(client, context.sessionId, message)
+        }
+
+      // If toast is configured, interpolate and show toast notification
+      if (hook.toast) {
         // Use the last command's result for template interpolation
         const lastResult = results[results.length - 1]
 
@@ -215,52 +286,37 @@ async function executeSessionHook(
           exitCode: lastResult?.exitCode,
         }
 
-        // Interpolate template
-        const message = interpolateTemplate(hook.inject, templateContext)
+        // Interpolate toast title and message templates
+        const toastTitle = hook.toast.title ? interpolateTemplate(hook.toast.title, templateContext) : undefined
+        const toastMessage = interpolateTemplate(hook.toast.message, templateContext)
 
-        // Inject into session
-        await injectMessage(client, context.sessionId, message)
-      }
-
-      // If consoleLog is configured, interpolate and log to console
-      if (hook.consoleLog) {
-        // Use the last command's result for template interpolation
-        const lastResult = results[results.length - 1]
-
-        // Build template context
-        const templateContext: TemplateContext = {
-          id: hook.id,
-         agent: context.agent,
-         cmd: Array.isArray(hook.run) ? hook.run[0] : hook.run,
-         stdout: lastResult?.stdout,
-         stderr: lastResult?.stderr,
-         exitCode: lastResult?.exitCode,
-       }
-
-       // Interpolate consoleLog template
-       const consoleMessage = interpolateTemplate(hook.consoleLog, templateContext)
-
-       // Log directly to OpenCode's console
-        logger.info(consoleMessage)
-     }
-   } catch (error) {
-     // Log the error but don't throw - this is non-blocking
-     const errorMessage = formatErrorMessage(hook.id, error)
-      logger.error(errorMessage)
-
-     // Optionally inject error message into session
-     try {
-       await injectMessage(client, context.sessionId, errorMessage)
-     } catch (injectionError) {
-       // If error injection fails, just log it
-       const injectionErrorMsg =
-         injectionError instanceof Error
-           ? injectionError.message
-           : String(injectionError)
-        logger.error(
-          `Failed to inject error message for hook "${hook.id}": ${injectionErrorMsg}`
+        // Show toast notification
+        await showToast(
+          client,
+          toastTitle,
+          toastMessage,
+          hook.toast.variant || "info",
+          hook.toast.duration
         )
-     }
+      }
+     } catch (error) {
+       // Log the error but don't throw - this is non-blocking
+       const errorMessage = formatErrorMessage(hook.id, error)
+        logger.error(errorMessage)
+
+       // Optionally inject error message into session
+       try {
+         await injectMessage(client, context.sessionId, errorMessage)
+       } catch (injectionError) {
+        // If error injection fails, just log it
+        const injectionErrorMsg =
+          injectionError instanceof Error
+            ? injectionError.message
+            : String(injectionError)
+         logger.error(
+           `Failed to inject error message for hook "${hook.id}": ${injectionErrorMsg}`
+         )
+      }
    }
 }
 

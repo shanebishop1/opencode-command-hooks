@@ -61,29 +61,66 @@ export interface ToolHook {
    run: string | string[]
 
    /**
-    * Optional template string for injecting hook results into the calling session.
-    * If omitted, the hook still runs but output is only logged.
-    * 
-    * Supports placeholder substitution with the following variables:
-    * - {id}: hook ID
-    * - {agent}: agent name (if available)
-    * - {tool}: tool name (for tool hooks)
-    * - {cmd}: command string that was executed
-    * - {stdout}: captured standard output (truncated to limit)
-    * - {stderr}: captured standard error (truncated to limit)
-    * - {exitCode}: command exit code (integer)
-    * 
-    * Placeholders for unavailable values are replaced with empty string.
-    */
-   inject?: string
+     * Optional template string for injecting hook results into the calling session.
+     * If omitted, the hook still runs but output is only logged.
+     * 
+     * Supports placeholder substitution with the following variables:
+     * - {id}: hook ID
+     * - {agent}: agent name (if available)
+     * - {tool}: tool name (for tool hooks)
+     * - {cmd}: command string that was executed
+     * - {stdout}: captured standard output (truncated to limit)
+     * - {stderr}: captured standard error (truncated to limit)
+     * - {exitCode}: command exit code (integer)
+     * 
+     * Placeholders for unavailable values are replaced with empty string.
+     */
+    inject?: string
 
-   /**
-    * Optional message to log directly to OpenCode's console via console.log().
-    * Supports template placeholder substitution like the inject template.
-    * If omitted, no console.log is performed.
-    */
-   consoleLog?: string
-}
+      /**
+       * Optional toast notification to display to the user.
+      * Supports template placeholder substitution like the inject template.
+      * If omitted, no toast is displayed.
+      * 
+      * @example
+      * ```json
+      * {
+      *   "title": "Lint Complete",
+      *   "message": "Exit code: {exitCode}",
+      *   "variant": "success",
+      *   "duration": 3000
+      * }
+      * ```
+      */
+     toast?: {
+       /**
+        * Optional title for the toast notification.
+        * Supports template placeholder substitution.
+        */
+       title?: string
+
+       /**
+        * Required message for the toast notification.
+        * Supports template placeholder substitution.
+        */
+       message: string
+
+       /**
+        * Visual variant/style for the toast.
+        * - "info": informational message (default)
+        * - "success": success message
+        * - "warning": warning message
+        * - "error": error message
+        */
+       variant?: "info" | "success" | "warning" | "error"
+
+       /**
+        * Duration in milliseconds for which the toast should be displayed.
+        * If omitted, uses the default duration.
+        */
+       duration?: number
+     }
+  }
 
 /**
  * Matching conditions for tool hooks
@@ -210,13 +247,50 @@ export interface SessionHook {
     */
    inject?: string
 
-   /**
-    * Optional message to log directly to OpenCode's console via console.log().
-    * Supports template placeholder substitution like the inject template.
-    * If omitted, no console.log is performed.
-    */
-   consoleLog?: string
-}
+      /**
+       * Optional toast notification to display to the user.
+      * Supports template placeholder substitution like the inject template.
+      * If omitted, no toast is displayed.
+      * 
+      * @example
+      * ```json
+      * {
+      *   "title": "Session Started",
+      *   "message": "Agent {agent} is ready",
+      *   "variant": "info",
+      *   "duration": 2000
+      * }
+      * ```
+      */
+     toast?: {
+       /**
+        * Optional title for the toast notification.
+        * Supports template placeholder substitution.
+        */
+       title?: string
+
+       /**
+        * Required message for the toast notification.
+        * Supports template placeholder substitution.
+        */
+       message: string
+
+       /**
+        * Visual variant/style for the toast.
+        * - "info": informational message (default)
+        * - "success": success message
+        * - "warning": warning message
+        * - "error": error message
+        */
+       variant?: "info" | "success" | "warning" | "error"
+
+       /**
+        * Duration in milliseconds for which the toast should be displayed.
+        * If omitted, uses the default duration.
+        */
+       duration?: number
+     }
+  }
 
 /**
  * Matching conditions for session hooks
