@@ -1,23 +1,14 @@
-# OpenCode Command Hooks
+# 🪝OpenCode Command Hooks
 
-Declaratively attach hooks to agent, tool, and session lifecycles.
+Attach shell commands to agent, tool, and session lifecycles using JSON/YAML configuration. Execute commands automatically without consuming tokens or requiring agent interaction.
 
 ## Why?
 
-### 1. Config vs. Code
+### 1. Zero-Token Automation
 
-Custom OpenCode plugins require lots of TypeScript boilerplate, manual error handling, and build steps.  
-This is great for ad-hoc functionality or highly complex tooling, but for simple hooks, it's overkill. This plugin gives you an abstraction to configure global/per-agent shell hook behavior using simple, readable JSON/YAML configs.
+Custom OpenCode plugins require TypeScript setup, manual error handling, and build processes. For routine automation tasks, this creates unnecessary complexity. This plugin provides shell hook functionality through configuration files—no tokens spent prompting agents to run repetitive commands.
 
-See below for a comparison of building your own custom plugin for shell hooks vs. using this plugin.
-
-**Native Plugin:**
-
-Writing this manually is deceptive. You have to handle:
-
-1. **Error Swallowing**: If `npm run lint` fails, it throws an error. If you don't catch it, your agent might crash.
-2. **UI Noise**: Using `console.error` to debug often spams the user's UI with raw JSON or stack traces.
-3. **Context Injection**: Getting the lint output _back_ to the LLM so it can fix the code requires manually constructing a `session.prompt` call with specific `noReply: true` flags—otherwise, the LLM might get confused or reply to itself.
+**Native Plugin (Requires TypeScript):**
 
 ```typescript
 // .opencode/plugin/my-plugin.ts
@@ -30,9 +21,8 @@ export const MyPlugin: Plugin = async ({ $ }) => {
         try {
           await $`npm run lint`;
         } catch (e) {
-          // If you log this, it might break the UI, or just look ugly
-          console.error(e);
-          // And the agent still won't know *what* failed unless you inject the shell output back (which requires even more code)
+          console.error(e); // UI spam or crashes
+          // Agent won't see what failed unless you inject it back
         }
       }
     },
@@ -40,9 +30,7 @@ export const MyPlugin: Plugin = async ({ $ }) => {
 };
 ```
 
-**This Plugin:**
-
-_This configuration handles execution, captures stdout/stderr, prevents crashes on failure, and injects the result back to the agent in a clean, formatted block automatically._
+**This Plugin (Configuration-Based):**
 
 ```jsonc
 {
@@ -51,41 +39,104 @@ _This configuration handles execution, captures stdout/stderr, prevents crashes 
       "id": "lint-ts",
       "when": { "tool": "write" },
       "run": ["npm run lint"],
+      "inject": {
+        "as": "system",
+        "template": "Lint results:\n{stdout}\n{stderr}",
+      },
     },
   ],
 }
 ```
 
-### 2. Your Agent Actually "Sees" the Output
+### 2. Automatic Context Injection
 
-Setting up a plugin to run commands is easy. Getting the output back to the Agent so it can _react_ to it is harder (requires specific SDK calls).
-This plugin handles context injection automatically.
-
-```jsonc
-"inject": { "as": "system" } // The agent sees the command output immediately
-```
-
-### 3. Filter Task Calls by Subagent
-
-Run different hooks based on **which subagent is being launched** via the `task` tool—without writing a custom plugin. Use `toolArgs` in your hook conditions to match on `subagent_type`, `description`, or any other task input. This works for both `before` and `after` phases (the plugin caches arguments so `after` hooks can filter too).
+Command output returns to the agent automatically without manual SDK calls. The agent can see and react to errors, warnings, or other results:
 
 ```jsonc
-// Only run when a "validator" subagent completes
 {
-  "id": "validate-subagent",
-  "when": {
-    "phase": "after",
-    "tool": "task",
-    "toolArgs": { "subagent_type": "validator" },
-  },
-  "run": ["npm test"],
-  "inject": "Validator finished. Tests run automatically:\n{stdout}",
+  "tool": [
+    {
+      "id": "typecheck",
+      "when": { "tool": "write", "toolArgs": { "path": "*.ts" } },
+      "run": ["npm run typecheck"],
+      "inject": {
+        "as": "system",
+        "template": "TypeScript check:\n{stdout}\n{stderr}",
+      },
+    },
+  ],
 }
 ```
 
-### 4. Reliability
+For background tasks where the agent doesn't need context, use toast notifications instead:
 
-- **Non-Blocking**: If a hook fails, your agent keeps working. Errors are logged gracefully.
+```jsonc
+{
+  "tool": [
+    {
+      "id": "build-status",
+      "when": { "tool": "write", "phase": "after" },
+      "run": ["npm run build"],
+      "toast": {
+        "title": "Build Status",
+        "message": "Build {exitCode, select, 0 {succeeded} other {failed}}",
+        "variant": "{exitCode, select, 0 {success} other {error}}",
+        "duration": 5000,
+      },
+    },
+  ],
+}
+```
+
+### 3. Filter Tools by Any Argument
+
+Run different hooks based on any tool argument—not just task subagent types. Filter by file paths, API endpoints, model names, or custom parameters.
+
+```jsonc
+// Filter by multiple subagent types
+{
+  "when": {
+    "tool": "task",
+    "toolArgs": { "subagent_type": ["validator", "reviewer", "tester"] }
+  }
+}
+
+// Filter write tool by file extension
+{
+  "when": {
+    "tool": "write",
+    "toolArgs": { "path": "*.test.ts" }
+  }
+}
+
+// Filter by API endpoint
+{
+  "when": {
+    "tool": "fetch",
+    "toolArgs": { "url": "*/api/validate" }
+  }
+}
+```
+
+### 4. Reliable Execution
+
+- **Non-blocking**: Hook failures don't crash the agent
+- **Automatic error handling**: Failed hooks inject error messages automatically
+- **Memory safe**: Output truncated to prevent memory issues
+- **Sequential execution**: Commands run in order, even if earlier ones fail
+
+---
+
+## Features
+
+- 🔔 **Toast Notifications** - Non-blocking user feedback with customizable titles, messages, and variants
+- 🎯 **Precise Filtering** - Filter by tool name, agent, phase, slash command, or ANY tool argument
+- 📊 **Complete Template System** - Access to `{id}`, `{agent}`, `{tool}`, `{cmd}`, `{stdout}`, `{stderr}`, `{exitCode}`
+- 🔄 **Multiple Event Types** - `tool.execute.before`, `tool.execute.after`, `tool.result`, `session.start`, `session.idle`
+- 🧩 **Flexible Configuration** - Global configs in `.opencode/command-hooks.jsonc` or markdown frontmatter
+- ⚡ **Zero-Token Automation** - Guaranteed execution without spending tokens on agent prompts
+- 🛡️ **Bulletproof Error Handling** - Graceful failures that never crash the agent
+- 🐛 **Debug Mode** - Detailed logging with `OPENCODE_HOOKS_DEBUG=1`
 
 ---
 
@@ -95,15 +146,55 @@ Run different hooks based on **which subagent is being launched** via the `task`
 opencode install opencode-command-hooks
 ```
 
+---
+
 ## Configuration
 
-Create a `.opencode/command-hooks.jsonc` file in your project root.
+### Global Configuration
 
-### Examples
+Create `.opencode/command-hooks.jsonc` in your project root:
 
-#### 1. Auto-Verify Subagent Work
+```jsonc
+{
+  "tool": [
+    // Your tool hooks here
+  ],
+  "session": [
+    // Your session hooks here
+  ],
+}
+```
 
-When a subagent finishes a task (via the `task` tool), automatically run the project's test suite. If the tests fail, the main agent sees the error immediately and can ask the subagent to fix it.
+### Markdown Frontmatter
+
+Override global settings in individual markdown files:
+
+```markdown
+---
+opencode-hooks:
+  tool:
+    - id: custom-hook
+      when: { tool: "write" }
+      run: ["echo 'File modified'"]
+---
+
+# Your markdown content
+```
+
+### Configuration Precedence
+
+1. **Markdown hooks** override global hooks with the same ID
+2. **Global hooks** are loaded from `.opencode/command-hooks.jsonc`
+3. **Duplicate IDs** within the same source are errors
+4. **Caching** prevents repeated file reads for performance
+
+---
+
+## Examples
+
+### Basic Examples
+
+#### Auto-Verify Subagent Work
 
 ````jsonc
 {
@@ -112,12 +203,11 @@ When a subagent finishes a task (via the `task` tool), automatically run the pro
       "id": "verify-subagent-work",
       "when": {
         "phase": "after",
-        "tool": ["task"], // This is the tool that OpenCode uses to spin up subagents
-        "callingAgent": ["*"],
+        "tool": ["task"],
       },
       "run": ["npm test"],
       "inject": {
-        "as": "user", // Inject as 'user' to simulate user feedback
+        "as": "user",
         "template": "Test Runner:\nExit Code: {exitCode}\n\nOutput:\n```\n{stdout}\n```\n\nIf tests failed, please fix them before proceeding.",
       },
     },
@@ -125,9 +215,7 @@ When a subagent finishes a task (via the `task` tool), automatically run the pro
 }
 ````
 
-#### 2. Enforce Linting on File Edits
-
-Prevent broken code from accumulating by running a linter every time a file is written.
+#### Enforce Linting on File Edits
 
 ```jsonc
 {
@@ -148,86 +236,214 @@ Prevent broken code from accumulating by running a linter every time a file is w
 }
 ```
 
----
+### Advanced Examples
 
-#### 3. Orchestrator/Subagent Pattern w/ Validation
-
-**Scenario**: You have an Orchestrator Agent that spins up Subagents to write code. You want to ensure every Subagent's work is valid before accepting it.
-
-**The Problem with Prompts**:
-If you just instruct the Subagent to _"run tests before finishing"_, three things go wrong:
-
-1.  **Reliability**: The Subagent might forget, hallucinate that it ran them, or crash before it gets to that step.
-2.  **Cost**: You pay for the input tokens to instruct it, and the output tokens for it to decide to call the test tool.
-3.  **Orchestrator Overhead**: If the Orchestrator has to manually run the tests after the Subagent returns, that's another expensive tool call loop.
-
-**The Hook Solution**:
-Attach a hook to the `task` tool (which launches subagents). It runs _automatically_ when the subagent finishes. It costs **0 tokens** to trigger, is **guaranteed** to run, and the Orchestrator gets the results immediately.
+#### Toast Notifications for Build Status
 
 ````jsonc
 {
   "tool": [
     {
-      "id": "validate-subagent",
+      "id": "build-notification",
       "when": {
         "phase": "after",
-        "tool": ["task"], // Fires when the subagent finishes
+        "tool": ["write"],
+        "toolArgs": { "path": "*.ts" },
       },
-      "run": ["npm test"],
+      "run": ["npm run build"],
+      "toast": {
+        "title": "TypeScript Build",
+        "message": "Build {exitCode, select, 0 {succeeded ✓} other {failed ✗}}",
+        "variant": "{exitCode, select, 0 {success} other {error}}",
+        "duration": 3000,
+      },
       "inject": {
-        "as": "user",
-        "template": "AUTOMATED VALIDATION:\n\nYour subagent has finished. We ran the tests to verify their work:\n\nExit Code: {exitCode}\nOutput:\n```\n{stdout}\n```\n\nIf this failed, REJECT the subagent's work and ask them to fix it.",
+        "as": "system",
+        "template": "Build output:\n```\n{stdout}\n```",
       },
     },
   ],
 }
 ````
 
----
-
-#### 4. Filter Task Tool Calls by Subagent Type
-
-Run different hooks based on which subagent is being called via the `task` tool. Use `toolArgs` to match on the subagent's `subagent_type` (or other tool arguments).
+#### Filter by Multiple Tool Arguments
 
 ```jsonc
 {
   "tool": [
+    // Run for specific file types
     {
-      "id": "validator-subagent-hook",
+      "id": "test-js-files",
       "when": {
-        "phase": "before",
-        "tool": "task",
+        "tool": "write",
         "toolArgs": {
-          "subagent_type": "validator",
+          "path": ["*.js", "*.jsx", "*.ts", "*.tsx"],
         },
       },
-      "run": ["echo 'Starting validator subagent'"],
-      "inject": "ℹ️ A validator subagent is being called",
+      "run": ["npm test -- --testPathPattern={toolArgs.path}"],
     },
+    // Filter by multiple subagent types
     {
-      "id": "reviewer-subagent-hook",
+      "id": "validate-subagents",
       "when": {
-        "phase": "before",
         "tool": "task",
         "toolArgs": {
-          "subagent_type": ["reviewer", "code-reviewer"],
+          "subagent_type": ["validator", "reviewer", "tester"],
         },
       },
-      "run": ["echo 'Starting reviewer subagent'"],
-      "inject": "🔍 A reviewer subagent is being called",
+      "run": ["echo 'Validating {toolArgs.subagent_type} subagent'"],
     },
   ],
 }
 ```
 
-**Available in**: `tool.execute.before` and `tool.execute.after`. For `after` hooks, this plugin caches the tool arguments captured before execution so you can filter on the same values when the tool completes.
+#### Handle Async Tool Completion
 
-**Supported tool argument filters**:
+```jsonc
+{
+  "tool": [
+    {
+      "id": "task-complete",
+      "when": {
+        "event": "tool.result",
+        "tool": ["task"],
+        "toolArgs": { "subagent_type": "code-writer" },
+      },
+      "run": ["npm run validate-changes"],
+      "toast": {
+        "title": "Code Writer Complete",
+        "message": "Validation: {exitCode, select, 0 {Passed} other {Failed}}",
+        "variant": "{exitCode, select, 0 {success} other {warning}}",
+      },
+    },
+  ],
+}
+```
 
-- For `task` tool: `subagent_type`, `description`, `prompt`
-- For other tools: Any argument the tool accepts
+#### Session Lifecycle Hooks
 
-Tool argument filters also work when handling `tool.result` events.
+```jsonc
+{
+  "session": [
+    {
+      "id": "session-start",
+      "when": { "event": "session.start" },
+      "run": ["echo 'New session started'"],
+      "toast": {
+        "title": "Session Started",
+        "message": "Ready to assist!",
+        "variant": "info",
+      },
+    },
+    {
+      "id": "session-idle",
+      "when": { "event": "session.idle" },
+      "run": ["echo 'Session idle'"],
+    },
+  ],
+}
+```
+
+---
+
+## Template Placeholders
+
+All templates support these placeholders:
+
+| Placeholder  | Description                              | Example                    |
+| ------------ | ---------------------------------------- | -------------------------- |
+| `{id}`       | Hook ID                                  | `lint-ts`                  |
+| `{agent}`    | Calling agent name                       | `orchestrator`             |
+| `{tool}`     | Tool name                                | `write`                    |
+| `{cmd}`      | Executed command                         | `npm run lint`             |
+| `{stdout}`   | Command stdout (truncated to 4000 chars) | `Linting complete`         |
+| `{stderr}`   | Command stderr (truncated to 4000 chars) | `Error: missing semicolon` |
+| `{exitCode}` | Command exit code                        | `0` or `1`                 |
+
+**Advanced Usage:**
+
+```jsonc
+{
+  "inject": {
+    "template": "Command '{cmd}' exited with code {exitCode}\n\nStdout:\n{stdout}\n\nStderr:\n{stderr}",
+  },
+}
+```
+
+---
+
+## Debugging
+
+Enable detailed debug logging:
+
+```bash
+export OPENCODE_HOOKS_DEBUG=1
+opencode start
+```
+
+This logs:
+
+- Command execution details
+- Template interpolation
+- Hook matching logic
+- Error handling
+
+**Example Debug Output:**
+
+```
+[DEBUG] Hook matched: lint-ts
+[DEBUG] Executing: npm run lint
+[DEBUG] Template interpolated: Exit code: 0
+[DEBUG] Toast shown: Lint Complete
+```
+
+---
+
+## Event Types
+
+### Tool Events
+
+- **`tool.execute.before`** - Before tool execution
+- **`tool.execute.after`** - After tool execution
+- **`tool.result`** - When async tools complete (task, firecrawl, etc.)
+
+### Session Events
+
+- **`session.start`** - New session started
+- **`session.idle`** - Session became idle
+- **`session.end`** - Session ended
+
+---
+
+## Tool vs Session Hooks
+
+### Tool Hooks
+
+- Run before/after specific tool executions
+- Can filter by tool name, calling agent, slash command, tool arguments
+- Access to tool-specific context (tool name, call ID, args)
+- **Best for**: Linting after writes, tests after code changes, validation
+
+### Session Hooks
+
+- Run on session lifecycle events
+- Can only filter by agent name (session events lack tool context)
+- **Best for**: Bootstrapping, cleanup, periodic checks
+
+---
+
+## Native Plugin vs This Plugin
+
+| Feature                  | Native Plugin                           | This Plugin               |
+| ------------------------ | --------------------------------------- | ------------------------- |
+| **Setup**                | TypeScript, build steps, error handling | JSON/YAML config          |
+| **Error Handling**       | Manual try/catch required               | Automatic, non-blocking   |
+| **User Feedback**        | Console logs (UI spam)                  | Toast notifications       |
+| **Context Injection**    | Manual SDK calls                        | Automatic                 |
+| **Tool Filtering**       | Basic tool name only                    | Tool name + ANY arguments |
+| **Guaranteed Execution** | Depends on agent                        | Always runs               |
+| **Token Cost**           | Variable                                | Zero tokens               |
+| **Debugging**            | Console.log                             | OPENCODE_HOOKS_DEBUG=1    |
 
 ---
 
@@ -235,17 +451,13 @@ Tool argument filters also work when handling `tool.result` events.
 
 ### Session Hooks Cannot Filter by Agent
 
-Session lifecycle events (`session.start`, `session.idle`, `session.end`) from OpenCode do not currently include the calling agent name in their event properties. This means you **cannot** use the `agent` filter field in session hook `when` conditions—it will match all agents but the agent field will be unavailable.
+Session lifecycle events (`session.start`, `session.idle`, `session.end`) don't include the calling agent name. You **cannot** use the `agent` filter field in session hook conditions—it matches all agents.
 
-**Why?** The `session.idle` event fires at the session level, not the agent level. To implement agent filtering for session events, OpenCode would need to pass the current agent context in the event properties.
-
-**Workaround:** If you need agent-specific behavior on session lifecycle events, you can listen to `tool.execute.after` events instead, which do provide the calling agent.
+**Workaround:** Use `tool.execute.after` events instead, which provide agent context.
 
 ---
 
 ## Development
-
-_Instructions for building this plugin._
 
 ```bash
 bun install
@@ -253,4 +465,6 @@ bun run build
 ```
 
 TODO:
-Implement max-length output using tail
+
+- Implement max-length output using tail
+- Add more template functions (date formatting, etc.)
