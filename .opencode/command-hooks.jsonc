@@ -3,24 +3,62 @@
     {
       "id": "search-complete",
       "when": {
-        "phase": "after",
+        "phase": "before",
         "tool": ["firecrawl_firecrawl_search"]
       },
       "run": [
-        "osascript -e 'display notification \"Hello World!\"' && npm run lint"
+        "osascript -e 'display notification \"Searched\"' && npm run lint"
       ],
       "inject": "Lint Runner:\nExit Code: {exitCode}\n\nOutput:\n```\n{stdout}\n```\n\nIf tests failed, please fix them before proceeding."
     },
     {
-      "id": "lint-complete",
+      "id": "before-bash-ls-1",
+      "when": {
+        "phase": "before",
+        "tool": ["bash"],
+        "toolArgs": {
+          "command": "ls"
+        }
+      },
+      "run": ["touch sloth.txt"],
+      "toast": {
+        "title": "Created Animal File",
+        "message": "Sloth",
+        "variant": "info"
+      }
+    },
+    {
+      "id": "before-bash-ls-2",
+      "when": {
+        "phase": "before",
+        "tool": ["bash"],
+        "toolArgs": {
+          "command": "ls"
+        }
+      },
+      "run": ["touch anteater.txt"],
+      "toast": {
+        "title": "Created Animal File",
+        "message": "Anteater",
+        "variant": "info"
+      }
+    },
+    {
+      "id": "before-read",
+      "when": {
+        "phase": "before",
+        "tool": ["read"]
+      },
+      "run": ["touch test.txt && echo ahhhh > test.txt"],
+      "toast": { "message": "created test.txt" }
+    },
+    {
+      "id": "after-read",
       "when": {
         "phase": "after",
-        "tool": ["write"]
+        "tool": ["read"]
       },
-      "run": [
-        "osascript -e 'display notification \"Linting\"' && npm run lint"
-      ],
-      "inject": "Lint Runner:\nExit Code: {exitCode}\n\nOutput:\n```\n{stdout}\n```\n\nHI. The above lint output was just a test of a hook working. Do not do anything. Just respond with OK."
+      "run": ["rm test.txt"]
     },
     {
       "id": "task-before-validator-subagent",
@@ -34,7 +72,9 @@
       "run": [
         "osascript -e 'display notification \"Starting validator subagent\"'"
       ],
-      "inject": "Starting a validator subagent (filtered by toolArgs.subagent_type)"
+      "toast": {
+        "message": "Starting a validator subagent (filtered by toolArgs.subagent_type)"
+      }
     },
     {
       "id": "task-after-general-subagent",
@@ -48,18 +88,12 @@
       "run": [
         "osascript -e 'display notification \"General subagent completed\"' && npm run lint"
       ],
-      "inject": "✅ General subagent task completed.\n\nLint output:\n```\n{stdout}\n```\n\nThis hook only runs for task calls where subagent_type is 'general'."
+      "toast": {
+        "message": "✅ General subagent task completed.\n\nLint output:\n```\n{stdout}\n```\n\nThis hook only runs for task calls where subagent_type is 'general'."
+      }
     }
   ],
   "session": [
-    {
-      "id": "session-start-notify",
-      "when": {
-        "event": "session.start"
-      },
-      "run": ["osascript -e 'display notification \"Session started\"'"],
-      "inject": "🚀 Session started! This message only appears on session.start event."
-    },
     {
       "id": "session-idle-notify",
       "when": {
