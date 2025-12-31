@@ -203,7 +203,7 @@ describe("Shell command execution", () => {
       expect(result.success).toBe(false)
       expect(result.exitCode).not.toBe(0)
       // nonexistent command puts error in stderr, not in error field
-      expect(result.stderr.length).toBeGreaterThan(0)
+      expect(result.stderr?.length ?? 0).toBeGreaterThan(0)
     })
 
     it("handles commands with syntax errors", async () => {

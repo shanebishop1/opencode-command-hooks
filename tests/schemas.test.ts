@@ -95,7 +95,6 @@ describe("Zod Schemas", () => {
       const result = parseToolHook(hook);
       expect(result).not.toBeNull();
       expect(result?.inject).toBeUndefined();
-      expect(result?.consoleLog).toBeUndefined();
     });
 
     it("should handle inject configuration", () => {
@@ -250,17 +249,129 @@ describe("Zod Schemas", () => {
       expect(result).toBeNull();
     });
 
-    it("should allow inject as string template", () => {
-      const hook = {
-        id: "hook",
-        when: { phase: "after" },
-        run: "echo test",
-        inject: "Command completed",
-      };
+     it("should allow inject as string template", () => {
+       const hook = {
+         id: "hook",
+         when: { phase: "after" },
+         run: "echo test",
+         inject: "Command completed",
+       };
 
-      const result = parseToolHook(hook);
-      expect(result).not.toBeNull();
-      expect(result?.inject).toBe("Command completed");
-    });
-  });
+       const result = parseToolHook(hook);
+       expect(result).not.toBeNull();
+       expect(result?.inject).toBe("Command completed");
+     });
+
+     it("should allow toast configuration on tool hook", () => {
+       const hook = {
+         id: "hook-with-toast",
+         when: { phase: "after", tool: "write" },
+         run: "npm run lint",
+         toast: {
+           title: "Lint Complete",
+           message: "Exit code: {exitCode}",
+           variant: "success",
+           duration: 3000,
+         },
+       };
+
+       const result = parseToolHook(hook);
+       expect(result).not.toBeNull();
+       expect(result?.toast).not.toBeUndefined();
+       expect(result?.toast?.title).toBe("Lint Complete");
+       expect(result?.toast?.message).toBe("Exit code: {exitCode}");
+       expect(result?.toast?.variant).toBe("success");
+       expect(result?.toast?.duration).toBe(3000);
+     });
+
+     it("should allow toast with only message on tool hook", () => {
+       const hook = {
+         id: "hook-with-minimal-toast",
+         when: { phase: "after" },
+         run: "echo test",
+         toast: {
+           message: "Operation completed",
+         },
+       };
+
+       const result = parseToolHook(hook);
+       expect(result).not.toBeNull();
+       expect(result?.toast?.message).toBe("Operation completed");
+       expect(result?.toast?.title).toBeUndefined();
+       expect(result?.toast?.variant).toBeUndefined();
+       expect(result?.toast?.duration).toBeUndefined();
+     });
+
+     it("should reject toast without message on tool hook", () => {
+       const hook = {
+         id: "hook-invalid-toast",
+         when: { phase: "after" },
+         run: "echo test",
+         toast: {
+           title: "Title only",
+           // missing message
+         },
+       };
+
+       const result = parseToolHook(hook);
+       expect(result).toBeNull();
+     });
+
+     it("should allow toast with valid variant on tool hook", () => {
+       const variants: Array<"info" | "success" | "warning" | "error"> = ["info", "success", "warning", "error"];
+       
+       for (const variant of variants) {
+         const hook = {
+           id: "hook-variant",
+           when: { phase: "after" },
+           run: "echo test",
+           toast: {
+             message: "Test",
+             variant,
+           },
+         };
+
+         const result = parseToolHook(hook);
+         expect(result).not.toBeNull();
+         expect(result?.toast?.variant).toBe(variant);
+       }
+     });
+
+     it("should reject toast with invalid variant on tool hook", () => {
+       const hook = {
+         id: "hook-invalid-variant",
+         when: { phase: "after" },
+         run: "echo test",
+         toast: {
+           message: "Test",
+           variant: "invalid",
+         },
+       };
+
+       const result = parseToolHook(hook);
+       expect(result).toBeNull();
+     });
+
+     it("should allow toast configuration on session hook", () => {
+       const hook = {
+         id: "session-hook-with-toast",
+         when: { event: "session.start" },
+         run: "git status",
+         toast: {
+           title: "Session Started",
+           message: "Agent {agent} is ready",
+           variant: "info",
+           duration: 2000,
+         },
+       };
+
+       const result = parseSessionHook(hook);
+       expect(result).not.toBeNull();
+       expect(result?.toast).not.toBeUndefined();
+       expect(result?.toast?.title).toBe("Session Started");
+       expect(result?.toast?.message).toBe("Agent {agent} is ready");
+       expect(result?.toast?.variant).toBe("info");
+       expect(result?.toast?.duration).toBe(2000);
+     });
+   });
 });

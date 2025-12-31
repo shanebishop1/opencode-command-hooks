@@ -1,0 +1,6 @@
+{
+  "plugin": [
+    "/Users/shane/projects/opencode-command-hooks/index.ts"
+  ],
+  "$schema": "https://opencode.ai/config.json"
+}

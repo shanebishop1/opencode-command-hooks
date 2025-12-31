@@ -39,3 +39,4 @@ tmp/
 temp/
 *.tmp
 opencode/
+tests/fixtures/e2e-config/
