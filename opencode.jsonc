@@ -2,8 +2,8 @@
   "$schema": "https://opencode.ai/config.json",
   "tools": {
     "brave_*": false,
-    "playwright_*": false,
-    "firecrawl_*": false,
+    "playwright_*": true,
+    "firecrawl_*": true,
     "tracker_*": false,
     "think_*": false,
     "skill": false
