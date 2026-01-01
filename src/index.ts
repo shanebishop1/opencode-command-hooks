@@ -126,8 +126,7 @@ const plugin: Plugin = async ({ client }) => {
    setGlobalLogger(clientLogger)
   
    try {
-     logger.info("Initializing plugin")
-     logger.info("[SMOKE-TEST] opencode-command-hooks plugin loaded successfully")
+     logger.info("Initializing OpenCode Command Hooks plugin...")
 
      const hooks = {
       /**

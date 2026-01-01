@@ -44,8 +44,7 @@ describe("Logging smoke test", () => {
     
     // Search for our plugin
     const pluginLines = lines.filter(l => 
-      l.includes("opencode-command-hooks") || 
-      l.includes("SMOKE-TEST") ||
+      l.includes("opencode-command-hooks") ||
       l.includes("plugin")
     )
     
@@ -53,8 +52,8 @@ describe("Logging smoke test", () => {
     pluginLines.slice(-20).forEach(l => console.log(`  ${l}`))
     
     // Check for our marker
-    const hasMarker = logContent.includes("[SMOKE-TEST]")
-    console.log(`\nContains [SMOKE-TEST]: ${hasMarker}`)
+    const hasMarker = logContent.includes("opencode-command-hooks")
+    console.log(`\nContains plugin marker: ${hasMarker}`)
     
     if (!hasMarker) {
       console.log(`\nLast 15 lines of log:`)
