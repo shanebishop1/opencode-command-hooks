@@ -91,7 +91,16 @@
       "toast": {
         "message": "✅ General subagent task completed.\n\nLint output:\n```\n{stdout}\n```\n\nThis hook only runs for task calls where subagent_type is 'general'."
       }
-    }
+    },
+     {
+       "id": "playwright-access-localhost",
+       "when": {
+         "phase": "before",
+         "tool": "playwright_browser_navigate",
+         "toolArgs": { "url": "http://localhost:3000" }
+       },
+       "run": ["touch ab.txt"]
+     }
   ],
   "session": [
     {

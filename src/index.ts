@@ -89,7 +89,11 @@ function filterToolHooks(
     if (!matches(hook.when.slashCommand, criteria.slashCommand)) return false
     
     // Match tool args if specified in the hook
-    if (hook.when.toolArgs && criteria.toolArgs) {
+    if (hook.when.toolArgs) {
+      // If hook specifies toolArgs but we don't have them, we can't match
+      // (this happens for async tools in tool.result event)
+      if (!criteria.toolArgs) return false
+      
       for (const [key, expectedValue] of Object.entries(hook.when.toolArgs)) {
         const actualValue = criteria.toolArgs[key]
         if (!matches(expectedValue, actualValue as string | undefined)) {
@@ -246,82 +250,82 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
           }
         }
 
-        // Handle tool.result event (fires when tool finishes)
-        if (event.type === "tool.result") {
-          logger.debug("Received tool.result event")
+         // Handle tool.result event (fires when tool finishes)
+         if (event.type === "tool.result") {
+           logger.debug("Received tool.result event")
 
-          const toolName = normalizeString(
-            event.properties?.name ?? event.properties?.tool
-          )
-          const sessionId = normalizeString(
-            event.properties?.sessionID ?? event.properties?.sessionId
-          )
-          const agent = normalizeString(event.properties?.agent)
-          const callId = normalizeString(
-            event.properties?.callID ?? event.properties?.callId
-          )
-          const storedToolArgs = getToolArgs(callId)
-
-          if (!sessionId || !toolName) {
-            logger.debug(
-              "tool.result event missing sessionID or tool name"
-            )
-            return
-          }
-
-          try {
-            // Load global config
-            const globalConfig = await loadGlobalConfig()
-
-            // Load agent-specific config if this is a task tool with subagent_type
-            let agentConfig: CommandHooksConfig = { tool: [], session: [] }
-            if (toolName === "task" && storedToolArgs) {
-              const subagentType = normalizeString(storedToolArgs.subagent_type)
-              if (subagentType) {
-                logger.debug(`Detected task tool call with subagent_type: ${subagentType}`)
-                agentConfig = await loadAgentConfig(subagentType)
-              }
-            }
-
-            const { config: mergedConfig } = mergeConfigs(
-              globalConfig,
-              agentConfig
-            )
-
-            // Filter tool hooks for after phase
-            const matchedHooks = filterToolHooks(mergedConfig.tool || [], {
-              phase: "after",
-              toolName,
-              callingAgent: agent,
-              slashCommand: normalizeString(event.properties?.slashCommand),
-              toolArgs: storedToolArgs,
-            })
-
-           logger.debug(
-             `Matched ${matchedHooks.length} hook(s) for tool.result (after phase)`
+           const toolName = normalizeString(
+             event.properties?.name ?? event.properties?.tool
            )
+           const sessionId = normalizeString(
+             event.properties?.sessionID ?? event.properties?.sessionId
+           )
+           const agent = normalizeString(event.properties?.agent)
+           const callId = normalizeString(
+             event.properties?.callID ?? event.properties?.callId
+           )
+           const storedToolArgs = getToolArgs(callId)
 
-            // Build execution context
-            const context: HookExecutionContext = {
-              sessionId,
-              agent: agent || "unknown",
-              tool: toolName,
-              callId,
-              toolArgs: storedToolArgs,
-            }
+           if (!sessionId || !toolName) {
+             logger.debug(
+               "tool.result event missing sessionID or tool name"
+             )
+             return
+           }
 
-            // Execute hooks
-            await executeHooks(matchedHooks, context, client as OpencodeClient)
+           try {
+             // Load global config
+             const globalConfig = await loadGlobalConfig()
 
-            deleteToolArgs(callId)
-          } catch (error) {
-            const errorMessage =
-              error instanceof Error ? error.message : String(error)
-            logger.error(
-              `Error handling tool.result event: ${errorMessage}`
+             // Load agent-specific config if this is a task tool with subagent_type
+             let agentConfig: CommandHooksConfig = { tool: [], session: [] }
+             if (toolName === "task" && storedToolArgs) {
+               const subagentType = normalizeString(storedToolArgs.subagent_type)
+               if (subagentType) {
+                 logger.debug(`Detected task tool call with subagent_type: ${subagentType}`)
+                 agentConfig = await loadAgentConfig(subagentType)
+               }
+             }
+
+             const { config: mergedConfig } = mergeConfigs(
+               globalConfig,
+               agentConfig
+             )
+
+             // Filter tool hooks for after phase
+             const matchedHooks = filterToolHooks(mergedConfig.tool || [], {
+               phase: "after",
+               toolName,
+               callingAgent: agent,
+               slashCommand: normalizeString(event.properties?.slashCommand),
+               toolArgs: storedToolArgs,
+             })
+
+            logger.debug(
+              `Matched ${matchedHooks.length} hook(s) for tool.result (after phase)`
             )
-          }
-        }
+
+             // Build execution context
+             const context: HookExecutionContext = {
+               sessionId,
+               agent: agent || "unknown",
+               tool: toolName,
+               callId,
+               toolArgs: storedToolArgs,
+             }
+
+             // Execute hooks
+             await executeHooks(matchedHooks, context, client as OpencodeClient)
+
+             deleteToolArgs(callId)
+           } catch (error) {
+             const errorMessage =
+               error instanceof Error ? error.message : String(error)
+             logger.error(
+               `Error handling tool.result event: ${errorMessage}`
+             )
+           }
+         }
       },
 
        /**
