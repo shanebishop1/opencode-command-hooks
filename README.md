@@ -2,32 +2,25 @@
 
 Attach shell commands to agent, tool, and session lifecycles using JSON/YAML configuration. Execute commands automatically without consuming tokens or requiring agent interaction.
 
-**Quick Win:** Make your engineer subagent self-validating with 15 lines of config (no TypeScript, no rebuilds, zero tokens):
+## Markdown Frontmatter Hooks
 
-````jsonc
-{
-  "tool": [
-    {
-      "id": "auto-validate",
-      "when": {
-        "phase": "after",
-        "tool": "task",
-        "toolArgs": { "subagent_type": "engineer" },
-      },
-      "run": ["npm run typecheck", "npm test"],
-      "inject": "✅ Validation: {exitCode, select, 0 {Passed} other {Failed - fix errors below}}\n```\n{stdout}\n```",
-    },
-  ],
-}
-````
+Define hooks directly in your subagents' markdown.
 
-Every time the engineer finishes, tests run automatically and results flow back to the orchestrator. Failed validations trigger self-healing—no manual intervention, no token costs.
-
+```markdown
 ---
+opencode-hooks:
+  tool:
+    - id: custom-hook
+      when: { tool: "write" }
+      run: ["echo 'File modified'"]
+---
+
+# Your markdown content
+```
 
 ## Simplified Agent Markdown Hooks
 
-Define hooks directly in your agent's markdown file for maximum simplicity. No need for global configs, `id` fields, `when` clauses, or `tool` specifications—everything is auto-configured when you use subagents via the `task` tool.
+Define hooks directly in your agent's markdown file so configuration stays with the agent. When used via the `task` tool, the hook target is inferred, so you can omit `id`, `when`, and `tool`.
 
 ### Quick Example
 
@@ -47,6 +40,27 @@ hooks:
 ---
 # Your agent markdown content here
 ```
+
+### Practical Example: Self-Validating Engineer
+
+````jsonc
+{
+  "tool": [
+    {
+      "id": "auto-validate",
+      "when": {
+        "phase": "after",
+        "tool": "task",
+        "toolArgs": { "subagent_type": "engineer" },
+      },
+      "run": ["npm run typecheck", "npm test"],
+      "inject": "Validation: {exitCode, select, 0 {Passed} other {Failed - fix errors below}}\n```\n{stdout}\n```",
+    },
+  ],
+}
+````
+
+Every time the engineer finishes, tests run automatically and results flow back to the orchestrator. Failed validations trigger self-healing—no manual intervention or token costs.
 
 ### How It Works
 
