@@ -62,5 +62,5 @@
       "command": ["npx", "-y", "mcp-tasks"]
     }
   },
-  "plugin": ["/Users/shane/projects/opencode-command-hooks/index.ts"]
+  "plugin": ["/Users/shane/projects/opencode-command-hooks/dist/index.js"]
 }

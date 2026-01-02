@@ -38,7 +38,7 @@ describe("tool.result event listener", () => {
   })
 
   it("processes tool.result event with complete context", async () => {
-    const { default: plugin } = await import("../src/index.js")
+    const { CommandHooksPlugin: plugin } = await import("../src/index.js")
     const mockCalls: any[] = []
     const mockClient = {
       session: {
@@ -72,7 +72,7 @@ describe("tool.result event listener", () => {
   })
 
   it("handles tool.result event with tool name and session ID", async () => {
-    const { default: plugin } = await import("../src/index.js")
+    const { CommandHooksPlugin: plugin } = await import("../src/index.js")
     const mockCalls: any[] = []
     const mockClient = {
       session: {
@@ -106,7 +106,7 @@ describe("tool.result event listener", () => {
   })
 
   it("handles tool.result event for firecrawl tool", async () => {
-    const { default: plugin } = await import("../src/index.js")
+    const { CommandHooksPlugin: plugin } = await import("../src/index.js")
     const mockCalls: any[] = []
     const mockClient = {
       session: {
@@ -140,7 +140,7 @@ describe("tool.result event listener", () => {
   })
 
   it("handles tool.result event with agent context", async () => {
-    const { default: plugin } = await import("../src/index.js")
+    const { CommandHooksPlugin: plugin } = await import("../src/index.js")
     const mockCalls: any[] = []
     const mockClient = {
       session: {
@@ -175,7 +175,7 @@ describe("tool.result event listener", () => {
   })
 
   it("gracefully handles missing tool name in tool.result", async () => {
-    const { default: plugin } = await import("../src/index.js")
+    const { CommandHooksPlugin: plugin } = await import("../src/index.js")
     const mockCalls: any[] = []
     const mockClient = {
       session: {
@@ -208,7 +208,7 @@ describe("tool.result event listener", () => {
   })
 
   it("gracefully handles missing session ID in tool.result", async () => {
-    const { default: plugin } = await import("../src/index.js")
+    const { CommandHooksPlugin: plugin } = await import("../src/index.js")
     const mockCalls: any[] = []
     const mockClient = {
       session: {
