@@ -16,33 +16,10 @@ const LOG_DIR = join(homedir(), ".local", "share", "opencode", "log")
  */
 async function isOpenCodeAvailable(): Promise<boolean> {
   try {
-    // First check if opencode is installed
-    const versionResult = await $`opencode --version 2>&1`.text()
-    if (!versionResult || versionResult.includes("Error:") || versionResult.includes("Cannot find module")) {
+    const whichResult = await $`which opencode 2>&1`.text()
+    if (!whichResult || whichResult.includes("not found")) {
       return false
     }
-    
-    // Then test if it can actually run commands (with a short timeout)
-    // Use a minimal run that should complete quickly
-    let runResult: string
-    try {
-      runResult = await $`timeout 10 opencode run "respond with OK" 2>&1`.text()
-    } catch (runError: unknown) {
-      // Shell command failed - check stdout for module errors
-      const err = runError as { stdout?: string; message?: string }
-      const output = err.stdout || err.message || ""
-      if (output.includes("Cannot find module") || output.includes("Unexpected error")) {
-        return false
-      }
-      // Other errors might still mean opencode is working
-      return false
-    }
-    
-    // If the run output contains module errors, OpenCode isn't working properly
-    if (runResult.includes("Cannot find module") || runResult.includes("Unexpected error")) {
-      return false
-    }
-    
     return true
   } catch {
     return false
@@ -114,7 +91,7 @@ function writeTestOpencodeConfig(): void {
  */
 async function runOpenCode(prompt: string): Promise<string> {
   try {
-    const result = await $`cd ${TEST_CONFIG_DIR} && OPENCODE_CONFIG=${TEST_OPENCODE_CONFIG} timeout 45 opencode -m opencode/big-pickle run ${prompt} 2>&1`.text()
+    const result = await $`cd ${TEST_CONFIG_DIR} && OPENCODE_CONFIG=${TEST_OPENCODE_CONFIG} timeout 30 opencode -m opencode/big-pickle run ${prompt} 2>&1`.text()
     await new Promise(resolve => setTimeout(resolve, 2000))
     
     // Ensure we always return a string
