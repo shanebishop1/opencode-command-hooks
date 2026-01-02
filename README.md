@@ -2,13 +2,13 @@
 
 Attach shell commands to agent, tool, and session lifecycles using JSON/YAML configuration. Execute commands automatically without consuming tokens or requiring agent interaction.
 
-## Markdown Frontmatter Hooks
+## Markdown Frontmatter Hooks (Core)
 
-Define hooks directly in your subagents' markdown.
+Define hooks directly in markdown frontmatter so they live with the content they affect. This is the default, first-class configuration path.
 
 ```markdown
 ---
-opencode-hooks:
+command_hooks:
   tool:
     - id: custom-hook
       when: { tool: "write" }
@@ -26,19 +26,14 @@ Define hooks directly in your agent's markdown file so configuration stays with 
 
 ```yaml
 ---
-description: My agent
+description: Engineer agent
 mode: subagent
 hooks:
-  before:
-    - run: "echo 'Starting...'"
   after:
-    - run: ["npm run typecheck", "npm run lint"]
-      inject: "Results:\n{stdout}"
-    - run: "npm test"
-      toast:
-        message: "Tests {exitCode, select, 0 {passed} other {failed}}"
+    - run: "npm run lint"
+      inject: "Lint results:\n{stdout}"
 ---
-# Your agent markdown content here
+# Engineer agent content
 ```
 
 ### Practical Example: Self-Validating Engineer
@@ -344,7 +339,7 @@ Override global settings in individual markdown files:
 
 ```markdown
 ---
-opencode-hooks:
+command_hooks:
   tool:
     - id: custom-hook
       when: { tool: "write" }
