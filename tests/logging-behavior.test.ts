@@ -8,11 +8,6 @@ describe("Logging smoke test", () => {
   it("client.app.log() writes to OpenCode log files", async () => {
     const logDir = join(homedir(), ".local", "share", "opencode", "log")
     
-    // Build the plugin first
-    console.log("\n=== Building plugin ===")
-    await $`pnpm build`.quiet()
-    console.log("Build complete")
-    
     // Run opencode to trigger plugin initialization
     console.log("\n=== Running OpenCode ===")
     try {
