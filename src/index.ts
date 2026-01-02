@@ -7,9 +7,6 @@ import { loadGlobalConfig } from "./config/global.js"
 import { loadAgentConfig } from "./config/agent.js"
 import { mergeConfigs } from "./config/merge.js"
 
-// Export unified executor
-export { executeHooks } from "./executor.js"
-
 /**
  * Helper to extract string values from event properties
  */
@@ -122,7 +119,7 @@ function filterToolHooks(
  * - No state tracking (pendingAfterEvents, completedAfterEvents removed)
  * - Unified executor handles all hook matching and execution
  */
-const plugin: Plugin = async ({ client }) => {
+export const CommandHooksPlugin: Plugin = async ({ client }) => {
     const clientLogger = createLogger(client)
    setGlobalLogger(clientLogger)
   
@@ -473,11 +470,15 @@ const plugin: Plugin = async ({ client }) => {
     logger.info(`Plugin returning hooks: ${Object.keys(hooks).join(", ")}`)
     return hooks
   } catch (error) {
-    logger.error(
-      `Error in plugin initialization: ${error instanceof Error ? error.message : String(error)}`
-    )
-    throw error
+    const message = error instanceof Error ? error.message : String(error)
+    logger.error(`Error in plugin initialization: ${message}`)
+    const fallbackHooks = {
+      config: async () => {},
+      event: async () => {},
+      "tool.execute.before": async () => {},
+      "tool.execute.after": async () => {},
+    }
+    return fallbackHooks
   }
 }
 
-export default plugin
