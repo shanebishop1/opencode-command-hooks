@@ -4,37 +4,24 @@ Attach shell commands to agent, tool, and session lifecycles using JSON/YAML con
 
 ## Markdown Frontmatter Hooks (Core)
 
-Define hooks directly in markdown frontmatter so they live with the content they affect. This is the default, first-class configuration path.
+Define hooks directly in agent markdown frontmatter so they live with the agent.
 
 ```markdown
----
-command_hooks:
-  tool:
-    - id: custom-hook
-      when: { tool: "write" }
-      run: ["echo 'File modified'"]
----
-
-# Your markdown content
-```
-
-## Simplified Agent Markdown Hooks
-
-Define hooks directly in your agent's markdown file so configuration stays with the agent. When used via the `task` tool, the hook target is inferred, so you can omit `id`, `when`, and `tool`.
-
-### Quick Example
-
-```yaml
 ---
 description: Engineer agent
 mode: subagent
 hooks:
   after:
     - run: "npm run lint"
-      inject: "Lint results:\n{stdout}"
+      inject: "Lint results: {stdout}"
 ---
+
 # Engineer agent content
 ```
+
+## Simplified Agent Markdown Hooks
+
+Define hooks directly in your agent's markdown file so configuration stays with the agent. When used via the `task` tool, the hook target is inferred, so you can omit `id`, `when`, and `tool`.
 
 ### Practical Example: Self-Validating Engineer
 
@@ -335,18 +322,23 @@ Create `.opencode/command-hooks.jsonc` in your project root:
 
 ### Markdown Frontmatter
 
-Override global settings in individual markdown files:
+Define hooks in agent markdown files using the simplified format:
 
 ```markdown
 ---
-command_hooks:
-  tool:
-    - id: custom-hook
-      when: { tool: "write" }
-      run: ["echo 'File modified'"]
+description: Engineer agent
+mode: subagent
+hooks:
+  before:
+    - run: "echo 'Starting engineering work...'"
+  after:
+    - run: "npm run lint"
+      inject: |
+        Lint results:
+        {stdout}
 ---
 
-# Your markdown content
+# Engineer agent content
 ```
 
 ### Configuration Precedence
