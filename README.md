@@ -54,6 +54,8 @@ hooks:
   after:
     - run: ["npm run lint", "npm run typecheck", "npm test"]
       inject: "Validation Results (exit {exitCode}): \n`{stdout}`\n`{stderr}`"
+      toast:
+        message: "Validation Complete"
 ```
 
 ### Hook Configuration Options
@@ -101,41 +103,39 @@ hooks:
       inject: "Typecheck + lint (exit {exitCode}) ``` {stdout} ```"
 ---
 
-# Engineer Agent
-
-Focus on implementing features with tests and proper error handling.
+<your subagent instructions>
 ````
 
 ---
 
 ## Why?
 
-You often want “quality gates” (tests, lint, typecheck) or other automation to run around agent/tool activity. Doing it by prompting the agent is unreliable and costs tokens; doing it in a native plugin means writing and maintaining code.
+When working with a fleet of subagents, automatic validation of the state of your codebase is really useful. By setting up quality gates (tests, lint, typechecks, etc.) or other automation, you can catch and prevent errors quickly and reliably.  
 
-This plugin runs those commands for you, from config, and can feed the results back into the session automatically.
+Doing this by having your orchestrator agent use the bash tool (or call a validator subagent) is non-deterministic and can cost a lot of tokens over time. You could always write a custom plugin to achieve this, but I found myself writing the same boilerplate, error handling, output capture, session injection logic over and over again. This plugin removes that overhead and provides an simple, opinionated system for integrating command hooks into your Opencode flow.
 
-### 1. Configuration Instead of Code
+### Automatic Context Injection
 
-Native plugins can do this, but you end up writing error handling, output capture, and session injection yourself.
+If `inject` is set, the command output is posted into the session, so your agents can react to failures.
 
-### 2. Automatic Context Injection
+### Filter by Tool Arguments
 
-If `inject` is set, the command output is posted into the session (without triggering a reply), so the agent can react to failures.
-
-### 3. Filter by Tool Arguments
-
-Tool hooks can match on any tool argument via `when.toolArgs` (exact string match, or arrays of exact strings).
+You can set up tool hooks to only trigger on specific arguments via `when.toolArgs`. This could be useful for having side effects when MCP tools are called.
 
 ```jsonc
 {
-  "id": "validate-engineer",
+  "id": "playwright-access-localhost",
   "when": {
     "phase": "after",
-    "tool": "task",
-    "toolArgs": { "subagent_type": ["engineer", "debugger"] },
+    "tool": "playwright_browser_navigate",
+    "toolArgs": { "url": "http://localhost:3000]" }
   },
-  "run": ["npm test"],
-  "inject": "Tests finished (exit {exitCode})\n\n{stdout}\n{stderr}",
+  "run": [
+    "osascript -e 'display notification \"Agent triggered playwright\"'"
+  ],
+  "toast": {
+    "message": "Agent used the playwright {tool} tool"
+  }
 }
 ```
 

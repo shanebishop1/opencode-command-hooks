@@ -3,6 +3,12 @@ description: Analyzes the codebase and implements code changes.
 mode: subagent
 model: opencode/minimax-m2.1-free
 temperature: 0.3
+hooks:
+  after:
+    - run: ["npm run lint", "npm run typecheck"]
+      inject: "Validation Results (exit {exitCode}): \n`{stdout}`\n`{stderr}`"
+      toast:
+        message: "Validation Complete"
 tools:
   bash: false
   webfetch: false
