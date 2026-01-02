@@ -4,24 +4,30 @@ Attach shell commands to agent, tool, and session lifecycles using JSON/YAML con
 
 **Quick Win:** Make your engineer subagent self-validating with 15 lines of config (no TypeScript, no rebuilds, zero tokens):
 
-```jsonc
+````jsonc
 {
-  "tool": [{
-    "id": "auto-validate",
-    "when": { "phase": "after", "tool": "task", "toolArgs": { "subagent_type": "engineer" }},
-    "run": ["npm run typecheck", "npm test"],
-    "inject": "✅ Validation: {exitCode, select, 0 {Passed} other {Failed - fix errors below}}\n```\n{stdout}\n```"
-  }]
+  "tool": [
+    {
+      "id": "auto-validate",
+      "when": {
+        "phase": "after",
+        "tool": "task",
+        "toolArgs": { "subagent_type": "engineer" },
+      },
+      "run": ["npm run typecheck", "npm test"],
+      "inject": "✅ Validation: {exitCode, select, 0 {Passed} other {Failed - fix errors below}}\n```\n{stdout}\n```",
+    },
+  ],
 }
-```
+````
 
 Every time the engineer finishes, tests run automatically and results flow back to the orchestrator. Failed validations trigger self-healing—no manual intervention, no token costs.
 
 ---
 
-## 🚀 Simplified Agent Markdown Hooks
+## Simplified Agent Markdown Hooks
 
-**NEW!** Define hooks directly in your agent's markdown file for maximum simplicity. No need for global configs, `id` fields, `when` clauses, or `tool` specifications—everything is auto-configured when you use subagents via the `task` tool.
+Define hooks directly in your agent's markdown file for maximum simplicity. No need for global configs, `id` fields, `when` clauses, or `tool` specifications—everything is auto-configured when you use subagents via the `task` tool.
 
 ### Quick Example
 
@@ -39,7 +45,6 @@ hooks:
       toast:
         message: "Tests {exitCode, select, 0 {passed} other {failed}}"
 ---
-
 # Your agent markdown content here
 ```
 
@@ -55,26 +60,30 @@ hooks:
 ### Simplified vs Global Config Format
 
 **Global Config (verbose):**
+
 ```jsonc
 {
-  "tool": [{
-    "id": "validate-engineer",
-    "when": { 
-      "phase": "after", 
-      "tool": "task", 
-      "toolArgs": { "subagent_type": "engineer" }
+  "tool": [
+    {
+      "id": "validate-engineer",
+      "when": {
+        "phase": "after",
+        "tool": "task",
+        "toolArgs": { "subagent_type": "engineer" },
+      },
+      "run": ["npm run typecheck", "npm test"],
+      "inject": "Validation: {exitCode, select, 0 {✓ Passed} other {✗ Failed}}",
+      "toast": {
+        "title": "Validation Complete",
+        "message": "{exitCode, select, 0 {✓ Passed} other {✗ Failed}}",
+      },
     },
-    "run": ["npm run typecheck", "npm test"],
-    "inject": "Validation: {exitCode, select, 0 {✓ Passed} other {✗ Failed}}",
-    "toast": {
-      "title": "Validation Complete",
-      "message": "{exitCode, select, 0 {✓ Passed} other {✗ Failed}}"
-    }
-  }]
+  ],
 }
 ```
 
 **Agent Markdown (simplified):**
+
 ```yaml
 hooks:
   after:
@@ -88,19 +97,19 @@ hooks:
 
 ### Hook Configuration Options
 
-| Option | Type | Required | Description |
-|--------|------|----------|-------------|
-| `run` | `string` \| `string[]` | ✅ Yes | Command(s) to execute |
-| `inject` | `string` | ❌ No | Message to inject into session (supports templates) |
-| `toast` | `object` | ❌ No | Toast notification configuration |
+| Option   | Type                   | Required | Description                                         |
+| -------- | ---------------------- | -------- | --------------------------------------------------- |
+| `run`    | `string` \| `string[]` | ✅ Yes   | Command(s) to execute                               |
+| `inject` | `string`               | ❌ No    | Message to inject into session (supports templates) |
+| `toast`  | `object`               | ❌ No    | Toast notification configuration                    |
 
 ### Toast Configuration
 
 ```yaml
 toast:
   message: "Build {exitCode, select, 0 {succeeded} other {failed}}"
-  variant: "{exitCode, select, 0 {success} other {error}}"  # info, success, warning, error
-  duration: 5000  # milliseconds (optional)
+  variant: "{exitCode, select, 0 {success} other {error}}" # info, success, warning, error
+  duration: 5000 # milliseconds (optional)
 ```
 
 ### Template Variables
@@ -114,7 +123,7 @@ Agent markdown hooks support the same template variables as global config:
 
 ### Complete Example
 
-```yaml
+````yaml
 ---
 description: Engineer Agent
 mode: subagent
@@ -125,13 +134,13 @@ hooks:
     - run: ["npm run typecheck", "npm run lint"]
       inject: |
         ## Validation Results
-        
+
         **TypeCheck:** {exitCode, select, 0 {✓ Passed} other {✗ Failed}}
-        
+
         ```
         {stdout}
         ```
-        
+
         {exitCode, select, 0 {} other {⚠️ Please fix validation errors before proceeding.}}
       toast:
         message: "TypeCheck & Lint: {exitCode, select, 0 {✓ Passed} other {✗ Failed}}"
@@ -142,10 +151,9 @@ hooks:
         message: "Tests {exitCode, select, 0 {✓ Passed} other {✗ Failed}}"
         variant: "{exitCode, select, 0 {success} other {error}}"
 ---
-
 # Engineer Agent
 Focus on implementing features with tests and proper error handling.
-```
+````
 
 ---
 
@@ -347,7 +355,7 @@ opencode-hooks:
 
 This example demonstrates the plugin's killer feature: **automatic validation injection after subagent work**. Unlike native plugins that require complex TypeScript and manual result handling, this achieves enterprise-grade quality gates with pure configuration.
 
-```jsonc
+````jsonc
 {
   "tool": [
     {
@@ -355,34 +363,36 @@ This example demonstrates the plugin's killer feature: **automatic validation in
       "when": {
         "phase": "after",
         "tool": "task",
-        "toolArgs": { "subagent_type": ["engineer", "debugger"] }
+        "toolArgs": { "subagent_type": ["engineer", "debugger"] },
       },
       "run": [
         "npm run typecheck",
         "npm run lint",
-        "npm test -- --coverage --passWithNoTests"
+        "npm test -- --coverage --passWithNoTests",
       ],
       "inject": "🔍 Validation Results:\n\n**TypeCheck:** {exitCode, select, 0 {✓ Passed} other {✗ Failed}}\n\n```\n{stdout}\n```\n\n{exitCode, select, 0 {} other {⚠️ The code you just wrote has validation errors. Please fix them before proceeding.}}",
       "toast": {
         "title": "Code Validation",
         "message": "{exitCode, select, 0 {All checks passed ✓} other {Validation failed - check errors}}",
         "variant": "{exitCode, select, 0 {success} other {error}}",
-        "duration": 5000
-      }
+        "duration": 5000,
+      },
     },
     {
       "id": "verify-test-coverage",
       "when": {
         "phase": "after",
         "tool": "task",
-        "toolArgs": { "subagent_type": "engineer" }
+        "toolArgs": { "subagent_type": "engineer" },
       },
-      "run": ["npm test -- --coverage --json > coverage.json && node -p 'JSON.parse(require(\"fs\").readFileSync(\"coverage.json\")).coverageMap.total.lines.pct'"],
-      "inject": "📊 Test Coverage: {stdout}%\n\n{stdout, select, ^[89]\\d|100$ {} other {⚠️ Coverage is below 80%. Please add more tests.}}"
-    }
-  ]
+      "run": [
+        "npm test -- --coverage --json > coverage.json && node -p 'JSON.parse(require(\"fs\").readFileSync(\"coverage.json\")).coverageMap.total.lines.pct'",
+      ],
+      "inject": "📊 Test Coverage: {stdout}%\n\n{stdout, select, ^[89]\\d|100$ {} other {⚠️ Coverage is below 80%. Please add more tests.}}",
+    },
+  ],
 }
-```
+````
 
 **What makes this powerful:**
 
@@ -420,7 +430,7 @@ This example demonstrates the plugin's killer feature: **automatic validation in
 
 #### Multi-Stage Validation Pipeline
 
-```jsonc
+````jsonc
 {
   "tool": [
     {
@@ -428,17 +438,17 @@ This example demonstrates the plugin's killer feature: **automatic validation in
       "when": {
         "phase": "after",
         "tool": "task",
-        "toolArgs": { "subagent_type": "validator" }
+        "toolArgs": { "subagent_type": "validator" },
       },
       "run": [
         "npm audit --audit-level=moderate",
-        "git diff --name-only | xargs grep -l 'API_KEY\\|SECRET\\|PASSWORD' || true"
+        "git diff --name-only | xargs grep -l 'API_KEY\\|SECRET\\|PASSWORD' || true",
       ],
-      "inject": "🔒 Security Scan:\n\n**Audit:** {exitCode, select, 0 {No vulnerabilities} other {⚠️ Vulnerabilities found}}\n\n```\n{stdout}\n```\n\nPlease address security issues before deployment."
-    }
-  ]
+      "inject": "🔒 Security Scan:\n\n**Audit:** {exitCode, select, 0 {No vulnerabilities} other {⚠️ Vulnerabilities found}}\n\n```\n{stdout}\n```\n\nPlease address security issues before deployment.",
+    },
+  ],
 }
-```
+````
 
 #### Enforce Linting on File Edits
 
@@ -667,48 +677,49 @@ export const ValidationPlugin: Plugin = async ({ $, client }) => {
   return {
     "tool.execute.after": async (input) => {
       if (input.tool !== "task") return;
-      
+
       // No way to filter by toolArgs.subagent_type without complex parsing
-      
+
       try {
         const results: string[] = [];
-        
+
         try {
           const typecheck = await $`npm run typecheck`.text();
           results.push(`TypeCheck: ${typecheck}`);
         } catch (e: any) {
           results.push(`TypeCheck failed: ${e.stderr || e.message}`);
         }
-        
+
         try {
           const lint = await $`npm run lint`.text();
           results.push(`Lint: ${lint}`);
         } catch (e: any) {
           results.push(`Lint failed: ${e.stderr || e.message}`);
         }
-        
+
         try {
           const test = await $`npm test -- --coverage --passWithNoTests`.text();
           results.push(`Tests: ${test}`);
         } catch (e: any) {
           results.push(`Tests failed: ${e.stderr || e.message}`);
         }
-        
+
         const output = results.join("\n\n");
-        const exitCode = results.some(r => r.includes("failed")) ? 1 : 0;
+        const exitCode = results.some((r) => r.includes("failed")) ? 1 : 0;
         const message = `🔍 Validation Results:\n\n${output}\n\n${
-          exitCode !== 0 
+          exitCode !== 0
             ? "⚠️ The code you just wrote has validation errors. Please fix them before proceeding."
             : ""
         }`;
-        
+
         await client.session.prompt({
           sessionID: input.sessionID,
           message,
         });
-        
-        console.log(exitCode === 0 ? "✓ All checks passed" : "✗ Validation failed");
-        
+
+        console.log(
+          exitCode === 0 ? "✓ All checks passed" : "✗ Validation failed",
+        );
       } catch (e) {
         console.error("Validation hook failed:", e);
       }
@@ -721,44 +732,44 @@ Problems: Can't filter by subagent_type, manual error handling for each command,
 
 **This Plugin: 15 lines of JSON**
 
-```jsonc
+````jsonc
 {
   "id": "validate-engineer-work",
   "when": {
     "phase": "after",
     "tool": "task",
-    "toolArgs": { "subagent_type": ["engineer", "debugger"] }
+    "toolArgs": { "subagent_type": ["engineer", "debugger"] },
   },
   "run": [
     "npm run typecheck",
-    "npm run lint", 
-    "npm test -- --coverage --passWithNoTests"
+    "npm run lint",
+    "npm test -- --coverage --passWithNoTests",
   ],
   "inject": "🔍 Validation Results:\n\n**TypeCheck:** {exitCode, select, 0 {✓ Passed} other {✗ Failed}}\n\n```\n{stdout}\n```\n\n{exitCode, select, 0 {} other {⚠️ Please fix validation errors.}}",
   "toast": {
     "title": "Code Validation",
     "message": "{exitCode, select, 0 {All checks passed ✓} other {Validation failed}}",
-    "variant": "{exitCode, select, 0 {success} other {error}}"
-  }
+    "variant": "{exitCode, select, 0 {success} other {error}}",
+  },
 }
-```
+````
 
 ---
 
 ### Feature Comparison
 
-| Feature                  | Native Plugin                           | This Plugin               |
-| ------------------------ | --------------------------------------- | ------------------------- |
-| **Setup**                | TypeScript, build steps, error handling | JSON/YAML config          |
-| **Error Handling**       | Manual try/catch required               | Automatic, non-blocking   |
-| **User Feedback**        | Console logs (UI spam)                  | Toast notifications       |
-| **Context Injection**    | Manual SDK calls                        | Automatic                 |
-| **Tool Filtering**       | Basic tool name only                    | Tool name + ANY arguments |
-| **Subagent Targeting**   | Complex parsing required                | Native `toolArgs` filter  |
-| **Guaranteed Execution** | Depends on agent                        | Always runs               |
-| **Token Cost**           | Variable                                | Zero tokens               |
+| Feature                  | Native Plugin                           | This Plugin                  |
+| ------------------------ | --------------------------------------- | ---------------------------- |
+| **Setup**                | TypeScript, build steps, error handling | JSON/YAML config             |
+| **Error Handling**       | Manual try/catch required               | Automatic, non-blocking      |
+| **User Feedback**        | Console logs (UI spam)                  | Toast notifications          |
+| **Context Injection**    | Manual SDK calls                        | Automatic                    |
+| **Tool Filtering**       | Basic tool name only                    | Tool name + ANY arguments    |
+| **Subagent Targeting**   | Complex parsing required                | Native `toolArgs` filter     |
+| **Guaranteed Execution** | Depends on agent                        | Always runs                  |
+| **Token Cost**           | Variable                                | Zero tokens                  |
 | **Hot Reload**           | Requires rebuild                        | Edit config, works instantly |
-| **Debugging**            | Console.log                             | OPENCODE_HOOKS_DEBUG=1    |
+| **Debugging**            | Console.log                             | OPENCODE_HOOKS_DEBUG=1       |
 
 ---
 
