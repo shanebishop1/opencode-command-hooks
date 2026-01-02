@@ -345,8 +345,9 @@ const plugin: Plugin = async ({ client }) => {
 
            // Load agent-specific config if this is a task tool with subagent_type
            let agentConfig: CommandHooksConfig = { tool: [], session: [] }
+           let subagentType: string | undefined
            if (input.tool === "task") {
-             const subagentType = normalizeString(output.args.subagent_type)
+             subagentType = normalizeString(output.args.subagent_type) || undefined
              if (subagentType) {
                logger.debug(`Detected task tool call with subagent_type: ${subagentType}`)
                agentConfig = await loadAgentConfig(subagentType)
@@ -362,7 +363,7 @@ const plugin: Plugin = async ({ client }) => {
            const matchedHooks = filterToolHooks(mergedConfig.tool || [], {
              phase: "before",
              toolName: input.tool,
-             callingAgent: undefined,
+             callingAgent: subagentType,
              slashCommand: undefined,
              toolArgs: output.args,
            })
@@ -374,7 +375,7 @@ const plugin: Plugin = async ({ client }) => {
            // Build execution context
            const context: HookExecutionContext = {
              sessionId: input.sessionID,
-             agent: "unknown",
+             agent: subagentType || "unknown",
              tool: input.tool,
              callId: input.callID,
              toolArgs: output.args,
@@ -421,43 +422,44 @@ const plugin: Plugin = async ({ client }) => {
 
            // Load agent-specific config if this is a task tool with subagent_type
            let agentConfig: CommandHooksConfig = { tool: [], session: [] }
-           if (input.tool === "task" && storedToolArgs) {
-             const subagentType = normalizeString(storedToolArgs.subagent_type)
-             if (subagentType) {
-               logger.debug(`Detected task tool call with subagent_type: ${subagentType}`)
-               agentConfig = await loadAgentConfig(subagentType)
-             }
-           }
+            let subagentType: string | undefined
+            if (input.tool === "task" && storedToolArgs) {
+              subagentType = normalizeString(storedToolArgs.subagent_type) || undefined
+              if (subagentType) {
+                logger.debug(`Detected task tool call with subagent_type: ${subagentType}`)
+                agentConfig = await loadAgentConfig(subagentType)
+              }
+            }
 
-           const { config: mergedConfig } = mergeConfigs(
-             globalConfig,
-             agentConfig
+            const { config: mergedConfig } = mergeConfigs(
+              globalConfig,
+              agentConfig
+            )
+
+            // Filter tool hooks for after phase
+            const matchedHooks = filterToolHooks(mergedConfig.tool || [], {
+              phase: "after",
+              toolName: input.tool,
+              callingAgent: subagentType,
+              slashCommand: undefined,
+              toolArgs: storedToolArgs,
+            })
+
+           logger.debug(
+             `Matched ${matchedHooks.length} hook(s) for tool.execute.after`
            )
 
-           // Filter tool hooks for after phase
-           const matchedHooks = filterToolHooks(mergedConfig.tool || [], {
-             phase: "after",
-             toolName: input.tool,
-             callingAgent: undefined,
-             slashCommand: undefined,
-             toolArgs: storedToolArgs,
-           })
+            // Build execution context
+            const context: HookExecutionContext = {
+              sessionId: input.sessionID,
+              agent: subagentType || "unknown",
+              tool: input.tool,
+              callId: input.callID,
+              toolArgs: storedToolArgs,
+            }
 
-          logger.debug(
-            `Matched ${matchedHooks.length} hook(s) for tool.execute.after`
-          )
-
-           // Build execution context
-           const context: HookExecutionContext = {
-             sessionId: input.sessionID,
-             agent: "unknown",
-             tool: input.tool,
-             callId: input.callID,
-             toolArgs: storedToolArgs,
-           }
-
-           // Execute hooks
-           await executeHooks(matchedHooks, context, client as OpencodeClient)
+            // Execute hooks
+            await executeHooks(matchedHooks, context, client as OpencodeClient)
          } catch (error) {
            const errorMessage =
              error instanceof Error ? error.message : String(error)

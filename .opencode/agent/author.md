@@ -3,6 +3,13 @@ description: A persuasive, friendly, but terse writer. Good at writing everythin
 mode: subagent
 model: openrouter/moonshotai/kimi-k2-0905:exacto
 temperature: 0.3
+hooks:
+  before:
+    - run: "echo 'starting'"
+  after:
+    - run: ["npm run typecheck", "touch test1.txt"]
+      inject: "Results:\n{stdout}"
+
 tools:
   webfetch: false
 ---

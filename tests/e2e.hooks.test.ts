@@ -83,7 +83,24 @@ function writeTestOpencodeConfig(): void {
   writeFileSync(TEST_OPENCODE_CONFIG, JSON.stringify(pluginConfig, null, 2))
 }
 
-
+/**
+ * Poll for log content until a predicate is satisfied or times out.
+ */
+async function waitForLogMatch(
+  predicate: (logContent: string) => boolean,
+  timeoutMs = 10000,
+  intervalMs = 500
+): Promise<string> {
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    const logContent = getRecentLogContent()
+    if (predicate(logContent)) {
+      return logContent
+    }
+    await new Promise(resolve => setTimeout(resolve, intervalMs))
+  }
+  return getRecentLogContent()
+}
 
 /**
  * Run OpenCode with a prompt and capture the stdout response
@@ -271,11 +288,11 @@ describe("E2E Hook Behavioral Tests", () => {
     console.log(`Response length: ${opencodeResponse.length}`)
     console.log(`Response preview: ${opencodeResponse.substring(0, 200)}...`)
 
-    // Add extra delay to ensure toast logging completes (toasts happen asynchronously during plugin lifecycle)
-    await new Promise(resolve => setTimeout(resolve, 5000))
-
-    // Check logs for toast marker
-    const logContent = getRecentLogContent()
+    const logContent = await waitForLogMatch(
+      content => content.includes(`TOAST_MARKER_${uniqueId}`),
+      15000,
+      500
+    )
     console.log(`Log content length: ${logContent.length}`)
     console.log(`Log contains [toast]: ${logContent.includes("[toast]")}`)
     console.log(`Log contains toast marker: ${logContent.includes(`TOAST_MARKER_${uniqueId}`)}`)
@@ -325,11 +342,11 @@ describe("E2E Hook Behavioral Tests", () => {
     console.log(`Response length: ${opencodeResponse.length}`)
     console.log(`Response preview: ${opencodeResponse.substring(0, 200)}...`)
 
-    // Add extra delay to ensure async logging from the plugin is flushed to disk
-    await new Promise(resolve => setTimeout(resolve, 3000))
-
-    // Check logs for inject marker with substituted stdout
-    const logContent = getRecentLogContent()
+    const logContent = await waitForLogMatch(
+      content => content.includes(`Output was: CAPTURED_${uniqueId}`),
+      15000,
+      500
+    )
     console.log(`Log content length: ${logContent.length}`)
     console.log(`Log contains [inject]: ${logContent.includes("[inject]")}`)
     console.log(`Log contains CAPTURED marker: ${logContent.includes(`CAPTURED_${uniqueId}`)}`)
