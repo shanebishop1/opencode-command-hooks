@@ -17,6 +17,138 @@ Attach shell commands to agent, tool, and session lifecycles using JSON/YAML con
 
 Every time the engineer finishes, tests run automatically and results flow back to the orchestrator. Failed validations trigger self-healing—no manual intervention, no token costs.
 
+---
+
+## 🚀 Simplified Agent Markdown Hooks
+
+**NEW!** Define hooks directly in your agent's markdown file for maximum simplicity. No need for global configs, `id` fields, `when` clauses, or `tool` specifications—everything is auto-configured when you use subagents via the `task` tool.
+
+### Quick Example
+
+```yaml
+---
+description: My agent
+mode: subagent
+hooks:
+  before:
+    - run: "echo 'Starting...'"
+  after:
+    - run: ["npm run typecheck", "npm run lint"]
+      inject: "Results:\n{stdout}"
+    - run: "npm test"
+      toast:
+        message: "Tests {exitCode, select, 0 {passed} other {failed}}"
+---
+
+# Your agent markdown content here
+```
+
+### How It Works
+
+1. **Automatic Targeting**: Hooks defined in agent markdown automatically apply when that subagent is invoked via the `task` tool
+2. **Simplified Syntax**: No `id`, `when`, or `tool` fields needed—everything is inferred from context
+3. **Before/After Hooks**: Use `before` hooks for setup/preparation and `after` hooks for validation/cleanup
+4. **Dual Location Support**: Works with both:
+   - `.opencode/agent/*.md` (project-level agents)
+   - `~/.config/opencode/agent/*.md` (user-level agents)
+
+### Simplified vs Global Config Format
+
+**Global Config (verbose):**
+```jsonc
+{
+  "tool": [{
+    "id": "validate-engineer",
+    "when": { 
+      "phase": "after", 
+      "tool": "task", 
+      "toolArgs": { "subagent_type": "engineer" }
+    },
+    "run": ["npm run typecheck", "npm test"],
+    "inject": "Validation: {exitCode, select, 0 {✓ Passed} other {✗ Failed}}",
+    "toast": {
+      "title": "Validation Complete",
+      "message": "{exitCode, select, 0 {✓ Passed} other {✗ Failed}}"
+    }
+  }]
+}
+```
+
+**Agent Markdown (simplified):**
+```yaml
+hooks:
+  after:
+    - run: ["npm run typecheck", "npm test"]
+      inject: "Validation: {exitCode, select, 0 {✓ Passed} other {✗ Failed}}"
+      toast:
+        message: "{exitCode, select, 0 {✓ Passed} other {✗ Failed}}"
+```
+
+**Reduction: 60% less boilerplate!**
+
+### Hook Configuration Options
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `run` | `string` \| `string[]` | ✅ Yes | Command(s) to execute |
+| `inject` | `string` | ❌ No | Message to inject into session (supports templates) |
+| `toast` | `object` | ❌ No | Toast notification configuration |
+
+### Toast Configuration
+
+```yaml
+toast:
+  message: "Build {exitCode, select, 0 {succeeded} other {failed}}"
+  variant: "{exitCode, select, 0 {success} other {error}}"  # info, success, warning, error
+  duration: 5000  # milliseconds (optional)
+```
+
+### Template Variables
+
+Agent markdown hooks support the same template variables as global config:
+
+- `{stdout}` - Command stdout (truncated to 4000 chars)
+- `{stderr}` - Command stderr (truncated to 4000 chars)
+- `{exitCode}` - Command exit code
+- `{cmd}` - Executed command
+
+### Complete Example
+
+```yaml
+---
+description: Engineer Agent
+mode: subagent
+hooks:
+  before:
+    - run: "echo '🚀 Engineer agent starting...'"
+  after:
+    - run: ["npm run typecheck", "npm run lint"]
+      inject: |
+        ## Validation Results
+        
+        **TypeCheck:** {exitCode, select, 0 {✓ Passed} other {✗ Failed}}
+        
+        ```
+        {stdout}
+        ```
+        
+        {exitCode, select, 0 {} other {⚠️ Please fix validation errors before proceeding.}}
+      toast:
+        message: "TypeCheck & Lint: {exitCode, select, 0 {✓ Passed} other {✗ Failed}}"
+        variant: "{exitCode, select, 0 {success} other {error}}"
+    - run: "npm test -- --coverage --passWithNoTests"
+      inject: "Test Coverage: {stdout}%"
+      toast:
+        message: "Tests {exitCode, select, 0 {✓ Passed} other {✗ Failed}}"
+        variant: "{exitCode, select, 0 {success} other {error}}"
+---
+
+# Engineer Agent
+Focus on implementing features with tests and proper error handling.
+```
+
+---
+
 ## Why?
 
 **The Problem:** You want your engineer/validator subagents to automatically run tests/linters and self-heal when validation fails—but asking agents to run validation costs tokens, isn't guaranteed, and requires complex native plugin code with manual error handling.
