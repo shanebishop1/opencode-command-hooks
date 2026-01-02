@@ -10,6 +10,115 @@
  */
 
 // ============================================================================
+// AGENT MARKDOWN SIMPLIFIED HOOKS (NEW)
+// ============================================================================
+
+/**
+ * Simplified agent hooks configuration for markdown frontmatter
+ *
+ * This is the new, simplified schema for defining hooks in agent markdown files.
+ * It's much more concise than the full CommandHooksConfig format.
+ *
+ * @example
+ * ```yaml
+ * hooks:
+ *   before:
+ *     - run: "echo 'Starting...'"
+ *   after:
+ *     - run: ["npm run typecheck", "npm run lint"]
+ *       inject: "Validation results:\n{stdout}"
+ * ```
+ */
+export interface AgentHooks {
+  /**
+   * Hooks that run before agent execution
+   * Optional; omit if no before hooks needed
+   */
+  before?: AgentHookEntry[]
+
+  /**
+   * Hooks that run after agent execution
+   * Optional; omit if no after hooks needed
+   */
+  after?: AgentHookEntry[]
+}
+
+/**
+ * Single hook entry in the simplified agent hooks format
+ *
+ * @example
+ * ```yaml
+ * - run: "npm run typecheck"
+ *   inject: "Typecheck results:\n{stdout}"
+ *   toast:
+ *     message: "Typecheck {exitCode, select, 0 {passed} other {failed}}"
+ *     variant: "success"
+ * ```
+ */
+export interface AgentHookEntry {
+  /**
+   * Shell command(s) to execute when this hook runs.
+   * - Single string: executed as-is
+   * - Array of strings: executed sequentially
+   *
+   * Required field - hook must have a run command.
+   */
+  run: string | string[]
+
+  /**
+   * Optional template for injecting hook results into the session.
+   * Supports the same placeholder substitution as ToolHook.inject.
+   *
+   * @example
+   * ```yaml
+   * inject: "Results:\n{stdout}"
+   * ```
+   */
+  inject?: string
+
+  /**
+   * Optional toast notification to display after the hook runs.
+   * Supports template placeholder substitution.
+   *
+   * @example
+   * ```yaml
+   * toast:
+   *   message: "Tests {exitCode, select, 0 {passed} other {failed}}"
+   *   variant: "success"
+   *   duration: 3000
+   * ```
+   */
+  toast?: {
+    /**
+     * Optional title for the toast notification.
+     * Supports template placeholder substitution.
+     */
+    title?: string
+
+    /**
+     * Required message for the toast notification.
+     * Supports template placeholder substitution.
+     */
+    message: string
+
+    /**
+     * Visual variant/style for the toast.
+     * - "info": informational message (default)
+     * - "success": success message
+     * - "warning": warning message
+     * - "error": error message
+     */
+    variant?: "info" | "success" | "warning" | "error"
+
+    /**
+     * Duration in milliseconds for which the toast should be displayed.
+     * If omitted, uses the default duration.
+     */
+    duration?: number
+  }
+}
+
+// ============================================================================
 // TOOL HOOKS
 // ============================================================================
 

@@ -1,9 +1,10 @@
 import type { Plugin } from "@opencode-ai/plugin"
 import type { Config, OpencodeClient } from "@opencode-ai/sdk"
-import type { HookExecutionContext, ToolHook, SessionHook } from "./types/hooks.js"
+import type { CommandHooksConfig, HookExecutionContext, ToolHook, SessionHook } from "./types/hooks.js"
 import { createLogger, setGlobalLogger, logger } from "./logging.js"
 import { executeHooks } from "./executor.js"
 import { loadGlobalConfig } from "./config/global.js"
+import { loadAgentConfig } from "./config/agent.js"
 import { mergeConfigs } from "./config/merge.js"
 
 // Export unified executor
@@ -271,27 +272,37 @@ const plugin: Plugin = async ({ client }) => {
             return
           }
 
-           try {
-             // Load config
-             const globalConfig = await loadGlobalConfig()
-             const markdownConfig = { tool: [], session: [] }
-             const { config: mergedConfig } = mergeConfigs(
-               globalConfig,
-               markdownConfig
-             )
+          try {
+            // Load global config
+            const globalConfig = await loadGlobalConfig()
 
-             // Filter tool hooks for after phase
-             const matchedHooks = filterToolHooks(mergedConfig.tool || [], {
-               phase: "after",
-               toolName,
-               callingAgent: agent,
-               slashCommand: normalizeString(event.properties?.slashCommand),
-               toolArgs: storedToolArgs,
-             })
+            // Load agent-specific config if this is a task tool with subagent_type
+            let agentConfig: CommandHooksConfig = { tool: [], session: [] }
+            if (toolName === "task" && storedToolArgs) {
+              const subagentType = normalizeString(storedToolArgs.subagent_type)
+              if (subagentType) {
+                logger.debug(`Detected task tool call with subagent_type: ${subagentType}`)
+                agentConfig = await loadAgentConfig(subagentType)
+              }
+            }
 
-            logger.debug(
-              `Matched ${matchedHooks.length} hook(s) for tool.result (after phase)`
+            const { config: mergedConfig } = mergeConfigs(
+              globalConfig,
+              agentConfig
             )
+
+            // Filter tool hooks for after phase
+            const matchedHooks = filterToolHooks(mergedConfig.tool || [], {
+              phase: "after",
+              toolName,
+              callingAgent: agent,
+              slashCommand: normalizeString(event.properties?.slashCommand),
+              toolArgs: storedToolArgs,
+            })
+
+           logger.debug(
+             `Matched ${matchedHooks.length} hook(s) for tool.result (after phase)`
+           )
 
             // Build execution context
             const context: HookExecutionContext = {
@@ -316,25 +327,35 @@ const plugin: Plugin = async ({ client }) => {
         }
       },
 
-      /**
-       * Tool execution before hook
-       * Runs before a tool is executed
-       */
-      "tool.execute.before": async (
-        input: { tool: string; sessionID: string; callID: string },
-        output: { args: Record<string, unknown> }
-      ) => {
-        logger.debug(
-          `Received tool.execute.before for tool: ${input.tool}`
-        )
+       /**
+        * Tool execution before hook
+        * Runs before a tool is executed
+        */
+       "tool.execute.before": async (
+         input: { tool: string; sessionID: string; callID: string },
+         output: { args: Record<string, unknown> }
+       ) => {
+         logger.debug(
+           `Received tool.execute.before for tool: ${input.tool}`
+         )
 
          try {
-           // Load config
+           // Load global config
            const globalConfig = await loadGlobalConfig()
-           const markdownConfig = { tool: [], session: [] }
+
+           // Load agent-specific config if this is a task tool with subagent_type
+           let agentConfig: CommandHooksConfig = { tool: [], session: [] }
+           if (input.tool === "task") {
+             const subagentType = normalizeString(output.args.subagent_type)
+             if (subagentType) {
+               logger.debug(`Detected task tool call with subagent_type: ${subagentType}`)
+               agentConfig = await loadAgentConfig(subagentType)
+             }
+           }
+
            const { config: mergedConfig } = mergeConfigs(
              globalConfig,
-             markdownConfig
+             agentConfig
            )
 
            // Filter tool hooks for before phase
@@ -350,57 +371,67 @@ const plugin: Plugin = async ({ client }) => {
             `Matched ${matchedHooks.length} hook(s) for tool.execute.before`
           )
 
-          // Build execution context
-          const context: HookExecutionContext = {
-            sessionId: input.sessionID,
-            agent: "unknown",
-            tool: input.tool,
-            callId: input.callID,
-            toolArgs: output.args,
-          }
+           // Build execution context
+           const context: HookExecutionContext = {
+             sessionId: input.sessionID,
+             agent: "unknown",
+             tool: input.tool,
+             callId: input.callID,
+             toolArgs: output.args,
+           }
 
-          storeToolArgs(input.callID, output.args)
+           storeToolArgs(input.callID, output.args)
 
-          // Execute hooks
-          await executeHooks(matchedHooks, context, client as OpencodeClient)
-        } catch (error) {
-          const errorMessage =
-            error instanceof Error ? error.message : String(error)
-          logger.error(
-            `Error handling tool.execute.before: ${errorMessage}`
-          )
-        }
-      },
+           // Execute hooks
+           await executeHooks(matchedHooks, context, client as OpencodeClient)
+         } catch (error) {
+           const errorMessage =
+             error instanceof Error ? error.message : String(error)
+           logger.error(
+             `Error handling tool.execute.before: ${errorMessage}`
+           )
+         }
+       },
 
-      /**
-       * Tool execution after hook
-       * Runs after a tool completes (only if output is present - sync tools)
-       */
-      "tool.execute.after": async (
-        input: { tool: string; sessionID: string; callID: string },
-        toolOutput?: { title: string; output: string; metadata: Record<string, unknown> }
-      ) => {
-        logger.debug(
-          `Received tool.execute.after for tool: ${input.tool}`
-        )
+       /**
+        * Tool execution after hook
+        * Runs after a tool completes (only if output is present - sync tools)
+        */
+       "tool.execute.after": async (
+         input: { tool: string; sessionID: string; callID: string },
+         toolOutput?: { title: string; output: string; metadata: Record<string, unknown> }
+       ) => {
+         logger.debug(
+           `Received tool.execute.after for tool: ${input.tool}`
+         )
 
-        // Only process if output is present (sync tools)
-        if (!toolOutput) {
-          logger.debug(
-            `Skipping tool.execute.after for ${input.tool}: no output (async tool)`
-          )
-          return
-        }
+         // Only process if output is present (sync tools)
+         if (!toolOutput) {
+           logger.debug(
+             `Skipping tool.execute.after for ${input.tool}: no output (async tool)`
+           )
+           return
+         }
 
-        const storedToolArgs = getToolArgs(input.callID)
+         const storedToolArgs = getToolArgs(input.callID)
 
          try {
-           // Load config
+           // Load global config
            const globalConfig = await loadGlobalConfig()
-           const markdownConfig = { tool: [], session: [] }
+
+           // Load agent-specific config if this is a task tool with subagent_type
+           let agentConfig: CommandHooksConfig = { tool: [], session: [] }
+           if (input.tool === "task" && storedToolArgs) {
+             const subagentType = normalizeString(storedToolArgs.subagent_type)
+             if (subagentType) {
+               logger.debug(`Detected task tool call with subagent_type: ${subagentType}`)
+               agentConfig = await loadAgentConfig(subagentType)
+             }
+           }
+
            const { config: mergedConfig } = mergeConfigs(
              globalConfig,
-             markdownConfig
+             agentConfig
            )
 
            // Filter tool hooks for after phase
@@ -416,25 +447,25 @@ const plugin: Plugin = async ({ client }) => {
             `Matched ${matchedHooks.length} hook(s) for tool.execute.after`
           )
 
-          // Build execution context
-          const context: HookExecutionContext = {
-            sessionId: input.sessionID,
-            agent: "unknown",
-            tool: input.tool,
-            callId: input.callID,
-            toolArgs: storedToolArgs,
-          }
+           // Build execution context
+           const context: HookExecutionContext = {
+             sessionId: input.sessionID,
+             agent: "unknown",
+             tool: input.tool,
+             callId: input.callID,
+             toolArgs: storedToolArgs,
+           }
 
-          // Execute hooks
-          await executeHooks(matchedHooks, context, client as OpencodeClient)
-        } catch (error) {
-          const errorMessage =
-            error instanceof Error ? error.message : String(error)
-          logger.error(
-            `Error handling tool.execute.after: ${errorMessage}`
-          )
-        }
-      },
+           // Execute hooks
+           await executeHooks(matchedHooks, context, client as OpencodeClient)
+         } catch (error) {
+           const errorMessage =
+             error instanceof Error ? error.message : String(error)
+           logger.error(
+             `Error handling tool.execute.after: ${errorMessage}`
+           )
+         }
+       },
     }
 
     logger.info(`Plugin returning hooks: ${Object.keys(hooks).join(", ")}`)
