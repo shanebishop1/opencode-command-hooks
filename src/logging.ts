@@ -31,11 +31,11 @@ export function createLogger(client: OpencodeClient) {
 
 export type Logger = ReturnType<typeof createLogger>
 
-// Internal global logger state
-let globalLogger: Logger | null = null
-
-// No-op logger for when no client is available
-const noopLogger: Logger = {
+/**
+ * Global logger instance.
+ * Set once during plugin initialization with the SDK client.
+ */
+let logger: Logger = {
   debug: () => {},
   info: () => {},
   error: () => {},
@@ -46,7 +46,7 @@ const noopLogger: Logger = {
  * Called once during plugin initialization with the SDK client.
  */
 export function setGlobalLogger(newLogger: Logger): void {
-  globalLogger = newLogger
+  logger = newLogger
 }
 
 /**
@@ -56,19 +56,4 @@ export function isDebugEnabled(): boolean {
   return process.env.OPENCODE_HOOKS_DEBUG === "1" || process.env.OPENCODE_HOOKS_DEBUG === "true"
 }
 
-/**
- * Proxy logger that always delegates to the current global logger.
- * This allows modules to import `logger` at load time, and it will
- * correctly use the real logger once it's initialized.
- */
-export const logger: Logger = {
-  get debug() {
-    return (globalLogger ?? noopLogger).debug
-  },
-  get info() {
-    return (globalLogger ?? noopLogger).info
-  },
-  get error() {
-    return (globalLogger ?? noopLogger).error
-  },
-} as Logger
+export { logger }

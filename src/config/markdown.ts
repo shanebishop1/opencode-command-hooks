@@ -11,12 +11,7 @@ import { isValidCommandHooksConfig } from "../schemas.js";
 import { load as parseYaml } from "js-yaml";
 import { logger } from "../logging.js";
 
-/**
- * In-memory cache for markdown configurations
- * Maps file paths to their parsed CommandHooksConfig to avoid repeated file reads.
- * Entries are cached indefinitely; clear manually if config files change.
- */
-const markdownConfigCache = new Map<string, CommandHooksConfig>();
+
 
 /**
  * Extract YAML frontmatter from markdown content
@@ -268,10 +263,6 @@ function extractAgentNameFromPath(filePath: string): string {
  * Reads a markdown file, extracts YAML frontmatter, parses it, and extracts
  * either the new simplified `hooks` format or the legacy `command_hooks` format.
  *
- * **Caching:** This function implements in-memory caching per file path to avoid
- * repeated file reads. The cache is checked first; if not found, the file is read
- * from disk and cached for subsequent calls.
- *
  * Error handling:
  * - If file doesn't exist: returns empty config (not an error)
  * - If no frontmatter found: returns empty config
@@ -289,151 +280,105 @@ function extractAgentNameFromPath(filePath: string): string {
  * ```
  */
 export async function loadMarkdownConfig(
-   filePath: string,
+    filePath: string,
 ): Promise<CommandHooksConfig> {
-   // Check cache first
-   if (markdownConfigCache.has(filePath)) {
-     const cached = markdownConfigCache.get(filePath)!;
-      logger.debug(`Returning cached markdown config from ${filePath}: ${cached.tool?.length ?? 0} tool hooks, ${cached.session?.length ?? 0} session hooks`);
-     return cached;
-   }
-
-   try {
+    try {
      // Try to read the file
      let content: string;
-     try {
-       const file = Bun.file(filePath);
-       if (!(await file.exists())) {
-          logger.debug(`Markdown file not found: ${filePath}`);
-         const emptyConfig = { tool: [], session: [] };
-         markdownConfigCache.set(filePath, emptyConfig);
-         return emptyConfig;
-       }
-       content = await file.text();
-     } catch (error) {
-       const message = error instanceof Error ? error.message : String(error);
-        logger.debug(
-          `Failed to read markdown file ${filePath}: ${message}`,
-        );
-       const emptyConfig = { tool: [], session: [] };
-       markdownConfigCache.set(filePath, emptyConfig);
-       return emptyConfig;
-     }
+      try {
+        const file = Bun.file(filePath);
+        if (!(await file.exists())) {
+           logger.debug(`Markdown file not found: ${filePath}`);
+          return { tool: [], session: [] };
+        }
+        content = await file.text();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+         logger.debug(
+           `Failed to read markdown file ${filePath}: ${message}`,
+         );
+        return { tool: [], session: [] };
+      }
 
-     // Extract YAML frontmatter
-     const yamlContent = extractYamlFrontmatter(content);
+      // Extract YAML frontmatter
+      const yamlContent = extractYamlFrontmatter(content);
 
-     if (!yamlContent) {
-        logger.debug(
-          `No YAML frontmatter found in ${filePath}`,
-        );
-       const emptyConfig = { tool: [], session: [] };
-       markdownConfigCache.set(filePath, emptyConfig);
-       return emptyConfig;
-     }
+      if (!yamlContent) {
+         logger.debug(
+           `No YAML frontmatter found in ${filePath}`,
+         );
+        return { tool: [], session: [] };
+      }
 
-     // Parse YAML
-     const parsed = parseYamlFrontmatter(yamlContent);
+      // Parse YAML
+      const parsed = parseYamlFrontmatter(yamlContent);
 
-     if (parsed === null) {
-        logger.info(
-          `Failed to parse YAML frontmatter in ${filePath}`,
-        );
-       const emptyConfig = { tool: [], session: [] };
-       markdownConfigCache.set(filePath, emptyConfig);
-       return emptyConfig;
-     }
+      if (parsed === null) {
+         logger.info(
+           `Failed to parse YAML frontmatter in ${filePath}`,
+         );
+        return { tool: [], session: [] };
+      }
 
-     // Extract command_hooks field
-     if (typeof parsed !== "object" || parsed === null) {
-        logger.debug(
-          `Parsed YAML is not an object in ${filePath}`,
-        );
-       const emptyConfig = { tool: [], session: [] };
-       markdownConfigCache.set(filePath, emptyConfig);
-       return emptyConfig;
-     }
+      // Extract command_hooks field
+      if (typeof parsed !== "object" || parsed === null) {
+         logger.debug(
+           `Parsed YAML is not an object in ${filePath}`,
+         );
+        return { tool: [], session: [] };
+      }
 
       const config = parsed as Record<string, unknown>;
       
-      // First, try to parse the new simplified hooks format
-      const agentName = extractAgentNameFromPath(filePath);
-      const agentHooks = parseAgentHooks(yamlContent);
-      
-      if (agentHooks) {
-        // Convert simplified format to internal format
-        const result = convertToCommandHooksConfig(agentHooks, agentName);
-        logger.debug(
-          `Loaded simplified hooks from ${filePath}: ${result.tool?.length ?? 0} tool hooks`,
-        );
-        
-        // Cache the result
-        markdownConfigCache.set(filePath, result);
-        return result;
-      }
-      
-      // Fall back to old command_hooks format
-      const commandHooks = config.command_hooks;
-
-      if (commandHooks === undefined) {
+       // First, try to parse the new simplified hooks format
+       const agentName = extractAgentNameFromPath(filePath);
+       const agentHooks = parseAgentHooks(yamlContent);
+       
+       if (agentHooks) {
+         // Convert simplified format to internal format
+         const result = convertToCommandHooksConfig(agentHooks, agentName);
          logger.debug(
-           `No hooks or command_hooks field in ${filePath}`,
+           `Loaded simplified hooks from ${filePath}: ${result.tool?.length ?? 0} tool hooks`,
          );
-        const emptyConfig = { tool: [], session: [] };
-        markdownConfigCache.set(filePath, emptyConfig);
-        return emptyConfig;
-      }
+         return result;
+       }
+      
+       // Fall back to old command_hooks format
+       const commandHooks = config.command_hooks;
 
-      // Validate command_hooks structure
-      if (!isValidCommandHooksConfig(commandHooks)) {
-         logger.info(
-           `command_hooks field is not a valid object in ${filePath} (expected { tool?: [], session?: [] })`,
-         );
-        const emptyConfig = { tool: [], session: [] };
-        markdownConfigCache.set(filePath, emptyConfig);
-        return emptyConfig;
-      }
+       if (commandHooks === undefined) {
+          logger.debug(
+            `No hooks or command_hooks field in ${filePath}`,
+          );
+         return { tool: [], session: [] };
+       }
 
-      // Return with defaults for missing arrays
-      const result: CommandHooksConfig = {
-        tool: commandHooks.tool ?? [],
-        session: commandHooks.session ?? [],
-      };
+       // Validate command_hooks structure
+       if (!isValidCommandHooksConfig(commandHooks)) {
+          logger.info(
+            `command_hooks field is not a valid object in ${filePath} (expected { tool?: [], session?: [] })`,
+          );
+         return { tool: [], session: [] };
+       }
 
-       logger.debug(
-         `Loaded command_hooks from ${filePath}: ${result.tool?.length ?? 0} tool hooks, ${result.session?.length ?? 0} session hooks`,
+       // Return with defaults for missing arrays
+       const result: CommandHooksConfig = {
+         tool: commandHooks.tool ?? [],
+         session: commandHooks.session ?? [],
+       };
+
+        logger.debug(
+          `Loaded command_hooks from ${filePath}: ${result.tool?.length ?? 0} tool hooks, ${result.session?.length ?? 0} session hooks`,
+        );
+
+      return result;
+    } catch (error) {
+      // Catch-all for unexpected errors
+      const message = error instanceof Error ? error.message : String(error);
+       logger.info(
+         `Unexpected error loading markdown config from ${filePath}: ${message}`,
        );
-
-     // Cache the result
-     markdownConfigCache.set(filePath, result);
-     return result;
-   } catch (error) {
-     // Catch-all for unexpected errors
-     const message = error instanceof Error ? error.message : String(error);
-      logger.info(
-        `Unexpected error loading markdown config from ${filePath}: ${message}`,
-      );
-     const emptyConfig = { tool: [], session: [] };
-     markdownConfigCache.set(filePath, emptyConfig);
-     return emptyConfig;
-   }
+      return { tool: [], session: [] };
+    }
 }
 
-/**
- * Clear the markdown config cache for a specific file
- *
- * Forces the next call to loadMarkdownConfig() for this file to reload from disk.
- * Useful for testing or when config files may have changed.
- *
- * @param filePath - Path to clear from cache, or undefined to clear all
- * @internal For testing purposes
- */
-export function clearMarkdownConfigCache(filePath?: string): void {
-   if (filePath) {
-     logger.debug(`Clearing markdown config cache for ${filePath}`);
-     markdownConfigCache.delete(filePath);
-   } else {
-     logger.debug("Clearing all markdown config cache");
-     markdownConfigCache.clear();
-   }
-}

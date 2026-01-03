@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { resolveAgentPath, loadAgentConfig } from "../src/config/agent";
-import { clearMarkdownConfigCache } from "../src/config/markdown";
 import { writeFile, rm, mkdir } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -15,9 +14,6 @@ describe("Agent Configuration", () => {
     await mkdir(join(testAgentDir, ".opencode", "agent"), { recursive: true });
     await mkdir(join(testProjectDir, ".opencode", "agent"), { recursive: true });
     await mkdir(join(process.env.HOME || "", ".config", "opencode", "agent"), { recursive: true });
-
-    // Clear any existing cache
-    clearMarkdownConfigCache();
   });
 
   afterEach(async () => {
@@ -28,9 +24,6 @@ describe("Agent Configuration", () => {
     } catch {
       // Ignore cleanup errors
     }
-
-    // Clear cache
-    clearMarkdownConfigCache();
   });
 
   describe("resolveAgentPath", () => {
