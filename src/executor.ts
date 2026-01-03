@@ -129,20 +129,27 @@ async function injectMessage(
  * @param hook - The tool hook to execute
  * @param context - Execution context (tool name, session ID, agent, etc.)
  * @param client - OpenCode SDK client for message injection
+ * @param truncationLimit - Optional truncation limit for command output
  * @returns Promise that resolves when hook execution is complete
  */
 async function executeToolHook(
    hook: ToolHook,
    context: HookExecutionContext,
-   client: OpencodeClient
+   client: OpencodeClient,
+   truncationLimit?: number
 ): Promise<void> {
      logger.debug(
-       `Executing tool hook "${hook.id}" for tool "${context.tool}"`
+       `Executing tool hook "${hook.id}" for tool "${context.tool}", truncationLimit: ${truncationLimit}`
      )
 
-     try {
+      try {
        // Execute the hook's commands
-       const results = await executeCommands(hook.run, hook.id)
+       if (truncationLimit !== undefined) {
+         logger.debug(`Executing with truncateOutput: ${truncationLimit}`)
+       } else {
+         logger.debug(`Executing with default truncation (30000)`)
+       }
+       const results = await executeCommands(hook.run, hook.id, truncationLimit !== undefined ? { truncateOutput: truncationLimit } : undefined)
 
        logger.debug(
          `Hook "${hook.id}" executed ${results.length} command(s)`
@@ -230,20 +237,22 @@ async function executeToolHook(
  * @param hook - The session hook to execute
  * @param context - Execution context (session ID, agent, etc.)
  * @param client - OpenCode SDK client for message injection
+ * @param truncationLimit - Optional truncation limit for command output
  * @returns Promise that resolves when hook execution is complete
  */
 async function executeSessionHook(
    hook: SessionHook,
    context: HookExecutionContext,
-   client: OpencodeClient
+   client: OpencodeClient,
+   truncationLimit?: number
 ): Promise<void> {
      logger.debug(
-       `Executing session hook "${hook.id}"`
+       `Executing session hook "${hook.id}", truncationLimit: ${truncationLimit}`
      )
 
     try {
       // Execute the hook's commands
-      const results = await executeCommands(hook.run, hook.id)
+      const results = await executeCommands(hook.run, hook.id, truncationLimit !== undefined ? { truncateOutput: truncationLimit } : undefined)
 
        logger.debug(
          `Hook "${hook.id}" executed ${results.length} command(s)`
@@ -344,6 +353,7 @@ function isToolHook(hook: ToolHook | SessionHook): hook is ToolHook {
  * @param hooks - Array of hooks to execute (can be tool or session hooks)
  * @param context - Execution context with session ID, agent, tool name, etc.
  * @param client - OpenCode SDK client for message injection
+ * @param truncationLimit - Optional truncation limit for command output (overrides default 30,000)
  * @returns Promise that resolves when all hooks are processed
  *
  * @example
@@ -367,21 +377,22 @@ function isToolHook(hook: ToolHook | SessionHook): hook is ToolHook {
 export async function executeHooks(
    hooks: (ToolHook | SessionHook)[],
    context: HookExecutionContext,
-   client: OpencodeClient
+   client: OpencodeClient,
+   truncationLimit?: number
 ): Promise<void> {
-    try {
-       logger.debug(
-         `executeHooks called with ${hooks.length} hook(s) for session "${context.sessionId}"`
-       )
+     try {
+        logger.debug(
+          `executeHooks called with ${hooks.length} hook(s) for session "${context.sessionId}", truncationLimit: ${truncationLimit}`
+        )
 
-      // Execute each hook
-      for (const hook of hooks) {
-        try {
-          if (isToolHook(hook)) {
-            await executeToolHook(hook, context, client)
-          } else {
-            await executeSessionHook(hook, context, client)
-          }
+       // Execute each hook
+       for (const hook of hooks) {
+         try {
+           if (isToolHook(hook)) {
+             await executeToolHook(hook, context, client, truncationLimit)
+           } else {
+             await executeSessionHook(hook, context, client, truncationLimit)
+           }
         } catch (error) {
           // Catch errors from individual hook execution and continue
           // (errors are already logged and injected by the hook execution functions)

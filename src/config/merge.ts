@@ -219,14 +219,16 @@ export function mergeConfigs(
     )
 
     // Build merged config
-    const mergedConfig: CommandHooksConfig = {
-      tool: mergedToolHooks.length > 0 ? mergedToolHooks : [],
-      session: mergedSessionHooks.length > 0 ? mergedSessionHooks : [],
-    }
+     // Preserve truncationLimit from global config (markdown cannot override this)
+     const mergedConfig: CommandHooksConfig = {
+       truncationLimit: global.truncationLimit,
+       tool: mergedToolHooks.length > 0 ? mergedToolHooks : [],
+       session: mergedSessionHooks.length > 0 ? mergedSessionHooks : [],
+     }
 
-     logger.debug(
-       `Merged configs: ${mergedToolHooks.length} tool hooks, ${mergedSessionHooks.length} session hooks, ${errors.length} errors`,
-     )
+      logger.debug(
+        `Merged configs: ${mergedToolHooks.length} tool hooks, ${mergedSessionHooks.length} session hooks, truncationLimit: ${mergedConfig.truncationLimit}, ${errors.length} errors`,
+      )
 
-    return { config: mergedConfig, errors }
+     return { config: mergedConfig, errors }
 }

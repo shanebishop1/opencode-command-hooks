@@ -32,13 +32,7 @@ function truncateText(text: string | undefined, limit: number): string {
   if (text.length <= limit) return text
   
   const truncated = text.slice(0, limit)
-  const metadata = [
-    "",
-    "",
-    "<bash_metadata>",
-    `bash tool truncated output as it exceeded ${limit} char limit`,
-    "</bash_metadata>"
-  ].join("\n")
+  const metadata = `\n\n[Output truncated: exceeded ${limit} character limit]`
   
   return truncated + metadata
 }
@@ -54,13 +48,16 @@ function truncateText(text: string | undefined, limit: number): string {
  * ```typescript
  * const result = await executeCommand("pnpm test")
  * console.log(result.exitCode, result.stdout)
+ * 
+ * // With custom truncation limit
+ * const result = await executeCommand("pnpm test", { truncateOutput: 5000 })
  * ```
  */
 export async function executeCommand(
-  command: string,
-  options?: { truncateOutput?: number }
+   command: string,
+   options?: { truncateOutput?: number }
 ): Promise<HookExecutionResult> {
-  const truncateLimit = options?.truncateOutput ?? DEFAULT_TRUNCATE_LIMIT
+   const truncateLimit = options?.truncateOutput ?? DEFAULT_TRUNCATE_LIMIT
   const hookId = "command" // Will be set by caller
 
     if (isDebugEnabled()) {

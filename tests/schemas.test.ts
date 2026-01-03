@@ -352,26 +352,142 @@ describe("Zod Schemas", () => {
        expect(result).toBeNull();
      });
 
-     it("should allow toast configuration on session hook", () => {
-       const hook = {
-         id: "session-hook-with-toast",
-         when: { event: "session.start" },
-         run: "git status",
-         toast: {
-           title: "Session Started",
-           message: "Agent {agent} is ready",
-           variant: "info",
-           duration: 2000,
-         },
-       };
+      it("should allow toast configuration on session hook", () => {
+        const hook = {
+          id: "session-hook-with-toast",
+          when: { event: "session.start" },
+          run: "git status",
+          toast: {
+            title: "Session Started",
+            message: "Agent {agent} is ready",
+            variant: "info",
+            duration: 2000,
+          },
+        };
 
-       const result = parseSessionHook(hook);
-       expect(result).not.toBeNull();
-       expect(result?.toast).not.toBeUndefined();
-       expect(result?.toast?.title).toBe("Session Started");
-       expect(result?.toast?.message).toBe("Agent {agent} is ready");
-       expect(result?.toast?.variant).toBe("info");
-       expect(result?.toast?.duration).toBe(2000);
-     });
-   });
+        const result = parseSessionHook(hook);
+        expect(result).not.toBeNull();
+        expect(result?.toast).not.toBeUndefined();
+        expect(result?.toast?.title).toBe("Session Started");
+        expect(result?.toast?.message).toBe("Agent {agent} is ready");
+        expect(result?.toast?.variant).toBe("info");
+        expect(result?.toast?.duration).toBe(2000);
+      });
+    });
+
+    describe("truncationLimit configuration", () => {
+      it("should parse valid truncationLimit in config", () => {
+        const config = {
+          truncationLimit: 5000,
+          tool: [
+            {
+              id: "test-hook",
+              when: { phase: "after" },
+              run: "echo test",
+            },
+          ],
+        };
+
+        const result = parseConfig(config);
+        expect(result.truncationLimit).toBe(5000);
+      });
+
+      it("should accept positive integer truncationLimit", () => {
+        const config = {
+          truncationLimit: 10000,
+        };
+
+        const result = parseConfig(config);
+        expect(result.truncationLimit).toBe(10000);
+      });
+
+      it("should accept small truncationLimit values", () => {
+        const config = {
+          truncationLimit: 1,
+        };
+
+        const result = parseConfig(config);
+        expect(result.truncationLimit).toBe(1);
+      });
+
+      it("should accept large truncationLimit values", () => {
+        const config = {
+          truncationLimit: 1000000,
+        };
+
+        const result = parseConfig(config);
+        expect(result.truncationLimit).toBe(1000000);
+      });
+
+      it("should reject zero truncationLimit", () => {
+        const config = {
+          truncationLimit: 0,
+        };
+
+        const result = parseConfig(config);
+        // Should return safe defaults when validation fails
+        expect(result.truncationLimit).toBeUndefined();
+      });
+
+      it("should reject negative truncationLimit", () => {
+        const config = {
+          truncationLimit: -1000,
+        };
+
+        const result = parseConfig(config);
+        // Should return safe defaults when validation fails
+        expect(result.truncationLimit).toBeUndefined();
+      });
+
+      it("should reject non-integer truncationLimit", () => {
+        const config = {
+          truncationLimit: 5000.5,
+        };
+
+        const result = parseConfig(config);
+        // Should return safe defaults when validation fails
+        expect(result.truncationLimit).toBeUndefined();
+      });
+
+      it("should work alongside other config options", () => {
+        const config = {
+          truncationLimit: 2000,
+          tool: [
+            {
+              id: "hook1",
+              when: { phase: "before", tool: "task" },
+              run: "echo before",
+            },
+          ],
+          session: [
+            {
+              id: "session1",
+              when: { event: "session.start" },
+              run: "git status",
+            },
+          ],
+        };
+
+        const result = parseConfig(config);
+        expect(result.truncationLimit).toBe(2000);
+        expect(result.tool).toHaveLength(1);
+        expect(result.session).toHaveLength(1);
+      });
+
+      it("should be optional in config", () => {
+        const config = {
+          tool: [
+            {
+              id: "test-hook",
+              when: { phase: "after" },
+              run: "echo test",
+            },
+          ],
+        };
+
+        const result = parseConfig(config);
+        expect(result.truncationLimit).toBeUndefined();
+        expect(result.tool).toHaveLength(1);
+      });
+    });
 });

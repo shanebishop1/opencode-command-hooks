@@ -219,17 +219,17 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
              })
 
             logger.debug(
-              `Matched ${matchedHooks.length} hook(s) for session.idle`
+              `Matched ${matchedHooks.length} hook(s) for session.idle, config truncationLimit: ${mergedConfig.truncationLimit}`
             )
 
             // Build execution context
-            const context: HookExecutionContext = {
-              sessionId,
-              agent: agent || "unknown",
-            }
+             const context: HookExecutionContext = {
+               sessionId,
+               agent: agent || "unknown",
+             }
 
-            // Execute hooks
-            await executeHooks(matchedHooks, context, client as OpencodeClient)
+             // Execute hooks with truncationLimit from config
+             await executeHooks(matchedHooks, context, client as OpencodeClient, mergedConfig.truncationLimit)
           } catch (error) {
             const errorMessage =
               error instanceof Error ? error.message : String(error)
@@ -295,19 +295,19 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
               `Matched ${matchedHooks.length} hook(s) for tool.result (after phase)`
             )
 
-             // Build execution context
-             const context: HookExecutionContext = {
-               sessionId,
-               agent: agent || "unknown",
-               tool: toolName,
-               callId,
-               toolArgs: storedToolArgs,
-             }
+              // Build execution context
+              const context: HookExecutionContext = {
+                sessionId,
+                agent: agent || "unknown",
+                tool: toolName,
+                callId,
+                toolArgs: storedToolArgs,
+              }
 
-             // Execute hooks
-             await executeHooks(matchedHooks, context, client as OpencodeClient)
+              // Execute hooks with truncationLimit from config
+              await executeHooks(matchedHooks, context, client as OpencodeClient, mergedConfig.truncationLimit)
 
-             deleteToolArgs(callId)
+              deleteToolArgs(callId)
            } catch (error) {
              const errorMessage =
                error instanceof Error ? error.message : String(error)
@@ -377,16 +377,16 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
              toolArgs: output.args,
            }
 
-           storeToolArgs(input.callID, output.args)
+            storeToolArgs(input.callID, output.args)
 
-           // Execute hooks
-           await executeHooks(matchedHooks, context, client as OpencodeClient)
-         } catch (error) {
-           const errorMessage =
-             error instanceof Error ? error.message : String(error)
-           logger.error(
-             `Error handling tool.execute.before: ${errorMessage}`
-           )
+            // Execute hooks with truncationLimit from config
+            await executeHooks(matchedHooks, context, client as OpencodeClient, mergedConfig.truncationLimit)
+          } catch (error) {
+            const errorMessage =
+              error instanceof Error ? error.message : String(error)
+            logger.error(
+              `Error handling tool.execute.before: ${errorMessage}`
+            )
          }
        },
 
@@ -447,23 +447,23 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
              `Matched ${matchedHooks.length} hook(s) for tool.execute.after`
            )
 
-            // Build execution context
-            const context: HookExecutionContext = {
-              sessionId: input.sessionID,
-              agent: subagentType || "unknown",
-              tool: input.tool,
-              callId: input.callID,
-              toolArgs: storedToolArgs,
-            }
+             // Build execution context
+             const context: HookExecutionContext = {
+               sessionId: input.sessionID,
+               agent: subagentType || "unknown",
+               tool: input.tool,
+               callId: input.callID,
+               toolArgs: storedToolArgs,
+             }
 
-            // Execute hooks
-            await executeHooks(matchedHooks, context, client as OpencodeClient)
-         } catch (error) {
-           const errorMessage =
-             error instanceof Error ? error.message : String(error)
-           logger.error(
-             `Error handling tool.execute.after: ${errorMessage}`
-           )
+             // Execute hooks with truncationLimit from config
+             await executeHooks(matchedHooks, context, client as OpencodeClient, mergedConfig.truncationLimit)
+          } catch (error) {
+            const errorMessage =
+              error instanceof Error ? error.message : String(error)
+            logger.error(
+              `Error handling tool.execute.after: ${errorMessage}`
+            )
          }
        },
     }

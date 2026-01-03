@@ -1,4 +1,5 @@
 {
+  "truncationLimit": 300,
   "tool": [
     {
       "id": "search-complete",

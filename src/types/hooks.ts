@@ -450,6 +450,7 @@ export interface SessionHookWhen {
  * ```json
  * {
  *   "command_hooks": {
+ *     "truncationLimit": 5000,
  *     "tool": [...],
  *     "session": [...]
  *   }
@@ -460,12 +461,25 @@ export interface SessionHookWhen {
  * ```yaml
  * ---
  * command_hooks:
+ *   truncationLimit: 5000
  *   tool: [...]
  *   session: [...]
  * ---
  * ```
  */
 export interface CommandHooksConfig {
+  /**
+   * Optional truncation limit for command output in characters.
+   * If omitted, defaults to 30,000 characters (matching OpenCode's bash tool).
+   * Set to a custom value to limit output captured from hook commands.
+   * 
+   * @example
+   * ```json
+   * { "truncationLimit": 5000 }
+   * ```
+   */
+  truncationLimit?: number
+
   /**
    * Array of tool execution hooks.
    * Hooks run before or after tool calls based on matching conditions.
