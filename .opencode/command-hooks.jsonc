@@ -108,4 +108,28 @@
       }
     }
   ]
+  "session": [
+    {
+      "id": "session-start",
+      "when": {
+        "event": "session.start"
+      },
+      "toast": {
+        "title": "Session Started",
+        "message": "A new session has started",
+        "variant": "info"
+      }
+    },
+    {
+      "id": "session-idle",
+      "when": {
+        "event": "session.idle"
+      },
+      "toast": {
+        "title": "Session Idle",
+        "message": "Session is now idle",
+        "variant": "success"
+      }
+    }
+  ]
 }
