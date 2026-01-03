@@ -29,7 +29,7 @@ import { logger } from "./logging.js"
 /**
  * Check if a value matches a pattern (string, array of strings, or wildcard)
  */
-export function matches(pattern: string | string[] | undefined, value: string | undefined): boolean {
+export const matches = (pattern: string | string[] | undefined, value: string | undefined): boolean => {
   if (!pattern) return true // Omitted pattern matches all
   if (pattern === "*") return true // Wildcard matches all
   if (Array.isArray(pattern)) return value ? pattern.includes(value) : false
@@ -39,10 +39,10 @@ export function matches(pattern: string | string[] | undefined, value: string | 
 /**
  * Filter session hooks that match the given criteria
  */
-export function filterSessionHooks(
+export const filterSessionHooks = (
   hooks: SessionHook[],
   criteria: { event: string; agent: string | undefined }
-): SessionHook[] {
+): SessionHook[] => {
   return hooks.filter((hook) => {
     // Normalize session.start to session.created
     let normalizedEvent = hook.when.event
@@ -58,7 +58,7 @@ export function filterSessionHooks(
 /**
  * Filter tool hooks that match the given criteria
  */
-export function filterToolHooks(
+export const filterToolHooks = (
   hooks: ToolHook[],
   criteria: {
     phase: "before" | "after"
@@ -67,7 +67,7 @@ export function filterToolHooks(
     slashCommand: string | undefined
     toolArgs?: Record<string, unknown>
   }
-): ToolHook[] {
+): ToolHook[] => {
   return hooks.filter((hook) => {
     if (hook.when.phase !== criteria.phase) return false
     if (!matches(hook.when.tool, criteria.toolName)) return false
@@ -110,7 +110,7 @@ export function filterToolHooks(
  * @param error - Error message or object
  * @returns Formatted error message
  */
-function formatErrorMessage(hookId: string, error: unknown): string {
+const formatErrorMessage = (hookId: string, error: unknown): string => {
     const errorText =
       error instanceof Error ? error.message : String(error || "Unknown error")
     return `[opencode-command-hooks] Hook "${hookId}" failed: ${errorText}`
@@ -129,13 +129,13 @@ function formatErrorMessage(hookId: string, error: unknown): string {
  * @param duration - Optional duration in milliseconds
  * @returns Promise that resolves when toast is shown
  */
-async function showToast(
+const showToast = async (
     client: OpencodeClient,
     title: string | undefined,
     message: string,
     variant: "info" | "success" | "warning" | "error" = "info",
     duration?: number
-): Promise<void> {
+): Promise<void> => {
     try {
         const finalTitle = title || "OpenCode Command Hook"
         logger.debug(`Showing toast: title="${finalTitle}", message="${message.substring(0, 50)}...", variant="${variant}", duration=${duration}`)
@@ -169,11 +169,11 @@ async function showToast(
  * @param message - Message text to inject
  * @returns Promise that resolves when message is injected
  */
-async function injectMessage(
+const injectMessage = async (
    client: OpencodeClient,
    sessionId: string,
    message: string
-): Promise<void> {
+): Promise<void> => {
     try {
        logger.debug(`Injecting message into session ${sessionId}`)
 
@@ -207,12 +207,12 @@ async function injectMessage(
  * @param truncationLimit - Optional truncation limit for command output
  * @returns Promise that resolves when hook execution is complete
  */
-async function executeHook(
+const executeHook = async (
    hook: ToolHook | SessionHook,
    context: HookExecutionContext,
    client: OpencodeClient,
    truncationLimit?: number
-): Promise<void> {
+): Promise<void> => {
    const hookType = isToolHook(hook) ? "tool" : "session"
    logger.debug(
      `Executing ${hookType} hook "${hook.id}"${context.tool ? ` for tool "${context.tool}"` : ""}, truncationLimit: ${truncationLimit}`
@@ -298,8 +298,8 @@ async function executeHook(
  * @param hook - Hook to check
  * @returns true if the hook is a ToolHook
  */
-function isToolHook(hook: ToolHook | SessionHook): hook is ToolHook {
-  return "phase" in hook.when
+const isToolHook = (hook: ToolHook | SessionHook): hook is ToolHook => {
+   return "phase" in hook.when
 }
 
 /**

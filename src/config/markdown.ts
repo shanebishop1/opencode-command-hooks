@@ -34,7 +34,7 @@ import { logger } from "../logging.js";
  * ```
  * Returns the YAML between the delimiters
  */
-export function extractYamlFrontmatter(content: string): string | null {
+export const extractYamlFrontmatter = (content: string): string | null => {
   // Check if content starts with ---
   if (!content.startsWith("---")) {
     return null;
@@ -64,7 +64,7 @@ export function extractYamlFrontmatter(content: string): string | null {
  * @param yamlContent - Raw YAML string to parse
  * @returns Parsed YAML object, or null if parsing failed
  */
-export function parseYamlFrontmatter(content: string): unknown {
+export const parseYamlFrontmatter = (content: string): unknown => {
   try {
     const parsed = parseYaml(content);
     return parsed === undefined ? null : parsed;
@@ -95,9 +95,9 @@ export function parseYamlFrontmatter(content: string): unknown {
  *       inject: "Results:\n{stdout}"
  * ```
  */
-export function parseAgentHooks(
+export const parseAgentHooks = (
   yamlContent: string,
-): AgentHooks | null {
+): AgentHooks | null => {
   const parsed = parseYamlFrontmatter(yamlContent);
 
    if (parsed === null || typeof parsed !== "object") {
@@ -164,10 +164,10 @@ export function parseAgentHooks(
  * // Results in: { tool: [{ id: "engineer-after-0", when: {...}, run: ..., inject: ... }] }
  * ```
  */
-export function convertToCommandHooksConfig(
+export const convertToCommandHooksConfig = (
   agentHooks: AgentHooks,
   agentName: string,
-): CommandHooksConfig {
+): CommandHooksConfig => {
   const toolHooks: ToolHook[] = [];
 
   // Convert before hooks
@@ -209,12 +209,12 @@ export function convertToCommandHooksConfig(
 /**
  * Convert a single AgentHookEntry to ToolHook format
  */
-function convertAgentHookEntryToToolHook(
+const convertAgentHookEntryToToolHook = (
   entry: AgentHookEntry,
   agentName: string,
   phase: "before" | "after",
   index: number,
-): ToolHook | null {
+): ToolHook | null => {
   if (!entry.run) {
     logger.debug("Hook entry missing required 'run' field");
     return null;
@@ -252,7 +252,7 @@ function convertAgentHookEntryToToolHook(
  * // Returns: "engineer"
  * ```
  */
-function extractAgentNameFromPath(filePath: string): string {
+const extractAgentNameFromPath = (filePath: string): string => {
   const fileName = filePath.split("/").pop() || "";
   return fileName.replace(/\.md$/, "");
 }
@@ -279,9 +279,9 @@ function extractAgentNameFromPath(filePath: string): string {
  * // Returns { tool: [...], session: [...] } or { tool: [], session: [] }
  * ```
  */
-export async function loadMarkdownConfig(
+export const loadMarkdownConfig = async (
     filePath: string,
-): Promise<CommandHooksConfig> {
+): Promise<CommandHooksConfig> => {
     try {
      // Try to read the file
      let content: string;

@@ -19,7 +19,7 @@ export type GlobalConfigResult = {
  * Strip comments from JSONC content
  * Handles both line comments and block comments
  */
-function stripJsoncComments(content: string): string {
+const stripJsoncComments = (content: string): string => {
   let result = "";
   let i = 0;
   let inString = false;
@@ -95,7 +95,7 @@ function stripJsoncComments(content: string): string {
 /**
  * Parse JSON content, handling parse errors gracefully
  */
-function parseJson(content: string): unknown {
+const parseJson = (content: string): unknown => {
   try {
     return JSON.parse(content);
   } catch (error) {
@@ -110,7 +110,7 @@ function parseJson(content: string): unknown {
  * Find command hooks config file by walking up directory tree
  * Looks for .opencode/command-hooks.jsonc
  */
-async function findConfigFile(startDir: string): Promise<string | null> {
+const findConfigFile = async (startDir: string): Promise<string | null> => {
    let currentDir = startDir;
 
    // Limit search depth to avoid infinite loops
@@ -162,7 +162,7 @@ async function findConfigFile(startDir: string): Promise<string | null> {
  *
  * @returns Promise resolving to GlobalConfigResult
  */
-export async function loadGlobalConfig(): Promise<GlobalConfigResult> {
+export const loadGlobalConfig = async (): Promise<GlobalConfigResult> => {
    let configPath: string | null = null;
    try {
      // Find config file

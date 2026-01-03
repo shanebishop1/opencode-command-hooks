@@ -26,7 +26,7 @@ import { logger, isDebugEnabled } from "../logging.js"
  * @param value - The value to replace with (undefined becomes empty string)
  * @returns The template with the placeholder replaced
  */
-function replacePlaceholder(template: string, placeholder: string, value: unknown): string {
+const replacePlaceholder = (template: string, placeholder: string, value: unknown): string => {
   // Convert value to string, handling undefined/null
   const stringValue = value === undefined || value === null ? "" : String(value)
 
@@ -71,7 +71,7 @@ function replacePlaceholder(template: string, placeholder: string, value: unknow
  * // Result: "Hook tests-after-task for task completed: exit 0\n```\n✓ All tests passed\n```"
  * ```
  */
-export function interpolateTemplate(template: string | undefined, context: TemplateContext): string {
+export const interpolateTemplate = (template: string | undefined, context: TemplateContext): string => {
   // Handle null/undefined template
   if (!template) {
     return ""

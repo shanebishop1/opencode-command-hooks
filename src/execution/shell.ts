@@ -20,7 +20,7 @@ const DEFAULT_TRUNCATE_LIMIT = 30_000
 /**
  * Truncate text to a maximum length, matching OpenCode's bash tool behavior
  */
-function truncateText(text: string | undefined, limit: number): string {
+const truncateText = (text: string | undefined, limit: number): string => {
   if (!text) return ""
   if (text.length <= limit) return text
   
@@ -174,9 +174,9 @@ export async function executeCommands(
  * @param command - Shell command to execute
  * @returns Object with stdout, stderr, and exitCode
  */
-async function executeShellCommand(
+const executeShellCommand = async (
   command: string
-): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
    try {
      // Use Bun's $ template literal to execute the command
      // The nothrow() method prevents throwing on non-zero exit codes
