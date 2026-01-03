@@ -1,18 +1,12 @@
 import type { Plugin } from "@opencode-ai/plugin"
 import type { Config, OpencodeClient } from "@opencode-ai/sdk"
-import type { CommandHooksConfig, HookExecutionContext, ToolHook, SessionHook } from "./types/hooks.js"
+import type { CommandHooksConfig, HookExecutionContext } from "./types/hooks.js"
 import { createLogger, setGlobalLogger, logger } from "./logging.js"
-import { executeHooks } from "./executor.js"
+import { executeHooks, filterSessionHooks, filterToolHooks } from "./executor.js"
+import { normalizeString } from "./utils.js"
 import { loadGlobalConfig } from "./config/global.js"
 import { loadAgentConfig } from "./config/agent.js"
 import { mergeConfigs } from "./config/merge.js"
-
-/**
- * Helper to extract string values from event properties
- */
-function normalizeString(value: unknown): string | undefined {
-  return typeof value === "string" ? value : undefined
-}
 
 async function notifyConfigError(
   configError: string | null,
@@ -58,79 +52,7 @@ function deleteToolArgs(callId: string | undefined): void {
   toolCallArgsCache.delete(callId)
 }
 
-/**
- * Check if a value matches a pattern (string, array of strings, or wildcard)
- */
-function matches(pattern: string | string[] | undefined, value: string | undefined): boolean {
-  if (!pattern) return true // Omitted pattern matches all
-  if (pattern === "*") return true // Wildcard matches all
-  if (Array.isArray(pattern)) return value ? pattern.includes(value) : false
-  return value === pattern
-}
 
-/**
- * Filter session hooks that match the given criteria
- */
-function filterSessionHooks(
-  hooks: SessionHook[],
-  criteria: { event: string; agent: string | undefined }
-): SessionHook[] {
-  return hooks.filter((hook) => {
-    // Normalize session.start to session.created
-    let normalizedEvent = hook.when.event
-    if (normalizedEvent === "session.start") {
-      normalizedEvent = "session.created"
-    }
-    
-    if (normalizedEvent !== criteria.event) return false
-    return matches(hook.when.agent, criteria.agent)
-  })
-}
-
-/**
- * Filter tool hooks that match the given criteria
- */
-function filterToolHooks(
-  hooks: ToolHook[],
-  criteria: {
-    phase: "before" | "after"
-    toolName: string | undefined
-    callingAgent: string | undefined
-    slashCommand: string | undefined
-    toolArgs?: Record<string, unknown>
-  }
-): ToolHook[] {
-  return hooks.filter((hook) => {
-    if (hook.when.phase !== criteria.phase) return false
-    if (!matches(hook.when.tool, criteria.toolName)) return false
-    if (!matches(hook.when.callingAgent, criteria.callingAgent)) return false
-    if (!matches(hook.when.slashCommand, criteria.slashCommand)) return false
-    
-    // Match tool args if specified in the hook
-    if (hook.when.toolArgs) {
-      // If hook specifies toolArgs but we don't have them, we can't match
-      // (this happens for async tools in tool.result event)
-      if (!criteria.toolArgs) {
-        logger.debug(
-          `Hook ${hook.id} requires toolArgs but none were provided for tool ${criteria.toolName}`
-        )
-        return false
-      }
-
-      for (const [key, expectedValue] of Object.entries(hook.when.toolArgs)) {
-        const actualValue = criteria.toolArgs[key]
-        if (!matches(expectedValue, actualValue as string | undefined)) {
-          logger.debug(
-            `Hook ${hook.id} toolArgs mismatch for ${key}: expected ${JSON.stringify(expectedValue)}, actual ${JSON.stringify(actualValue)}`
-          )
-          return false
-        }
-      }
-    }
-    
-    return true
-  })
-}
 
 /**
  * Handle a session lifecycle event (session.created or session.idle)
