@@ -16,14 +16,7 @@
  */
 
 import type { TemplateContext } from "../types/hooks.js"
-import { logger } from "../logging.js"
-
-/**
- * Check if debug logging is enabled
- */
-function isDebugEnabled(): boolean {
-  return process.env.OPENCODE_HOOKS_DEBUG === "1" || process.env.OPENCODE_HOOKS_DEBUG === "true"
-}
+import { logger, isDebugEnabled } from "../logging.js"
 
 /**
  * Replace a placeholder in a template string with a value

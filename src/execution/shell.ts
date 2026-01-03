@@ -13,16 +13,9 @@
  */
 
 import type { HookExecutionResult } from "../types/hooks.js"
-import { logger } from "../logging.js"
+import { logger, isDebugEnabled } from "../logging.js"
 
 const DEFAULT_TRUNCATE_LIMIT = 30_000
-
-/**
- * Check if debug logging is enabled
- */
-function isDebugEnabled(): boolean {
-   return process.env.OPENCODE_HOOKS_DEBUG === "1" || process.env.OPENCODE_HOOKS_DEBUG === "true"
-}
 
 /**
  * Truncate text to a maximum length, matching OpenCode's bash tool behavior

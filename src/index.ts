@@ -148,6 +148,107 @@ function filterToolHooks(
 }
 
 /**
+ * Handle a session lifecycle event (session.created or session.idle)
+ */
+async function handleSessionEvent(
+  eventType: "session.created" | "session.idle",
+  sessionId: string | undefined,
+  agent: string | undefined,
+  client: OpencodeClient
+): Promise<void> {
+  if (!sessionId) {
+    logger.debug(`${eventType} event missing session ID`)
+    return
+  }
+
+  try {
+    const { config: globalConfig, error: globalConfigError } = await loadGlobalConfig()
+    await notifyConfigError(globalConfigError, sessionId, client)
+
+    const markdownConfig = { tool: [], session: [] }
+    const { config: mergedConfig } = mergeConfigs(globalConfig, markdownConfig)
+
+    const matchedHooks = filterSessionHooks(mergedConfig.session || [], {
+      event: eventType,
+      agent,
+    })
+
+    logger.debug(
+      `Matched ${matchedHooks.length} hook(s) for ${eventType}, agent=${agent}`
+    )
+
+    const context: HookExecutionContext = {
+      sessionId,
+      agent: agent || "unknown",
+    }
+
+    await executeHooks(matchedHooks, context, client, mergedConfig.truncationLimit)
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    logger.error(`Error handling ${eventType} event: ${errorMessage}`)
+  }
+}
+
+/**
+ * Handle tool execution hook (before or after)
+ */
+async function handleToolExecutionHook(
+  phase: "before" | "after",
+  input: { tool: string; sessionID: string; callID: string },
+  toolArgs: Record<string, unknown> | undefined,
+  client: OpencodeClient
+): Promise<void> {
+  try {
+    const { config: globalConfig, error: globalConfigError } = await loadGlobalConfig()
+    await notifyConfigError(globalConfigError, input.sessionID, client)
+
+    let agentConfig: CommandHooksConfig = { tool: [], session: [] }
+    let subagentType: string | undefined
+    
+    if (input.tool === "task" && toolArgs) {
+      subagentType = normalizeString(toolArgs.subagent_type) || undefined
+      if (subagentType) {
+        logger.debug(`Detected task tool call with subagent_type: ${subagentType}`)
+        agentConfig = await loadAgentConfig(subagentType)
+      }
+    }
+
+    const { config: mergedConfig } = mergeConfigs(globalConfig, agentConfig)
+
+    const matchedHooks = filterToolHooks(mergedConfig.tool || [], {
+      phase,
+      toolName: input.tool,
+      callingAgent: subagentType,
+      slashCommand: undefined,
+      toolArgs,
+    })
+
+    logger.debug(`Matched ${matchedHooks.length} hook(s) for tool.execute.${phase}`)
+
+    const context: HookExecutionContext = {
+      sessionId: input.sessionID,
+      agent: subagentType || "unknown",
+      tool: input.tool,
+      callId: input.callID,
+      toolArgs,
+    }
+
+    if (phase === "before") {
+      storeToolArgs(input.callID, toolArgs)
+    }
+
+    await executeHooks(matchedHooks, context, client, mergedConfig.truncationLimit)
+
+    if (phase === "after") {
+      deleteToolArgs(input.callID)
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    logger.error(`Error handling tool.execute.${phase}: ${errorMessage}`)
+  }
+}
+
+/**
  * OpenCode Command Hooks Plugin
  *
  * Allows users to declaratively attach shell commands to agent/tool/slash-command
@@ -186,344 +287,158 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
         // This hook is called by OpenCode during plugin initialization
       },
 
-      /**
-       * Event hook for session lifecycle events
-       * Supports: session.start, session.idle, tool.result
-       *
-       * Note: The Plugin type from @opencode-ai/plugin may not include session.start
-       * in its event type union, but it is documented as a supported event in the
-       * OpenCode SDK. We use a type assertion to allow this event type.
-       */
-        event: async ({ event }: { event: { type: string; properties?: Record<string, unknown> } }) => {
-          // Handle session.created event
-          if (event.type === "session.created") {
-           logger.debug("Received session.created event")
-
-           // session.created has info.id, not sessionID directly
-           const info = event.properties?.info as { id?: string } | undefined
-           const sessionId = info?.id ? normalizeString(info.id) : undefined
-           const agent = normalizeString(event.properties?.agent)
-
-           if (!sessionId) {
-             logger.debug("session.created event missing session ID in info")
-             return
-           }
-
-           try {
-             // Load config
-             const { config: globalConfig, error: globalConfigError } = await loadGlobalConfig()
-             await notifyConfigError(globalConfigError, sessionId, client as OpencodeClient)
-
-             const markdownConfig = { tool: [], session: [] }
-             const { config: mergedConfig } = mergeConfigs(
-               globalConfig,
-               markdownConfig
-             )
-
-             // Filter session hooks for session.created (maps to session.start)
-             const matchedHooks = filterSessionHooks(mergedConfig.session || [], {
-               event: "session.created",
-               agent,
-             })
-
-             logger.debug(
-               `Matched ${matchedHooks.length} hook(s) for session.created (mapped to session.start), agent=${agent}, sessionId=${sessionId}`
-             )
-
-             // Build execution context
-             const context: HookExecutionContext = {
-               sessionId,
-               agent: agent || "unknown",
-             }
-
-             // Execute hooks with truncationLimit from config
-             await executeHooks(matchedHooks, context, client as OpencodeClient, mergedConfig.truncationLimit)
-           } catch (error) {
-             const errorMessage =
-               error instanceof Error ? error.message : String(error)
-             logger.error(
-               `Error handling session.created event: ${errorMessage}`
-             )
-           }
-         }
-
-         // Handle session.idle event
-         if (event.type === "session.idle") {
-           logger.debug("Received session.idle event")
-
-           const sessionId = normalizeString(event.properties?.sessionID)
-           const agent = normalizeString(event.properties?.agent)
-
-           if (!sessionId) {
-             logger.debug("session.idle event missing sessionID")
-             return
-           }
-
-           try {
-             // Load config
-             const { config: globalConfig, error: globalConfigError } = await loadGlobalConfig()
-             await notifyConfigError(globalConfigError, sessionId, client as OpencodeClient)
-
-             const markdownConfig = { tool: [], session: [] }
-             const { config: mergedConfig } = mergeConfigs(
-               globalConfig,
-               markdownConfig
-             )
-
-             // Filter session hooks for session.idle
-             const matchedHooks = filterSessionHooks(mergedConfig.session || [], {
-               event: "session.idle",
-               agent,
-             })
-
-             logger.debug(
-               `Matched ${matchedHooks.length} hook(s) for session.idle, config truncationLimit: ${mergedConfig.truncationLimit}`
-             )
-
-             // Build execution context
-             const context: HookExecutionContext = {
-               sessionId,
-               agent: agent || "unknown",
-             }
-
-             // Execute hooks with truncationLimit from config
-             await executeHooks(matchedHooks, context, client as OpencodeClient, mergedConfig.truncationLimit)
-           } catch (error) {
-             const errorMessage =
-               error instanceof Error ? error.message : String(error)
-             logger.error(
-               `Error handling session.idle event: ${errorMessage}`
-             )
-           }
-         }
-
-         // Handle tool.result event (fires when tool finishes)
-         if (event.type === "tool.result") {
-           logger.debug("Received tool.result event")
-
-           const toolName = normalizeString(
-             event.properties?.name ?? event.properties?.tool
-           )
-           const sessionId = normalizeString(
-             event.properties?.sessionID ?? event.properties?.sessionId
-           )
-           const agent = normalizeString(event.properties?.agent)
-           const callId = normalizeString(
-             event.properties?.callID ?? event.properties?.callId
-           )
-           const storedToolArgs = getToolArgs(callId)
-
-           if (!sessionId || !toolName) {
-             logger.debug(
-               "tool.result event missing sessionID or tool name"
-             )
-             return
-           }
-
-           try {
-             // Load global config
-             const { config: globalConfig, error: globalConfigError } = await loadGlobalConfig()
-             await notifyConfigError(globalConfigError, sessionId, client as OpencodeClient)
-
-             // Load agent-specific config if this is a task tool with subagent_type
-             let agentConfig: CommandHooksConfig = { tool: [], session: [] }
-             if (toolName === "task" && storedToolArgs) {
-               const subagentType = normalizeString(storedToolArgs.subagent_type)
-               if (subagentType) {
-                 logger.debug(`Detected task tool call with subagent_type: ${subagentType}`)
-                 agentConfig = await loadAgentConfig(subagentType)
-               }
-             }
-
-             const { config: mergedConfig } = mergeConfigs(
-               globalConfig,
-               agentConfig
-             )
-
-             // Filter tool hooks for after phase
-             const matchedHooks = filterToolHooks(mergedConfig.tool || [], {
-               phase: "after",
-               toolName,
-               callingAgent: agent,
-               slashCommand: normalizeString(event.properties?.slashCommand),
-               toolArgs: storedToolArgs,
-             })
-
-            logger.debug(
-              `Matched ${matchedHooks.length} hook(s) for tool.result (after phase)`
-            )
-
-              // Build execution context
-              const context: HookExecutionContext = {
-                sessionId,
-                agent: agent || "unknown",
-                tool: toolName,
-                callId,
-                toolArgs: storedToolArgs,
-              }
-
-              // Execute hooks with truncationLimit from config
-              await executeHooks(matchedHooks, context, client as OpencodeClient, mergedConfig.truncationLimit)
-
-              deleteToolArgs(callId)
-           } catch (error) {
-             const errorMessage =
-               error instanceof Error ? error.message : String(error)
-             logger.error(
-               `Error handling tool.result event: ${errorMessage}`
-             )
-           }
-         }
-      },
-
        /**
-        * Tool execution before hook
-        * Runs before a tool is executed
+        * Event hook for session lifecycle events
+        * Supports: session.start, session.idle, tool.result
+        *
+        * Note: The Plugin type from @opencode-ai/plugin may not include session.start
+        * in its event type union, but it is documented as a supported event in the
+        * OpenCode SDK. We use a type assertion to allow this event type.
         */
-        "tool.execute.before": async (
-          input: { tool: string; sessionID: string; callID: string },
-          output: { args: Record<string, unknown> }
-        ) => {
-          logger.debug(
-            `Received tool.execute.before for tool: ${input.tool}`
-          )
-          logger.debug(
-            `Tool args: ${JSON.stringify(output.args)}`
-          )
+         event: async ({ event }: { event: { type: string; properties?: Record<string, unknown> } }) => {
+           // Handle session.created event
+           if (event.type === "session.created") {
+            logger.debug("Received session.created event")
 
-           try {
-            // Load global config
-            const { config: globalConfig, error: globalConfigError } = await loadGlobalConfig()
-            await notifyConfigError(globalConfigError, input.sessionID, client as OpencodeClient)
- 
-            // Load agent-specific config if this is a task tool with subagent_type
+            // session.created has info.id, not sessionID directly
+            const info = event.properties?.info as { id?: string } | undefined
+            const sessionId = info?.id ? normalizeString(info.id) : undefined
+            const agent = normalizeString(event.properties?.agent)
 
-           let agentConfig: CommandHooksConfig = { tool: [], session: [] }
-           let subagentType: string | undefined
-           if (input.tool === "task") {
-             subagentType = normalizeString(output.args.subagent_type) || undefined
-             if (subagentType) {
-               logger.debug(`Detected task tool call with subagent_type: ${subagentType}`)
-               agentConfig = await loadAgentConfig(subagentType)
-             }
-           }
+            await handleSessionEvent("session.created", sessionId, agent, client as OpencodeClient)
+          }
 
-           const { config: mergedConfig } = mergeConfigs(
-             globalConfig,
-             agentConfig
-           )
+          // Handle session.idle event
+          if (event.type === "session.idle") {
+            logger.debug("Received session.idle event")
 
-           // Filter tool hooks for before phase
-           const matchedHooks = filterToolHooks(mergedConfig.tool || [], {
-             phase: "before",
-             toolName: input.tool,
-             callingAgent: subagentType,
-             slashCommand: undefined,
-             toolArgs: output.args,
-           })
+            const sessionId = normalizeString(event.properties?.sessionID)
+            const agent = normalizeString(event.properties?.agent)
 
-          logger.debug(
-            `Matched ${matchedHooks.length} hook(s) for tool.execute.before`
-          )
+            await handleSessionEvent("session.idle", sessionId, agent, client as OpencodeClient)
+          }
 
-           // Build execution context
-           const context: HookExecutionContext = {
-             sessionId: input.sessionID,
-             agent: subagentType || "unknown",
-             tool: input.tool,
-             callId: input.callID,
-             toolArgs: output.args,
-           }
+          // Handle tool.result event (fires when tool finishes)
+          if (event.type === "tool.result") {
+            logger.debug("Received tool.result event")
 
-            storeToolArgs(input.callID, output.args)
-
-            // Execute hooks with truncationLimit from config
-            await executeHooks(matchedHooks, context, client as OpencodeClient, mergedConfig.truncationLimit)
-          } catch (error) {
-            const errorMessage =
-              error instanceof Error ? error.message : String(error)
-            logger.error(
-              `Error handling tool.execute.before: ${errorMessage}`
+            const toolName = normalizeString(
+              event.properties?.name ?? event.properties?.tool
             )
-         }
-       },
+            const sessionId = normalizeString(
+              event.properties?.sessionID ?? event.properties?.sessionId
+            )
+            const agent = normalizeString(event.properties?.agent)
+            const callId = normalizeString(
+              event.properties?.callID ?? event.properties?.callId
+            )
+            const storedToolArgs = getToolArgs(callId)
 
-       /**
-        * Tool execution after hook
-        * Runs after a tool completes (only if output is present - sync tools)
-        */
-       "tool.execute.after": async (
-         input: { tool: string; sessionID: string; callID: string },
-         toolOutput?: { title: string; output: string; metadata: Record<string, unknown> }
-       ) => {
-         logger.debug(
-           `Received tool.execute.after for tool: ${input.tool}`
-         )
-
-         // Only process if output is present (sync tools)
-         if (!toolOutput) {
-           logger.debug(
-             `Skipping tool.execute.after for ${input.tool}: no output (async tool)`
-           )
-           return
-         }
-
-          const storedToolArgs = getToolArgs(input.callID)
- 
-           try {
-             // Load global config
-             const { config: globalConfig, error: globalConfigError } = await loadGlobalConfig()
-             await notifyConfigError(globalConfigError, input.sessionID, client as OpencodeClient)
- 
-             // Load agent-specific config if this is a task tool with subagent_type
-
-           let agentConfig: CommandHooksConfig = { tool: [], session: [] }
-            let subagentType: string | undefined
-            if (input.tool === "task" && storedToolArgs) {
-              subagentType = normalizeString(storedToolArgs.subagent_type) || undefined
-              if (subagentType) {
-                logger.debug(`Detected task tool call with subagent_type: ${subagentType}`)
-                agentConfig = await loadAgentConfig(subagentType)
-              }
+            if (!sessionId || !toolName) {
+              logger.debug(
+                "tool.result event missing sessionID or tool name"
+              )
+              return
             }
 
-            const { config: mergedConfig } = mergeConfigs(
-              globalConfig,
-              agentConfig
-            )
+            // For tool.result, we need to pass the stored tool args and handle agent differently
+            try {
+              const { config: globalConfig, error: globalConfigError } = await loadGlobalConfig()
+              await notifyConfigError(globalConfigError, sessionId, client as OpencodeClient)
 
-            // Filter tool hooks for after phase
-            const matchedHooks = filterToolHooks(mergedConfig.tool || [], {
-              phase: "after",
-              toolName: input.tool,
-              callingAgent: subagentType,
-              slashCommand: undefined,
-              toolArgs: storedToolArgs,
-            })
+              // Load agent-specific config if this is a task tool with subagent_type
+              let agentConfig: CommandHooksConfig = { tool: [], session: [] }
+              let subagentType: string | undefined
+              if (toolName === "task" && storedToolArgs) {
+                subagentType = normalizeString(storedToolArgs.subagent_type)
+                if (subagentType) {
+                  logger.debug(`Detected task tool call with subagent_type: ${subagentType}`)
+                  agentConfig = await loadAgentConfig(subagentType)
+                }
+              }
 
+              const { config: mergedConfig } = mergeConfigs(
+                globalConfig,
+                agentConfig
+              )
+
+              // Filter tool hooks for after phase
+              const matchedHooks = filterToolHooks(mergedConfig.tool || [], {
+                phase: "after",
+                toolName,
+                callingAgent: agent,
+                slashCommand: normalizeString(event.properties?.slashCommand),
+                toolArgs: storedToolArgs,
+              })
+
+             logger.debug(
+               `Matched ${matchedHooks.length} hook(s) for tool.result (after phase)`
+             )
+
+               // Build execution context
+               const context: HookExecutionContext = {
+                 sessionId,
+                 agent: agent || "unknown",
+                 tool: toolName,
+                 callId,
+                 toolArgs: storedToolArgs,
+               }
+
+               // Execute hooks with truncationLimit from config
+               await executeHooks(matchedHooks, context, client as OpencodeClient, mergedConfig.truncationLimit)
+
+               deleteToolArgs(callId)
+            } catch (error) {
+              const errorMessage =
+                error instanceof Error ? error.message : String(error)
+              logger.error(
+                `Error handling tool.result event: ${errorMessage}`
+              )
+            }
+          }
+       },
+
+        /**
+         * Tool execution before hook
+         * Runs before a tool is executed
+         */
+         "tool.execute.before": async (
+           input: { tool: string; sessionID: string; callID: string },
+           output: { args: Record<string, unknown> }
+         ) => {
            logger.debug(
-             `Matched ${matchedHooks.length} hook(s) for tool.execute.after`
+             `Received tool.execute.before for tool: ${input.tool}`
+           )
+           logger.debug(
+             `Tool args: ${JSON.stringify(output.args)}`
            )
 
-             // Build execution context
-             const context: HookExecutionContext = {
-               sessionId: input.sessionID,
-               agent: subagentType || "unknown",
-               tool: input.tool,
-               callId: input.callID,
-               toolArgs: storedToolArgs,
-             }
+           await handleToolExecutionHook("before", input, output.args, client as OpencodeClient)
+        },
 
-             // Execute hooks with truncationLimit from config
-             await executeHooks(matchedHooks, context, client as OpencodeClient, mergedConfig.truncationLimit)
-          } catch (error) {
-            const errorMessage =
-              error instanceof Error ? error.message : String(error)
-            logger.error(
-              `Error handling tool.execute.after: ${errorMessage}`
+        /**
+         * Tool execution after hook
+         * Runs after a tool completes (only if output is present - sync tools)
+         */
+        "tool.execute.after": async (
+          input: { tool: string; sessionID: string; callID: string },
+          toolOutput?: { title: string; output: string; metadata: Record<string, unknown> }
+        ) => {
+          logger.debug(
+            `Received tool.execute.after for tool: ${input.tool}`
+          )
+
+          // Only process if output is present (sync tools)
+          if (!toolOutput) {
+            logger.debug(
+              `Skipping tool.execute.after for ${input.tool}: no output (async tool)`
             )
-         }
-       },
+            return
+          }
+
+          const storedToolArgs = getToolArgs(input.callID)
+          await handleToolExecutionHook("after", input, storedToolArgs, client as OpencodeClient)
+        },
     }
 
     logger.info(`Plugin returning hooks: ${Object.keys(hooks).join(", ")}`)

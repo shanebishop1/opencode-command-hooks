@@ -6,6 +6,7 @@
  */
 
 import type { CommandHooksConfig } from "../types/hooks.js";
+import { isValidCommandHooksConfig } from "../schemas.js";
 import { join, dirname } from "path";
 import { logger } from "../logging.js";
 
@@ -103,29 +104,7 @@ function parseJson(content: string): unknown {
   }
 }
 
-/**
- * Check if a value is a valid CommandHooksConfig object
- */
-function isValidCommandHooksConfig(
-  value: unknown,
-): value is CommandHooksConfig {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
 
-  const obj = value as Record<string, unknown>;
-
-  // Both tool and session are optional
-  if (obj.tool !== undefined && !Array.isArray(obj.tool)) {
-    return false;
-  }
-
-  if (obj.session !== undefined && !Array.isArray(obj.session)) {
-    return false;
-  }
-
-  return true;
-}
 
 /**
  * Find command hooks config file by walking up directory tree
