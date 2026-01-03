@@ -23,8 +23,9 @@ const PhaseSchema = z.enum(["before", "after"]);
 
 /**
  * Session event types
+ * Note: "session.start" maps to "session.created" internally
  */
-const SessionEventSchema = z.enum(["session.start", "session.idle", "session.end"]);
+const SessionEventSchema = z.enum(["session.created", "session.idle", "session.end", "session.start"]);
 
 // ============================================================================
 // TOOL HOOK SCHEMAS

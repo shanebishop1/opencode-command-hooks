@@ -91,7 +91,13 @@ function filterSessionHooks(
   criteria: { event: string; agent: string | undefined }
 ): SessionHook[] {
   return hooks.filter((hook) => {
-    if (hook.when.event !== criteria.event) return false
+    // Normalize session.start to session.created
+    let normalizedEvent = hook.when.event
+    if (normalizedEvent === "session.start") {
+      normalizedEvent = "session.created"
+    }
+    
+    if (normalizedEvent !== criteria.event) return false
     return matches(hook.when.agent, criteria.agent)
   })
 }
@@ -188,18 +194,70 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
        * in its event type union, but it is documented as a supported event in the
        * OpenCode SDK. We use a type assertion to allow this event type.
        */
-      event: async ({ event }: { event: { type: string; properties?: Record<string, unknown> } }) => {
-        // Handle session.start event
-        if (event.type === "session.start") {
-          logger.debug("Received session.start event")
+        event: async ({ event }: { event: { type: string; properties?: Record<string, unknown> } }) => {
+          // Handle session.created event
+          if (event.type === "session.created") {
+           logger.debug("Received session.created event")
 
-          const sessionId = normalizeString(event.properties?.sessionID)
-          const agent = normalizeString(event.properties?.agent)
+           // session.created has info.id, not sessionID directly
+           const info = event.properties?.info as { id?: string } | undefined
+           const sessionId = info?.id ? normalizeString(info.id) : undefined
+           const agent = normalizeString(event.properties?.agent)
 
-          if (!sessionId) {
-            logger.debug("session.start event missing sessionID")
-            return
-          }
+           if (!sessionId) {
+             logger.debug("session.created event missing session ID in info")
+             return
+           }
+
+           try {
+             // Load config
+             const { config: globalConfig, error: globalConfigError } = await loadGlobalConfig()
+             await notifyConfigError(globalConfigError, sessionId, client as OpencodeClient)
+
+             const markdownConfig = { tool: [], session: [] }
+             const { config: mergedConfig } = mergeConfigs(
+               globalConfig,
+               markdownConfig
+             )
+
+             // Filter session hooks for session.created (maps to session.start)
+             const matchedHooks = filterSessionHooks(mergedConfig.session || [], {
+               event: "session.created",
+               agent,
+             })
+
+             logger.debug(
+               `Matched ${matchedHooks.length} hook(s) for session.created (mapped to session.start), agent=${agent}, sessionId=${sessionId}`
+             )
+
+             // Build execution context
+             const context: HookExecutionContext = {
+               sessionId,
+               agent: agent || "unknown",
+             }
+
+             // Execute hooks with truncationLimit from config
+             await executeHooks(matchedHooks, context, client as OpencodeClient, mergedConfig.truncationLimit)
+           } catch (error) {
+             const errorMessage =
+               error instanceof Error ? error.message : String(error)
+             logger.error(
+               `Error handling session.created event: ${errorMessage}`
+             )
+           }
+         }
+
+         // Handle session.idle event
+         if (event.type === "session.idle") {
+           logger.debug("Received session.idle event")
+
+           const sessionId = normalizeString(event.properties?.sessionID)
+           const agent = normalizeString(event.properties?.agent)
+
+           if (!sessionId) {
+             logger.debug("session.idle event missing sessionID")
+             return
+           }
 
            try {
              // Load config
@@ -218,11 +276,11 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
                agent,
              })
 
-            logger.debug(
-              `Matched ${matchedHooks.length} hook(s) for session.idle, config truncationLimit: ${mergedConfig.truncationLimit}`
-            )
+             logger.debug(
+               `Matched ${matchedHooks.length} hook(s) for session.idle, config truncationLimit: ${mergedConfig.truncationLimit}`
+             )
 
-            // Build execution context
+             // Build execution context
              const context: HookExecutionContext = {
                sessionId,
                agent: agent || "unknown",
@@ -230,14 +288,14 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
 
              // Execute hooks with truncationLimit from config
              await executeHooks(matchedHooks, context, client as OpencodeClient, mergedConfig.truncationLimit)
-          } catch (error) {
-            const errorMessage =
-              error instanceof Error ? error.message : String(error)
-            logger.error(
-              `Error handling session.idle event: ${errorMessage}`
-            )
-          }
-        }
+           } catch (error) {
+             const errorMessage =
+               error instanceof Error ? error.message : String(error)
+             logger.error(
+               `Error handling session.idle event: ${errorMessage}`
+             )
+           }
+         }
 
          // Handle tool.result event (fires when tool finishes)
          if (event.type === "tool.result") {
