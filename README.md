@@ -1,14 +1,14 @@
 # 🪝 OpenCode Command Hooks
 
-Use simple configs to easily integrate shell command hooks when specified tools/subagents are called. Optionally, inject a command hook's output directly into the session for your agent to read.
+Use simple configs to easily integrate shell command hooks with tool/subagent invocations. With a single line of configuration, you can inject a hook's output directly into context for your agent to read.
 
 Example use cases: run tests after a subagent finishes a task, auto-lint after writes, etc. You can also configure the hooks to run only when specified arguments are passed to a given tool.
 
 ## Markdown Frontmatter Hooks
 
-Define hooks in agent markdown frontmatter so they live with the agent.
+Define hooks in just a couple lines of markdown frontmatter. Putting them here is also really nice because you can see your entire agent's config in one place.
 
-````markdown
+````yaml
 ---
 description: Analyzes the codebase and implements code changes.
 mode: subagent
@@ -30,7 +30,9 @@ hooks:
 
 When working with a fleet of subagents, automatic validation of the state of your codebase is really useful. By setting up quality gates (lint/typecheck/test/etc.) or other automation, you can catch and prevent errors quickly and reliably.  
 
-Doing this by asking your orchestrator agent to use the bash tool (or call a validator subagent) is non-deterministic and can cost a lot of tokens over time. You could always write your own custom plugin to achieve this automatic validation behavior, but I found myself writing the same boilerplate, error handling, output capture, and session injection logic over and over again. This plugin removes that overhead and provides a simple, opinionated system for integrating command hooks into your Opencode workflow.
+Doing this by asking your orchestrator agent to use the bash tool (or call a validator subagent) is non-deterministic and can cost a lot of tokens over time. You could always write your own custom plugin to achieve this automatic validation behavior, but I found myself writing the same boilerplate, error handling, output capture, and session injection logic over and over again.  
+
+Though this plugin is mostly a wrapper around accessing hooks that Opencode already exposes, it provides basic plumbing that reduces overhead, giving you a simple, opinionated system for integrating command hooks into your Opencode workflow. I also just like having hooks/config for my agents all colocated in one place (markdown files) and thought that maybe somebody else would like this too.
 
 ---
 
@@ -66,11 +68,11 @@ hooks:
 
 ### Hook Configuration Options
 
-| Option   | Type                   | Required | Description                       |
-| -------- | ---------------------- | -------- | --------------------------------- |
-| `run`    | `string` \| `string[]` | ✅ Yes   | Command(s) to execute             |
-| `inject` | `string`               | ❌ No    | Message injected into the session |
-| `toast`  | `object`               | ❌ No    | Toast notification configuration  |
+| Option   | Type                   | Description                       |
+| -------- | ---------------------- | --------------------------------- |
+| `run`    | `string` \| `string[]` | Command(s) to execute             |
+| `inject` | `string`               | Message injected into the session |
+| `toast`  | `object`               | Toast notification configuration  |
 
 ### Toast Configuration
 
@@ -139,17 +141,12 @@ You can set up tool hooks to only trigger on specific arguments via `when.toolAr
 }
 ```
 
-### 4. Execution Semantics
-
-- Hooks are **non-blocking**: failures don’t crash the session/tool.
-- Commands run **sequentially**, even if earlier ones fail.
-- `inject`/`toast` interpolate using the **last command’s** output if `run` is an array.
-
----
-
 ## Features
 
 - Tool hooks (`before`/`after`) and session hooks (`start`/`idle`)
+  - Hooks are **non-blocking**: failures don’t crash the session/tool.
+  - Commands run **sequentially**, even if earlier ones fail.
+  - `inject`/`toast` interpolate using the **last command’s** output if `run` is an array.
 - Match by tool name, calling agent, slash command, and tool arguments
 - Optional session injection and toast notifications
 - Output truncation to keep memory bounded
@@ -159,15 +156,19 @@ You can set up tool hooks to only trigger on specific arguments via `when.toolAr
 
 ## Installation
 
-```bash
-opencode install opencode-command-hooks
+Add to your `opencode.json`:
+
+```jsonc
+{
+  "plugin": ["opencode-command-hooks"]
+}
 ```
 
 ---
 
 ## Configuration
 
-### Global Configuration
+### JSON Config
 
 Create `.opencode/command-hooks.jsonc` in your project (the plugin searches upward from the current working directory):
 
@@ -183,13 +184,13 @@ Create `.opencode/command-hooks.jsonc` in your project (the plugin searches upwa
 }
 ```
 
-#### Global Configuration Options
+#### JSON Config Options
 
-| Option | Type | Required | Description |
-| ------ | ---- | -------- | ----------- |
-| `truncationLimit` | `number` | ❌ No | Maximum characters to capture from command output. Defaults to 30,000 (matching OpenCode's bash tool). Must be a positive integer. |
-| `tool` | `ToolHook[]` | ❌ No | Array of tool execution hooks |
-| `session` | `SessionHook[]` | ❌ No | Array of session lifecycle hooks |
+| Option | Type  | Description |
+| ------ | ----  | ----------- |
+| `truncationLimit` | `number`  | Maximum characters to capture from command output. Defaults to 30,000 (matching OpenCode's bash tool). Must be a positive integer. |
+| `tool` | `ToolHook[]` | Array of tool execution hooks |
+| `session` | `SessionHook[]`| Array of session lifecycle hooks |
 
 ### Markdown Frontmatter
 
@@ -210,7 +211,7 @@ hooks:
 
 ### Configuration Precedence
 
-1. Global hooks are loaded from `.opencode/command-hooks.jsonc`
+1. Hooks are loaded from `.opencode/command-hooks.jsonc`
 2. Markdown hooks are converted to normal hooks with auto-generated IDs
 3. If a markdown hook and a global hook share the same `id`, the markdown hook wins
 4. Duplicate IDs within the same source are errors
@@ -247,9 +248,7 @@ Run validation after certain subagents complete, inject results back into the se
 }
 ```
 
-### Basic Examples
-
-#### Run Tests After Any `task`
+### Run Tests After Any `task` (subagent creation toolcall)
 
 ```jsonc
 {
@@ -264,7 +263,7 @@ Run validation after certain subagents complete, inject results back into the se
 }
 ```
 
-#### Enforce Linting After a Specific `write`
+### Enforce Linting After a Specific `write`
 
 Tool-arg matching is exact. This example runs only when the tool arg `path` equals `src/index.ts`.
 
@@ -285,9 +284,7 @@ Tool-arg matching is exact. This example runs only when the tool arg `path` equa
 }
 ```
 
-### Advanced Examples
-
-#### Toast Notifications for Build Status
+### Toast Notifications for Build Status
 
 ```jsonc
 {
@@ -307,7 +304,7 @@ Tool-arg matching is exact. This example runs only when the tool arg `path` equa
 }
 ```
 
-#### Handle Async Tool Completion (`tool.result`)
+### Handle Async Tool Completion (`tool.result`)
 
 ```jsonc
 {
@@ -326,7 +323,7 @@ Tool-arg matching is exact. This example runs only when the tool arg `path` equa
 }
 ```
 
-#### Session Lifecycle Hooks
+### Session Lifecycle Hooks
 
 ```jsonc
 {
@@ -350,7 +347,7 @@ Tool-arg matching is exact. This example runs only when the tool arg `path` equa
 
 ## Template Placeholders
 
-All templates support these placeholders:
+All inject/toast string templates support these placeholders:
 
 | Placeholder  | Description                | Example                    |
 | ------------ | -------------------------- | -------------------------- |
@@ -364,111 +361,81 @@ All templates support these placeholders:
 
 ---
 
-## Debugging
-
-Enable debug logging:
-
-```bash
-export OPENCODE_HOOKS_DEBUG=1
-opencode start
-```
-
----
-
-## Event Types
-
-### Tool Events
-
-- `tool.execute.before`
-- `tool.execute.after`
-- `tool.result`
-
-### Session Events
-
-- `session.start`
-- `session.idle`
-
----
-
-## Tool vs Session Hooks
-
-### Tool Hooks
-
-- Triggered around tool executions (`before`/`after`)
-- Can match by tool name, calling agent, slash command, and tool arguments
-- Best for: lint/tests/formatters around `write` and `task`
-
-### Session Hooks
-
-- Triggered on session lifecycle events
-- Can match by `agent` when OpenCode includes it in event properties (otherwise it’s treated as unknown)
-- Best for: bootstrapping, cleanup, periodic checks
-
----
-
-## Native Plugin vs This Plugin
-
-Native plugins can do anything, but even “run a command and post its output” turns into a bunch of glue code.
-
-**Native plugin (code you maintain):**
-
+## Why Use This Plugin?
+**It lets you easily set up bash hooks with ~3-5 lines of YAML which are cleanly colocated with your subagent configuration.**
+Conversely, rolling your own looks something like this (for each project and set of hooks you want to set up):
 ```ts
 import type { Plugin } from "@opencode-ai/plugin";
 
-export const MyPlugin: Plugin = async ({ $, client }) => ({
-  "tool.execute.after": async (input) => {
-    if (input.tool !== "task") return;
-    const stdout = await $`npm test`.text();
-    await client.session.promptAsync({
-      path: { id: input.sessionID },
-      body: { noReply: true, parts: [{ type: "text", text: stdout }] },
-    });
-  },
-});
+export const MyHooks: Plugin = async ({ $, client }) => {
+  const argsCache = new Map();
+
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "task") {
+        argsCache.set(input.callID, output.args);
+      }
+    },
+
+    "tool.execute.after": async (input, output) => {
+      if (!output && input.tool === "task") return;
+
+      const args = argsCache.get(input.callID);
+      argsCache.delete(input.callID);
+
+      // Filter by tool and subagent type
+      if (input.tool !== "task") return;
+      if (!["engineer", "debugger"].includes(args?.subagent_type)) return;
+
+      try {
+        // Run commands sequentially, even if they fail
+        let lastResult = { exitCode: 0, stdout: "", stderr: "" };
+        
+        for (const cmd of ["npm run typecheck", "npm run lint"]) {
+          try {
+            const result = await $`sh -c ${cmd}`.nothrow().quiet();
+            const stdout = result.stdout?.toString() || "";
+            const stderr = result.stderr?.toString() || "";
+            
+            // Truncate to 30k chars to match OpenCode's bash tool
+            lastResult = {
+              exitCode: result.exitCode ?? 0,
+              stdout: stdout.length > 30000 
+                ? stdout.slice(0, 30000) + "\n[Output truncated: exceeded 30000 character limit]"
+                : stdout,
+              stderr: stderr.length > 30000
+                ? stderr.slice(0, 30000) + "\n[Output truncated: exceeded 30000 character limit]"
+                : stderr,
+            };
+          } catch (err) {
+            lastResult = { exitCode: 1, stdout: "", stderr: String(err) };
+          }
+        }
+
+        // Inject results into session (noReply prevents LLM response)
+        const message = `Validation (exit ${lastResult.exitCode})\n\n${lastResult.stdout}\n${lastResult.stderr}`;
+        await client.session.promptAsync({
+          path: { id: input.sessionID },
+          body: {
+            noReply: true,
+            parts: [{ type: "text", text: message }],
+          },
+        });
+
+        // Show toast notification
+        await client.tui.showToast({
+          body: {
+            title: "Validation",
+            message: `exit ${lastResult.exitCode}`,
+            variant: "info",
+          },
+        });
+      } catch (err) {
+        console.error("Hook failed:", err);
+      }
+    },
+  };
+};
 ```
 
-**This plugin (config):**
-
-```jsonc
-{
-  "id": "tests-after-task",
-  "when": { "phase": "after", "tool": "task" },
-  "run": ["npm test"],
-  "inject": "Tests (exit {exitCode})\n\n{stdout}\n{stderr}",
-}
-```
-
----
-
-### Feature Comparison
-
-| Feature           | Native Plugin                       | This Plugin       |
-| ----------------- | ----------------------------------- | ----------------- |
-| Setup             | TypeScript + build + error handling | JSON/YAML config  |
-| Error handling    | Manual                              | Non-blocking      |
-| User feedback     | Console logs unless you build UI    | Toasts            |
-| Session injection | Manual SDK calls                    | `inject` template |
-| Tool filtering    | Whatever you implement              | Built-in matchers |
-| Agent prompting   | Optional (you wire it up)           | Not needed        |
-
----
-
-## Known Limitations
-
-- Templates are simple placeholder substitution (no conditionals / ICU MessageFormat).
-- `when.toolArgs` matching is exact string/array match (no glob/regex).
-- For multi-command hooks (`run: [...]`), `inject`/`toast` use the last command’s output.
-
----
-
-## Development
-
-```bash
-bun install
-bun run build
-```
-
-TODO:
-
-- Implement max-length output using tail
-- Add more template functions (date formatting, etc.)
+The plugin handles: sequential execution with failure recovery, output truncation, exit code capture, template interpolation, session injection, toast notifications, toolArgs filtering, async tool support, and non-blocking error handling.
