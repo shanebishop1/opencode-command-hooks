@@ -8,11 +8,11 @@ import { loadGlobalConfig } from "./config/global.js"
 import { loadAgentConfig } from "./config/agent.js"
 import { mergeConfigs } from "./config/merge.js"
 
-async function notifyConfigError(
+const notifyConfigError = async (
   configError: string | null,
   sessionId: string | undefined,
   client: OpencodeClient,
-): Promise<void> {
+): Promise<void> => {
   if (!configError) return
 
   const key = `${sessionId ?? "no-session"}:${configError}`
@@ -37,17 +37,17 @@ async function notifyConfigError(
 const toolCallArgsCache = new Map<string, Record<string, unknown>>()
 const notifiedConfigErrors = new Set<string>()
 
-function storeToolArgs(callId: string | undefined, args: Record<string, unknown> | undefined): void {
+const storeToolArgs = (callId: string | undefined, args: Record<string, unknown> | undefined): void => {
   if (!callId || !args) return
   toolCallArgsCache.set(callId, args)
 }
 
-function getToolArgs(callId: string | undefined): Record<string, unknown> | undefined {
+const getToolArgs = (callId: string | undefined): Record<string, unknown> | undefined => {
   if (!callId) return undefined
   return toolCallArgsCache.get(callId)
 }
 
-function deleteToolArgs(callId: string | undefined): void {
+const deleteToolArgs = (callId: string | undefined): void => {
   if (!callId) return
   toolCallArgsCache.delete(callId)
 }
@@ -57,12 +57,12 @@ function deleteToolArgs(callId: string | undefined): void {
 /**
  * Handle a session lifecycle event (session.created or session.idle)
  */
-async function handleSessionEvent(
+const handleSessionEvent = async (
   eventType: "session.created" | "session.idle",
   sessionId: string | undefined,
   agent: string | undefined,
   client: OpencodeClient
-): Promise<void> {
+): Promise<void> => {
   if (!sessionId) {
     logger.debug(`${eventType} event missing session ID`)
     return
@@ -99,12 +99,12 @@ async function handleSessionEvent(
 /**
  * Handle tool execution hook (before or after)
  */
-async function handleToolExecutionHook(
+const handleToolExecutionHook = async (
   phase: "before" | "after",
   input: { tool: string; sessionID: string; callID: string },
   toolArgs: Record<string, unknown> | undefined,
   client: OpencodeClient
-): Promise<void> {
+): Promise<void> => {
   try {
     const { config: globalConfig, error: globalConfigError } = await loadGlobalConfig()
     await notifyConfigError(globalConfigError, input.sessionID, client)

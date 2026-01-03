@@ -136,7 +136,7 @@ export type CommandHooksConfig = z.infer<typeof ConfigSchema>;
  * @param input - Unknown configuration object to parse
  * @returns Valid CommandHooksConfig with safe defaults on failure
  */
-export function parseConfig(input: unknown): CommandHooksConfig {
+export const parseConfig = (input: unknown): CommandHooksConfig => {
   const result = ConfigSchema.safeParse(input);
 
   if (!result.success) {
@@ -158,7 +158,7 @@ export function parseConfig(input: unknown): CommandHooksConfig {
  * @param input - Unknown hook object to parse
  * @returns Parsed hook or null if invalid
  */
-export function parseToolHook(input: unknown): ToolHook | null {
+export const parseToolHook = (input: unknown): ToolHook | null => {
   const result = ToolHookSchema.safeParse(input);
   return result.success ? result.data : null;
 }
@@ -169,7 +169,7 @@ export function parseToolHook(input: unknown): ToolHook | null {
  * @param input - Unknown hook object to parse
  * @returns Parsed hook or null if invalid
  */
-export function parseSessionHook(input: unknown): SessionHook | null {
+export const parseSessionHook = (input: unknown): SessionHook | null => {
   const result = SessionHookSchema.safeParse(input);
   return result.success ? result.data : null;
 }
@@ -180,9 +180,9 @@ export function parseSessionHook(input: unknown): SessionHook | null {
  * @param input - Unknown configuration object to validate
  * @returns Validation errors if any, or null if valid
  */
-export function getConfigValidationErrors(
+export const getConfigValidationErrors = (
   input: unknown
-): z.ZodError | null {
+): z.ZodError | null => {
   const result = ConfigSchema.safeParse(input);
   return result.success ? null : result.error;
 }
@@ -190,9 +190,9 @@ export function getConfigValidationErrors(
 /**
  * Check if a value is a valid CommandHooksConfig object
  */
-export function isValidCommandHooksConfig(
+export const isValidCommandHooksConfig = (
   value: unknown,
-): value is CommandHooksConfig {
+): value is CommandHooksConfig => {
   if (typeof value !== "object" || value === null) {
     return false;
   }

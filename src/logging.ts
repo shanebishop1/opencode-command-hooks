@@ -6,7 +6,7 @@ export type LogLevel = "debug" | "info" | "error"
  * Creates a logger that uses OpenCode's SDK logging.
  * Logs are written to ~/.local/share/opencode/log/
  */
-export function createLogger(client: OpencodeClient) {
+export const createLogger = (client: OpencodeClient) => {
   const log = (level: LogLevel, message: string): void => {
     if (client?.app?.log) {
       client.app.log({
@@ -45,14 +45,14 @@ let logger: Logger = {
  * Set the global logger instance.
  * Called once during plugin initialization with the SDK client.
  */
-export function setGlobalLogger(newLogger: Logger): void {
+export const setGlobalLogger = (newLogger: Logger): void => {
   logger = newLogger
 }
 
 /**
  * Check if debug logging is enabled
  */
-export function isDebugEnabled(): boolean {
+export const isDebugEnabled = (): boolean => {
   return process.env.OPENCODE_HOOKS_DEBUG === "1" || process.env.OPENCODE_HOOKS_DEBUG === "true"
 }
 

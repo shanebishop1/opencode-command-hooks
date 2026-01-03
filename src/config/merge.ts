@@ -35,7 +35,7 @@ import { logger } from "../logging.js"
  * findDuplicateIds(hooks)  // Returns ["hook-1"]
  * ```
  */
-export function findDuplicateIds(hooks: (ToolHook | SessionHook)[]): string[] {
+export const findDuplicateIds = (hooks: (ToolHook | SessionHook)[]): string[] => {
    const idCounts = new Map<string, number>()
 
    // Count occurrences of each ID
@@ -60,10 +60,10 @@ export function findDuplicateIds(hooks: (ToolHook | SessionHook)[]): string[] {
  * @param source - Source identifier for error reporting (e.g., "global", "markdown")
  * @returns Array of validation errors (empty if no duplicates)
  */
-function validateConfigForDuplicates(
+const validateConfigForDuplicates = (
    config: CommandHooksConfig,
    source: string,
-): HookValidationError[] {
+): HookValidationError[] => {
    const errors: HookValidationError[] = []
 
    // Check tool hooks for duplicates
@@ -121,10 +121,10 @@ function validateConfigForDuplicates(
  * // Returns: [{ id: "hook-1", ... (markdown version) }, { id: "hook-2", ... }, { id: "hook-3", ... }]
  * ```
  */
-function mergeHookArrays<T extends ToolHook | SessionHook>(
+const mergeHookArrays = <T extends ToolHook | SessionHook>(
    globalHooks: T[],
    markdownHooks: T[],
-): T[] {
+): T[] => {
    // Create a map of markdown hooks by ID for quick lookup
    const markdownMap = new Map<string, T>()
    const markdownIds = new Set<string>()
@@ -191,10 +191,10 @@ function mergeHookArrays<T extends ToolHook | SessionHook>(
  * // result.errors === [] (no duplicates)
  * ```
  */
-export function mergeConfigs(
+export const mergeConfigs = (
    global: CommandHooksConfig,
    markdown: CommandHooksConfig,
-): { config: CommandHooksConfig; errors: HookValidationError[] } {
+): { config: CommandHooksConfig; errors: HookValidationError[] } => {
    const errors: HookValidationError[] = []
 
    // Validate global config for duplicates
