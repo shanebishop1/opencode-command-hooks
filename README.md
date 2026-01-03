@@ -1,6 +1,6 @@
 # 🪝 OpenCode Command Hooks
 
-Use simple configs to easily integrate shell command hooks with tool/subagent invocations. With a single line of configuration, you can inject a hook's output directly into context for your agent to read.
+Use simple configs to declaratively integrate shell command hooks with tool/subagent invocations. With a single line of configuration, you can inject a hook's output directly into context for your agent to read.
 
 Example use cases: run tests after a subagent finishes a task, auto-lint after writes, etc. You can also configure the hooks to run only when specified arguments are passed to a given tool. The plugin will handle sequential execution with failure recovery, output truncation, exit code capture, template interpolation, session context injection, toast notifications, toolArgs filtering, and non-blocking error handling.
 
