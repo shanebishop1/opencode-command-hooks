@@ -225,7 +225,7 @@ async function executeHook(
  * @returns true if the hook is a ToolHook
  */
 function isToolHook(hook: ToolHook | SessionHook): hook is ToolHook {
-   return "when" in hook && "phase" in (hook as ToolHook).when
+  return "phase" in hook.when
 }
 
 /**

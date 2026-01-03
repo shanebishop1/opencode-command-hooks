@@ -251,11 +251,11 @@ async function handleToolExecutionHook(
  * - Unified executor handles all hook matching and execution
  */
 export const CommandHooksPlugin: Plugin = async ({ client }) => {
-    const clientLogger = createLogger(client)
-   setGlobalLogger(clientLogger)
+  const clientLogger = createLogger(client)
+  setGlobalLogger(clientLogger)
   
-   try {
-     logger.info("Initializing OpenCode Command Hooks plugin...")
+  try {
+    logger.info("Initializing OpenCode Command Hooks plugin...")
 
      const hooks = {
       /**
