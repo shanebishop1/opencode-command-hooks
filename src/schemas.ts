@@ -103,6 +103,7 @@ export const SessionHookSchema = z.object({
  * under the "command_hooks" key, or in YAML frontmatter of agent/slash-command markdown.
  */
 export const ConfigSchema = z.object({
+  truncationLimit: z.number().int().positive().optional(),
   tool: z.array(ToolHookSchema).optional(),
   session: z.array(SessionHookSchema).optional(),
 });

@@ -184,10 +184,11 @@ async function findConfigFile(startDir: string): Promise<string | null> {
  * @returns Promise resolving to GlobalConfigResult
  */
 export async function loadGlobalConfig(): Promise<GlobalConfigResult> {
-  let configPath: string | null = null;
-  try {
-    // Find config file
-    configPath = await findConfigFile(process.cwd());
+   let configPath: string | null = null;
+   try {
+     // Find config file
+     logger.debug(`loadGlobalConfig: starting search from: ${process.cwd()}`)
+     configPath = await findConfigFile(process.cwd());
 
     if (!configPath) {
       logger.debug(
@@ -236,17 +237,18 @@ export async function loadGlobalConfig(): Promise<GlobalConfigResult> {
       };
     }
 
-    // Return with defaults for missing arrays
-    const result: CommandHooksConfig = {
-      tool: parsed.tool ?? [],
-      session: parsed.session ?? [],
-    };
+     // Return with defaults for missing arrays
+     const result: CommandHooksConfig = {
+       truncationLimit: parsed.truncationLimit,
+       tool: parsed.tool ?? [],
+       session: parsed.session ?? [],
+     };
 
-    logger.debug(
-      `Loaded global config: ${result.tool?.length ?? 0} tool hooks, ${result.session?.length ?? 0} session hooks`,
-    );
+     logger.debug(
+       `Loaded global config: truncationLimit=${result.truncationLimit}, ${result.tool?.length ?? 0} tool hooks, ${result.session?.length ?? 0} session hooks`,
+     );
 
-    return { config: result, error: null };
+     return { config: result, error: null };
   } catch (error) {
     // Catch-all for unexpected errors
     const message = error instanceof Error ? error.message : String(error);

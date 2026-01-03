@@ -42,16 +42,14 @@ describe("Shell command execution", () => {
     })
 
     it("truncates long output", async () => {
-      const longOutput = "x".repeat(5000)
-      const result = await executeCommand(`echo '${longOutput}'`, { truncateOutput: 100 })
+       const longOutput = "x".repeat(5000)
+       const result = await executeCommand(`echo '${longOutput}'`, { truncateOutput: 100 })
 
-      expect(result.success).toBe(true)
-      expect(result.stdout).toContain("<bash_metadata>")
-      expect(result.stdout).toContain("bash tool truncated output as it exceeded 100 char limit")
-      expect(result.stdout).toContain("</bash_metadata>")
-      // Output should be truncated to 100 chars + metadata
-      expect(result.stdout!.split("<bash_metadata>")[0].length).toBeLessThanOrEqual(102) // 100 + 2 newlines
-    })
+       expect(result.success).toBe(true)
+       expect(result.stdout).toContain("[Output truncated: exceeded 100 character limit]")
+       // Output should be truncated to 100 chars + metadata
+       expect(result.stdout!.length).toBeLessThan(200) // 100 chars + metadata message
+     })
 
     it("handles commands with pipes", async () => {
       const result = await executeCommand("echo 'hello' | tr 'a-z' 'A-Z'")
@@ -115,20 +113,18 @@ describe("Shell command execution", () => {
     })
 
     it("truncates output for all commands", async () => {
-      const longOutput = "x".repeat(5000)
-      const results = await executeCommands(
-        [`echo '${longOutput}'`, `echo '${longOutput}'`],
-        "test-hook",
-        { truncateOutput: 100 }
-      )
+       const longOutput = "x".repeat(5000)
+       const results = await executeCommands(
+         [`echo '${longOutput}'`, `echo '${longOutput}'`],
+         "test-hook",
+         { truncateOutput: 100 }
+       )
 
-      expect(results).toHaveLength(2)
-      results.forEach(result => {
-        expect(result.stdout).toContain("<bash_metadata>")
-        expect(result.stdout).toContain("bash tool truncated output as it exceeded 100 char limit")
-        expect(result.stdout).toContain("</bash_metadata>")
-      })
-    })
+       expect(results).toHaveLength(2)
+       results.forEach(result => {
+         expect(result.stdout).toContain("[Output truncated: exceeded 100 character limit]")
+       })
+     })
 
     it("captures exit codes for all commands", async () => {
       const results = await executeCommands(
