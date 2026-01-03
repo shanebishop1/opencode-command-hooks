@@ -9,12 +9,10 @@ import type { CommandHooksConfig } from "../types/hooks.js";
 import { join, dirname } from "path";
 import { logger } from "../logging.js";
 
-/**
- * In-memory cache for global configuration
- * Stores the loaded config to avoid repeated file system reads on every tool call.
- * Set to null to force a reload on the next loadGlobalConfig() call.
- */
-let cachedConfig: CommandHooksConfig | null = null;
+export type GlobalConfigResult = {
+  config: CommandHooksConfig;
+  error: string | null;
+};
 
 /**
  * Strip comments from JSONC content
@@ -23,10 +21,38 @@ let cachedConfig: CommandHooksConfig | null = null;
 function stripJsoncComments(content: string): string {
   let result = "";
   let i = 0;
+  let inString = false;
+  let stringQuote: "\"" | "'" | null = null;
+  let isEscaped = false;
 
   while (i < content.length) {
+    const current = content[i];
+    const next = content[i + 1];
+
+    if (inString) {
+      result += current;
+      if (isEscaped) {
+        isEscaped = false;
+      } else if (current === "\\") {
+        isEscaped = true;
+      } else if (current === stringQuote) {
+        inString = false;
+        stringQuote = null;
+      }
+      i++;
+      continue;
+    }
+
+    if (current === "\"" || current === "'") {
+      inString = true;
+      stringQuote = current as "\"" | "'";
+      result += current;
+      i++;
+      continue;
+    }
+
     // Check for line comment
-    if (content[i] === "/" && content[i + 1] === "/") {
+    if (current === "/" && next === "/") {
       // Skip until end of line
       while (i < content.length && content[i] !== "\n") {
         i++;
@@ -40,7 +66,7 @@ function stripJsoncComments(content: string): string {
     }
 
     // Check for block comment
-    if (content[i] === "/" && content[i + 1] === "*") {
+    if (current === "/" && next === "*") {
       // Skip until */
       i += 2;
       while (i < content.length - 1) {
@@ -58,7 +84,7 @@ function stripJsoncComments(content: string): string {
     }
 
     // Regular character
-    result += content[i];
+    result += current;
     i++;
   }
 
@@ -149,112 +175,85 @@ async function findConfigFile(startDir: string): Promise<string | null> {
  * Searches for .opencode/command-hooks.jsonc starting from the current working
  * directory and walking up. Parses the entire file as CommandHooksConfig.
  *
- * **Caching:** This function implements in-memory caching to avoid repeated file
- * system reads on every tool call. The cache is checked first; if null, the config
- * is loaded from disk and cached for subsequent calls.
- *
  * Error handling:
  * - If no config file found: returns empty config (not an error)
  * - If config file is malformed: logs warning, returns empty config
  * - If file is not a valid CommandHooksConfig: logs warning, returns empty config
  * - Never throws errors - always returns a valid config
  *
- * @returns Promise resolving to CommandHooksConfig (may be empty)
+ * @returns Promise resolving to GlobalConfigResult
  */
-export async function loadGlobalConfig(): Promise<CommandHooksConfig> {
-   // Check cache first
-   if (cachedConfig !== null) {
-      logger.debug(`Returning cached global config: ${cachedConfig.tool?.length ?? 0} tool hooks, ${cachedConfig.session?.length ?? 0} session hooks`);
-     return cachedConfig;
-   }
+export async function loadGlobalConfig(): Promise<GlobalConfigResult> {
+  let configPath: string | null = null;
+  try {
+    // Find config file
+    configPath = await findConfigFile(process.cwd());
 
-   try {
-     // Find config file
-     const configPath = await findConfigFile(process.cwd());
-
-       if (!configPath) {
-          logger.debug(
-            `No .opencode/command-hooks.jsonc file found, using empty config`,
-          );
-         const emptyConfig = { tool: [], session: [] };
-         cachedConfig = emptyConfig;
-         return emptyConfig;
-       }
-
-     // Read file
-     let content: string;
-     try {
-       const file = Bun.file(configPath);
-       content = await file.text();
-     } catch (error) {
-       const message = error instanceof Error ? error.message : String(error);
-        logger.info(
-          `Failed to read config file ${configPath}: ${message}`,
-        );
-       const emptyConfig = { tool: [], session: [] };
-       cachedConfig = emptyConfig;
-       return emptyConfig;
-     }
-
-     // Parse JSONC
-     let parsed: unknown;
-     try {
-       const stripped = stripJsoncComments(content);
-       parsed = parseJson(stripped);
-     } catch (error) {
-       const message = error instanceof Error ? error.message : String(error);
-        logger.info(
-          `Failed to parse config file ${configPath}: ${message}`,
-        );
-       const emptyConfig = { tool: [], session: [] };
-       cachedConfig = emptyConfig;
-       return emptyConfig;
-     }
-
-     // Validate entire file as CommandHooksConfig
-     if (!isValidCommandHooksConfig(parsed)) {
-        logger.info(
-          `Config file is not a valid CommandHooksConfig (expected { tool?: [], session?: [] }), using empty config`,
-        );
-       const emptyConfig = { tool: [], session: [] };
-       cachedConfig = emptyConfig;
-       return emptyConfig;
-     }
-
-     // Return with defaults for missing arrays
-     const result: CommandHooksConfig = {
-       tool: parsed.tool ?? [],
-       session: parsed.session ?? [],
-     };
-
-       logger.debug(
-         `Loaded global config: ${result.tool?.length ?? 0} tool hooks, ${result.session?.length ?? 0} session hooks`,
-       );
-
-      // Cache the result
-      cachedConfig = result;
-      return result;
-   } catch (error) {
-     // Catch-all for unexpected errors
-     const message = error instanceof Error ? error.message : String(error);
-      logger.info(
-        `Unexpected error loading global config: ${message}`,
+    if (!configPath) {
+      logger.debug(
+        "No .opencode/command-hooks.jsonc file found, using empty config",
       );
-     const emptyConfig = { tool: [], session: [] };
-     cachedConfig = emptyConfig;
-     return emptyConfig;
-   }
-}
+      return { config: { tool: [], session: [] }, error: null };
+    }
 
-/**
- * Clear the global config cache
- *
- * Forces the next call to loadGlobalConfig() to reload from disk.
- * Useful for testing or when config files may have changed.
- *
- * @internal For testing purposes
- */
-export function clearGlobalConfigCache(): void {
-   logger.debug("Clearing global config cache");
-   cachedConfig = null;
+    // Read file
+    let content: string;
+    try {
+      const file = Bun.file(configPath);
+      content = await file.text();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.info(`Failed to read config file ${configPath}: ${message}`);
+      return {
+        config: { tool: [], session: [] },
+        error: `Failed to read config file ${configPath}: ${message}`,
+      };
+    }
+
+    // Parse JSONC
+    let parsed: unknown;
+    try {
+      const stripped = stripJsoncComments(content);
+      parsed = parseJson(stripped);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.info(`Failed to parse config file ${configPath}: ${message}`);
+      return {
+        config: { tool: [], session: [] },
+        error: `Failed to parse config file ${configPath}: ${message}`,
+      };
+    }
+
+    // Validate entire file as CommandHooksConfig
+    if (!isValidCommandHooksConfig(parsed)) {
+      logger.info(
+        "Config file is not a valid CommandHooksConfig (expected { tool?: [], session?: [] }), using empty config",
+      );
+      return {
+        config: { tool: [], session: [] },
+        error:
+          "Config file is not a valid CommandHooksConfig (expected { tool?: [], session?: [] })",
+      };
+    }
+
+    // Return with defaults for missing arrays
+    const result: CommandHooksConfig = {
+      tool: parsed.tool ?? [],
+      session: parsed.session ?? [],
+    };
+
+    logger.debug(
+      `Loaded global config: ${result.tool?.length ?? 0} tool hooks, ${result.session?.length ?? 0} session hooks`,
+    );
+
+    return { config: result, error: null };
+  } catch (error) {
+    // Catch-all for unexpected errors
+    const message = error instanceof Error ? error.message : String(error);
+    logger.info(`Unexpected error loading global config: ${message}`);
+    return {
+      config: { tool: [], session: [] },
+      error: `Unexpected error loading global config: ${message}`,
+    };
+  }
 }

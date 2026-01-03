@@ -144,10 +144,12 @@ export async function loadAgentConfig(agentName: string): Promise<CommandHooksCo
 export async function loadAgentConfigWithGlobal(
   agentName: string,
 ): Promise<{ config: CommandHooksConfig; agentPath: string | null }> {
-  const [globalConfig, agentConfig] = await Promise.all([
+  const [globalResult, agentConfig] = await Promise.all([
     import("./global.js").then((m) => m.loadGlobalConfig()),
     loadAgentConfig(agentName),
   ]);
+
+  const globalConfig = globalResult.config;
 
   return {
     config: {

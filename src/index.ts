@@ -14,11 +14,38 @@ function normalizeString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined
 }
 
+async function notifyConfigError(
+  configError: string | null,
+  sessionId: string | undefined,
+  client: OpencodeClient,
+): Promise<void> {
+  if (!configError) return
+
+  const key = `${sessionId ?? "no-session"}:${configError}`
+  if (notifiedConfigErrors.has(key)) return
+  notifiedConfigErrors.add(key)
+
+  try {
+    await client.tui.showToast({
+      body: {
+        title: "Command Hooks Config Error",
+        message: configError,
+        variant: "error",
+      },
+    })
+  } catch (notifyError) {
+    const notifyMessage =
+      notifyError instanceof Error ? notifyError.message : String(notifyError)
+    logger.error(`Failed to notify config error: ${notifyMessage}`)
+  }
+}
+
 const TOOL_ARGS_TTL_MS = 5 * 60 * 1000
 const toolCallArgsCache = new Map<
   string,
   { args: Record<string, unknown>; cleanup?: ReturnType<typeof setTimeout> }
 >()
+const notifiedConfigErrors = new Set<string>()
 
 function storeToolArgs(callId: string | undefined, args: Record<string, unknown> | undefined): void {
   if (!callId || !args) return
@@ -92,11 +119,19 @@ function filterToolHooks(
     if (hook.when.toolArgs) {
       // If hook specifies toolArgs but we don't have them, we can't match
       // (this happens for async tools in tool.result event)
-      if (!criteria.toolArgs) return false
-      
+      if (!criteria.toolArgs) {
+        logger.debug(
+          `Hook ${hook.id} requires toolArgs but none were provided for tool ${criteria.toolName}`
+        )
+        return false
+      }
+
       for (const [key, expectedValue] of Object.entries(hook.when.toolArgs)) {
         const actualValue = criteria.toolArgs[key]
         if (!matches(expectedValue, actualValue as string | undefined)) {
+          logger.debug(
+            `Hook ${hook.id} toolArgs mismatch for ${key}: expected ${JSON.stringify(expectedValue)}, actual ${JSON.stringify(actualValue)}`
+          )
           return false
         }
       }
@@ -168,55 +203,9 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
 
            try {
              // Load config
-             const globalConfig = await loadGlobalConfig()
-             const markdownConfig = { tool: [], session: [] }
-             const { config: mergedConfig } = mergeConfigs(
-               globalConfig,
-               markdownConfig
-             )
+             const { config: globalConfig, error: globalConfigError } = await loadGlobalConfig()
+             await notifyConfigError(globalConfigError, sessionId, client as OpencodeClient)
 
-             // Filter session hooks for session.start
-             const matchedHooks = filterSessionHooks(mergedConfig.session || [], {
-               event: "session.start",
-               agent,
-             })
-
-            logger.debug(
-              `Matched ${matchedHooks.length} hook(s) for session.start`
-            )
-
-            // Build execution context
-            const context: HookExecutionContext = {
-              sessionId,
-              agent: agent || "unknown",
-            }
-
-            // Execute hooks
-            await executeHooks(matchedHooks, context, client as OpencodeClient)
-          } catch (error) {
-            const errorMessage =
-              error instanceof Error ? error.message : String(error)
-            logger.error(
-              `Error handling session.start event: ${errorMessage}`
-            )
-          }
-        }
-
-        // Handle session.idle event
-        if (event.type === "session.idle") {
-          logger.debug("Received session.idle event")
-
-          const sessionId = normalizeString(event.properties?.sessionID)
-          const agent = normalizeString(event.properties?.agent)
-
-          if (!sessionId) {
-            logger.debug("session.idle event missing sessionID")
-            return
-          }
-
-           try {
-             // Load config
-             const globalConfig = await loadGlobalConfig()
              const markdownConfig = { tool: [], session: [] }
              const { config: mergedConfig } = mergeConfigs(
                globalConfig,
@@ -275,7 +264,8 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
 
            try {
              // Load global config
-             const globalConfig = await loadGlobalConfig()
+             const { config: globalConfig, error: globalConfigError } = await loadGlobalConfig()
+             await notifyConfigError(globalConfigError, sessionId, client as OpencodeClient)
 
              // Load agent-specific config if this is a task tool with subagent_type
              let agentConfig: CommandHooksConfig = { tool: [], session: [] }
@@ -332,19 +322,24 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
         * Tool execution before hook
         * Runs before a tool is executed
         */
-       "tool.execute.before": async (
-         input: { tool: string; sessionID: string; callID: string },
-         output: { args: Record<string, unknown> }
-       ) => {
-         logger.debug(
-           `Received tool.execute.before for tool: ${input.tool}`
-         )
+        "tool.execute.before": async (
+          input: { tool: string; sessionID: string; callID: string },
+          output: { args: Record<string, unknown> }
+        ) => {
+          logger.debug(
+            `Received tool.execute.before for tool: ${input.tool}`
+          )
+          logger.debug(
+            `Tool args: ${JSON.stringify(output.args)}`
+          )
 
-         try {
-           // Load global config
-           const globalConfig = await loadGlobalConfig()
+           try {
+            // Load global config
+            const { config: globalConfig, error: globalConfigError } = await loadGlobalConfig()
+            await notifyConfigError(globalConfigError, input.sessionID, client as OpencodeClient)
+ 
+            // Load agent-specific config if this is a task tool with subagent_type
 
-           // Load agent-specific config if this is a task tool with subagent_type
            let agentConfig: CommandHooksConfig = { tool: [], session: [] }
            let subagentType: string | undefined
            if (input.tool === "task") {
@@ -415,13 +410,15 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
            return
          }
 
-         const storedToolArgs = getToolArgs(input.callID)
+          const storedToolArgs = getToolArgs(input.callID)
+ 
+           try {
+             // Load global config
+             const { config: globalConfig, error: globalConfigError } = await loadGlobalConfig()
+             await notifyConfigError(globalConfigError, input.sessionID, client as OpencodeClient)
+ 
+             // Load agent-specific config if this is a task tool with subagent_type
 
-         try {
-           // Load global config
-           const globalConfig = await loadGlobalConfig()
-
-           // Load agent-specific config if this is a task tool with subagent_type
            let agentConfig: CommandHooksConfig = { tool: [], session: [] }
             let subagentType: string | undefined
             if (input.tool === "task" && storedToolArgs) {
