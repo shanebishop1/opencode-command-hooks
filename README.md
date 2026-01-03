@@ -2,8 +2,6 @@
 
 Use simple configs to declaratively define shell command hooks on tool/subagent invocations. With a single line of configuration, you can inject a hook's output directly into context for your agent to read.
 
-Example use cases: run tests after a subagent finishes a task, auto-lint after writes, etc. You can also configure the hooks to run only when specified arguments are passed to a given tool. The plugin will handle sequential execution with failure recovery, output truncation, exit code capture, template interpolation, session context injection, toast notifications, toolArgs filtering, and non-blocking error handling.
-
 ## Markdown Frontmatter Hooks
 
 Define hooks in just a couple lines of markdown frontmatter. Putting them here is also really nice because you can see your entire agent's config in one place.
@@ -18,6 +16,14 @@ hooks:
       inject: "Test Output:\n{stdout}\n{stderr}"
 ---
 ````
+
+## Table of Contents
+
+- [Features](#features)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Examples](#examples)
+- [Template Placeholders](#template-placeholders)
 
 ### How It Works
 
@@ -143,14 +149,14 @@ You can set up tool hooks to only trigger on specific arguments via `when.toolAr
 
 ## Features
 
-- Tool hooks (`before`/`after`) and session hooks (`start`/`idle`)
+- Tool hooks (`before`/`after`) and session hooks (`start`/`idle`) via simple JSON/YAML frontmatter config
   - Hooks are **non-blocking**: failures don’t crash the session/tool.
   - Commands run **sequentially**, even if earlier ones fail.
+- Inject bash output into context with `inject` and notify user with `toast`
   - `inject`/`toast` interpolate using the **last command’s** output if `run` is an array.
-- Match by tool name, calling agent, slash command, and tool arguments
+- Match by tool name and (optionally) arguments
 - Optional session injection and toast notifications
-- Output truncation to keep memory bounded
-- Debug logging via `OPENCODE_HOOKS_DEBUG=1`
+- Automatic output truncation (30,000 by default)
 
 ---
 
@@ -221,7 +227,7 @@ hooks:
 
 ## Examples
 
-### Autonomous Quality Gates (After `task`)
+### Automatically run typecheck, lint, and test (after `task`)
 
 Run validation after certain subagents complete, inject results back into the session, and show a small toast.
 
@@ -299,25 +305,6 @@ Tool-arg matching is exact. This example runs only when the tool arg `path` equa
         "variant": "info",
         "duration": 3000,
       },
-    },
-  ],
-}
-```
-
-### Handle Async Tool Completion (`tool.result`)
-
-```jsonc
-{
-  "tool": [
-    {
-      "id": "task-result-hook",
-      "when": {
-        "phase": "after",
-        "tool": "task",
-        "toolArgs": { "subagent_type": "code-writer" },
-      },
-      "run": ["npm run validate-changes"],
-      "toast": { "title": "Code Writer", "message": "exit {exitCode}" },
     },
   ],
 }
