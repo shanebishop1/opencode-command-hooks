@@ -410,11 +410,13 @@ export interface SessionHook {
 export interface SessionHookWhen {
   /**
    * Session lifecycle event type.
-   * - "session.start": fires when session is ready to receive pre-context
+   * - "session.created": fires when session is created (internal name)
    * - "session.idle": fires after agent turn completes (for after-turn hooks)
    * - "session.end": fires when session ends
+   * 
+   * Note: For user convenience, config files can use "session.start" which maps to "session.created"
    */
-  event: "session.start" | "session.idle" | "session.end"
+  event: "session.created" | "session.idle" | "session.end" | "session.start"
 
   /**
    * Agent name(s) to match.
@@ -649,7 +651,7 @@ export interface NormalizedToolHookWhen {
  * Normalized representation of session hook matching conditions
  */
 export interface NormalizedSessionHookWhen {
-  event: "session.start" | "session.idle" | "session.end"
+  event: "session.created" | "session.idle" | "session.end"
   agent: string[]
 }
 
