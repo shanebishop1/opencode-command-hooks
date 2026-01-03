@@ -120,7 +120,7 @@ If `inject` is set, the command output is posted into the session, so your agent
 
 ### Filter by Tool Arguments
 
-You can set up tool hooks to only trigger on specific arguments via `when.toolArgs`. This could be useful for having side effects when MCP tools are called.
+You can set up tool hooks to only trigger on specific arguments via `when.toolArgs`.
 
 ```jsonc
 {
