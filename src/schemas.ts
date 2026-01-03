@@ -186,3 +186,27 @@ export function getConfigValidationErrors(
   const result = ConfigSchema.safeParse(input);
   return result.success ? null : result.error;
 }
+
+/**
+ * Check if a value is a valid CommandHooksConfig object
+ */
+export function isValidCommandHooksConfig(
+  value: unknown,
+): value is CommandHooksConfig {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const obj = value as Record<string, unknown>;
+
+  // Both tool and session are optional
+  if (obj.tool !== undefined && !Array.isArray(obj.tool)) {
+    return false;
+  }
+
+  if (obj.session !== undefined && !Array.isArray(obj.session)) {
+    return false;
+  }
+
+  return true;
+}

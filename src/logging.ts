@@ -50,6 +50,13 @@ export function setGlobalLogger(newLogger: Logger): void {
 }
 
 /**
+ * Check if debug logging is enabled
+ */
+export function isDebugEnabled(): boolean {
+  return process.env.OPENCODE_HOOKS_DEBUG === "1" || process.env.OPENCODE_HOOKS_DEBUG === "true"
+}
+
+/**
  * Proxy logger that always delegates to the current global logger.
  * This allows modules to import `logger` at load time, and it will
  * correctly use the real logger once it's initialized.

@@ -9,118 +9,43 @@
  * - Per-slash-command YAML frontmatter in command markdown
  */
 
-// ============================================================================
-// AGENT MARKDOWN SIMPLIFIED HOOKS (NEW)
-// ============================================================================
-
 /**
  * Simplified agent hooks configuration for markdown frontmatter
  *
  * This is the new, simplified schema for defining hooks in agent markdown files.
  * It's much more concise than the full CommandHooksConfig format.
- *
- * @example
- * ```yaml
- * hooks:
- *   before:
- *     - run: "echo 'Starting...'"
- *   after:
- *     - run: ["npm run typecheck", "npm run lint"]
- *       inject: "Validation results:\n{stdout}"
- * ```
  */
 export interface AgentHooks {
-  /**
-   * Hooks that run before agent execution
-   * Optional; omit if no before hooks needed
-   */
+  /** Hooks that run before agent execution */
   before?: AgentHookEntry[]
 
-  /**
-   * Hooks that run after agent execution
-   * Optional; omit if no after hooks needed
-   */
+  /** Hooks that run after agent execution */
   after?: AgentHookEntry[]
 }
 
-/**
- * Single hook entry in the simplified agent hooks format
- *
- * @example
- * ```yaml
- * - run: "npm run typecheck"
- *   inject: "Typecheck results:\n{stdout}"
- *   toast:
- *     message: "Typecheck {exitCode, select, 0 {passed} other {failed}}"
- *     variant: "success"
- * ```
- */
+/** Single hook entry in the simplified agent hooks format */
 export interface AgentHookEntry {
-  /**
-   * Shell command(s) to execute when this hook runs.
-   * - Single string: executed as-is
-   * - Array of strings: executed sequentially
-   *
-   * Required field - hook must have a run command.
-   */
+  /** Command(s) to execute. Array runs sequentially. */
   run: string | string[]
 
-  /**
-   * Optional template for injecting hook results into the session.
-   * Supports the same placeholder substitution as ToolHook.inject.
-   *
-   * @example
-   * ```yaml
-   * inject: "Results:\n{stdout}"
-   * ```
-   */
+  /** Optional template for injecting hook results into the session. Supports placeholder substitution. */
   inject?: string
 
-  /**
-   * Optional toast notification to display after the hook runs.
-   * Supports template placeholder substitution.
-   *
-   * @example
-   * ```yaml
-   * toast:
-   *   message: "Tests {exitCode, select, 0 {passed} other {failed}}"
-   *   variant: "success"
-   *   duration: 3000
-   * ```
-   */
+  /** Optional toast notification. Supports placeholder substitution. */
   toast?: {
-    /**
-     * Optional title for the toast notification.
-     * Supports template placeholder substitution.
-     */
+    /** Optional title. Supports placeholder substitution. */
     title?: string
 
-    /**
-     * Required message for the toast notification.
-     * Supports template placeholder substitution.
-     */
+    /** Message text. Supports placeholder substitution. */
     message: string
 
-    /**
-     * Visual variant/style for the toast.
-     * - "info": informational message (default)
-     * - "success": success message
-     * - "warning": warning message
-     * - "error": error message
-     */
+    /** Visual variant: "info" | "success" | "warning" | "error" */
     variant?: "info" | "success" | "warning" | "error"
 
-    /**
-     * Duration in milliseconds for which the toast should be displayed.
-     * If omitted, uses the default duration.
-     */
+    /** Duration in milliseconds. */
     duration?: number
   }
 }
-
-// ============================================================================
-// TOOL HOOKS
-// ============================================================================
 
 /**
  * Tool hook configuration
@@ -128,171 +53,65 @@ export interface AgentHookEntry {
  * Runs shell command(s) before or after a tool execution. Hooks can be filtered
  * by tool name, calling agent, and slash command context. Results can optionally
  * be injected into the session as messages.
- *
-  * @example
-  * ```json
-  * {
-  *   "id": "global-tests-after-task",
-  *   "when": {
-  *     "phase": "after",
-  *     "tool": ["task"],
-  *     "callingAgent": ["*"]
-  *   },
-  *   "run": ["pnpm test --runInBand"],
-  *   "inject": {
-  *     "template": "Tests after {tool}: exit {exitCode}\n```sh\n{stdout}\n```"
-  *   }
-  * }
-  * ```
-  */
+ */
 export interface ToolHook {
-  /**
-   * Unique identifier for this hook within its scope (global or per-entity).
-   * Used for error reporting and logging.
-   * Must be unique within the same config source (global or markdown file).
-   */
+  /** Unique hook identifier. Must be unique within config source. */
   id: string
 
-  /**
-   * Matching conditions that determine when this hook should run.
-   * All specified conditions must match for the hook to execute.
-   */
+  /** Matching conditions that determine when this hook should run. */
   when: ToolHookWhen
 
-   /**
-    * Shell command(s) to execute when this hook matches.
-    * - Single string: executed as-is
-    * - Array of strings: executed sequentially, even if earlier commands fail
-    *
-    * Commands are executed via Bun's shell API ($) with proper error handling.
-    * Non-zero exit codes do not block subsequent commands or normal tool execution.
-    */
-   run: string | string[]
+  /** Command(s) to execute. Array runs sequentially; failures don't block. */
+  run: string | string[]
 
-   /**
-     * Optional template string for injecting hook results into the calling session.
-     * If omitted, the hook still runs but output is only logged.
-     * 
-     * Supports placeholder substitution with the following variables:
-     * - {id}: hook ID
-     * - {agent}: agent name (if available)
-     * - {tool}: tool name (for tool hooks)
-     * - {cmd}: command string that was executed
-     * - {stdout}: captured standard output (truncated to limit)
-     * - {stderr}: captured standard error (truncated to limit)
-     * - {exitCode}: command exit code (integer)
-     * 
-     * Placeholders for unavailable values are replaced with empty string.
-     */
-    inject?: string
+  /**
+   * Optional template for injecting hook results into the session.
+   * Supports placeholders: {id}, {agent}, {tool}, {cmd}, {stdout}, {stderr}, {exitCode}
+   * Unavailable values are replaced with empty string.
+   */
+  inject?: string
 
-      /**
-       * Optional toast notification to display to the user.
-      * Supports template placeholder substitution like the inject template.
-      * If omitted, no toast is displayed.
-      * 
-      * @example
-      * ```json
-      * {
-      *   "title": "Lint Complete",
-      *   "message": "Exit code: {exitCode}",
-      *   "variant": "success",
-      *   "duration": 3000
-      * }
-      * ```
-      */
-     toast?: {
-       /**
-        * Optional title for the toast notification.
-        * Supports template placeholder substitution.
-        */
-       title?: string
+  /** Optional toast notification. Supports placeholder substitution. */
+  toast?: {
+    /** Optional title. Supports placeholder substitution. */
+    title?: string
 
-       /**
-        * Required message for the toast notification.
-        * Supports template placeholder substitution.
-        */
-       message: string
+    /** Message text. Supports placeholder substitution. */
+    message: string
 
-       /**
-        * Visual variant/style for the toast.
-        * - "info": informational message (default)
-        * - "success": success message
-        * - "warning": warning message
-        * - "error": error message
-        */
-       variant?: "info" | "success" | "warning" | "error"
+    /** Visual variant: "info" | "success" | "warning" | "error" */
+    variant?: "info" | "success" | "warning" | "error"
 
-       /**
-        * Duration in milliseconds for which the toast should be displayed.
-        * If omitted, uses the default duration.
-        */
-       duration?: number
-     }
+    /** Duration in milliseconds. */
+    duration?: number
   }
+}
 
 /**
  * Matching conditions for tool hooks
  *
- * Determines when a tool hook should execute. All specified conditions must match.
+ * All specified conditions must match for the hook to execute.
  * Omitted fields default to matching all values (wildcard behavior).
  */
 export interface ToolHookWhen {
-  /**
-   * Execution phase: "before" or "after" tool execution.
-   * - "before": runs before the tool is invoked
-   * - "after": runs after the tool completes (regardless of success/failure)
-   */
+  /** Execution phase: "before" or "after" tool execution. */
   phase: "before" | "after"
 
-  /**
-   * Tool name(s) to match.
-   * - Omitted or "*": matches all tools
-   * - Array of strings: matches if tool name is in the array
-   * - Single string: matches if tool name equals the string
-   *
-   * Examples: "task", ["bash", "write"], "*"
-   */
+  /** Tool name(s) to match. Omitted or "*" matches all tools. */
   tool?: string | string[]
 
   /**
    * Calling agent name(s) to match.
-   * - Omitted: defaults to "*" in global config, "this agent" in markdown
-   * - "*": matches any agent
-   * - Array of strings: matches if agent name is in the array
-   * - Single string: matches if agent name equals the string
-   *
-   * When defined in agent markdown, omitting this field means the hook
-   * applies only to that agent (implicit scoping).
+   * Omitted: defaults to "*" in global config, "this agent" in markdown.
    */
   callingAgent?: string | string[]
 
-  /**
-   * Slash command name(s) to match (optional).
-   * Only applies when the tool invocation is associated with a slash command.
-   * - Omitted: matches tool calls regardless of slash command context
-   * - "*": matches any slash command
-   * - Array of strings: matches if slash command name is in the array
-   * - Single string: matches if slash command name equals the string
-   *
-   * Note: Slash command detection may not be available for all tool types.
-   */
+  /** Slash command name(s) to match. Omitted matches all contexts. */
   slashCommand?: string | string[]
 
-  /**
-   * Tool argument filters (optional, only available in tool.execute.before).
-   * Match based on the tool's input arguments.
-   * Useful for filtering task tool calls by subagentType.
-   *
-   * Example: { "subagentType": "validator" } matches only task calls with subagentType="validator"
-   * Example: { "subagentType": ["validator", "reviewer"] } matches multiple values
-   */
+  /** Tool argument filters (only in tool.execute.before). Match by input arguments. */
   toolArgs?: Record<string, string | string[]>
 }
-
-// ============================================================================
-// SESSION HOOKS
-// ============================================================================
 
 /**
  * Session hook configuration
@@ -300,206 +119,76 @@ export interface ToolHookWhen {
  * Runs shell command(s) on session lifecycle events (start, idle, end).
  * Can be filtered by agent name. Results can optionally be injected into
  * the session as messages.
- *
-  * @example
-  * ```json
-  * {
-  *   "id": "global-bootstrap",
-  *   "when": {
-  *     "event": "session.start",
-  *     "agent": ["build", "validator", "*"]
-  *   },
-  *   "run": ["git status --short"],
-  *   "inject": {
-  *     "template": "Repo status for {agent}:\n```sh\n{stdout}\n```"
-  *   }
-  * }
-  * ```
-  */
+ */
 export interface SessionHook {
-  /**
-   * Unique identifier for this hook within its scope (global or per-entity).
-   * Used for error reporting and logging.
-   * Must be unique within the same config source (global or markdown file).
-   */
+  /** Unique hook identifier. Must be unique within config source. */
   id: string
 
-  /**
-   * Matching conditions that determine when this hook should run.
-   * All specified conditions must match for the hook to execute.
-   */
+  /** Matching conditions that determine when this hook should run. */
   when: SessionHookWhen
 
-   /**
-    * Shell command(s) to execute when this hook matches.
-    * - Single string: executed as-is
-    * - Array of strings: executed sequentially, even if earlier commands fail
-    *
-    * Commands are executed via Bun's shell API ($) with proper error handling.
-    * Non-zero exit codes do not block subsequent commands or normal session flow.
-    */
-   run: string | string[]
+  /** Command(s) to execute. Array runs sequentially; failures don't block. */
+  run: string | string[]
 
-   /**
-    * Optional template string for injecting hook results into the calling session.
-    * If omitted, the hook still runs but output is only logged.
-    * 
-    * Supports placeholder substitution with the following variables:
-    * - {id}: hook ID
-    * - {agent}: agent name (if available)
-    * - {cmd}: command string that was executed
-    * - {stdout}: captured standard output (truncated to limit)
-    * - {stderr}: captured standard error (truncated to limit)
-    * - {exitCode}: command exit code (integer)
-    * 
-    * Placeholders for unavailable values are replaced with empty string.
-    */
-   inject?: string
+  /**
+   * Optional template for injecting hook results into the session.
+   * Supports placeholders: {id}, {agent}, {cmd}, {stdout}, {stderr}, {exitCode}
+   * Unavailable values are replaced with empty string.
+   */
+  inject?: string
 
-      /**
-       * Optional toast notification to display to the user.
-      * Supports template placeholder substitution like the inject template.
-      * If omitted, no toast is displayed.
-      * 
-      * @example
-      * ```json
-      * {
-      *   "title": "Session Started",
-      *   "message": "Agent {agent} is ready",
-      *   "variant": "info",
-      *   "duration": 2000
-      * }
-      * ```
-      */
-     toast?: {
-       /**
-        * Optional title for the toast notification.
-        * Supports template placeholder substitution.
-        */
-       title?: string
+  /** Optional toast notification. Supports placeholder substitution. */
+  toast?: {
+    /** Optional title. Supports placeholder substitution. */
+    title?: string
 
-       /**
-        * Required message for the toast notification.
-        * Supports template placeholder substitution.
-        */
-       message: string
+    /** Message text. Supports placeholder substitution. */
+    message: string
 
-       /**
-        * Visual variant/style for the toast.
-        * - "info": informational message (default)
-        * - "success": success message
-        * - "warning": warning message
-        * - "error": error message
-        */
-       variant?: "info" | "success" | "warning" | "error"
+    /** Visual variant: "info" | "success" | "warning" | "error" */
+    variant?: "info" | "success" | "warning" | "error"
 
-       /**
-        * Duration in milliseconds for which the toast should be displayed.
-        * If omitted, uses the default duration.
-        */
-       duration?: number
-     }
+    /** Duration in milliseconds. */
+    duration?: number
   }
+}
 
 /**
  * Matching conditions for session hooks
  *
- * Determines when a session hook should execute. All specified conditions must match.
+ * All specified conditions must match for the hook to execute.
  * Omitted fields default to matching all values (wildcard behavior).
  */
 export interface SessionHookWhen {
   /**
    * Session lifecycle event type.
-   * - "session.created": fires when session is created (internal name)
-   * - "session.idle": fires after agent turn completes (for after-turn hooks)
-   * - "session.end": fires when session ends
-   * 
-   * Note: For user convenience, config files can use "session.start" which maps to "session.created"
+   * "session.start" (alias for "session.created"), "session.idle", "session.end"
    */
   event: "session.created" | "session.idle" | "session.end" | "session.start"
 
   /**
    * Agent name(s) to match.
-   * - Omitted: defaults to "*" in global config, "this agent" in markdown
-   * - "*": matches any agent
-   * - Array of strings: matches if agent name is in the array
-   * - Single string: matches if agent name equals the string
-   *
-   * When defined in agent markdown, omitting this field means the hook
-   * applies only to that agent (implicit scoping).
+   * Omitted: defaults to "*" in global config, "this agent" in markdown.
    */
   agent?: string | string[]
 }
 
-// ============================================================================
-// MESSAGE INJECTION
-// ============================================================================
-
-
-
-// ============================================================================
-// TOP-LEVEL CONFIGURATION
-// ============================================================================
-
 /**
  * Top-level command hooks configuration
  *
- * This is the root configuration object that appears in opencode.json/.opencode.jsonc
- * under the "command_hooks" key, or in YAML frontmatter of agent/slash-command markdown.
- *
- * @example
- * In opencode.json:
- * ```json
- * {
- *   "command_hooks": {
- *     "truncationLimit": 5000,
- *     "tool": [...],
- *     "session": [...]
- *   }
- * }
- * ```
- *
- * In agent markdown frontmatter:
- * ```yaml
- * ---
- * command_hooks:
- *   truncationLimit: 5000
- *   tool: [...]
- *   session: [...]
- * ---
- * ```
+ * Root configuration object in opencode.json/.opencode.jsonc under "command_hooks" key,
+ * or in YAML frontmatter of agent/slash-command markdown.
  */
 export interface CommandHooksConfig {
-  /**
-   * Optional truncation limit for command output in characters.
-   * If omitted, defaults to 30,000 characters (matching OpenCode's bash tool).
-   * Set to a custom value to limit output captured from hook commands.
-   * 
-   * @example
-   * ```json
-   * { "truncationLimit": 5000 }
-   * ```
-   */
+  /** Truncation limit for command output in characters. Defaults to 30,000. */
   truncationLimit?: number
 
-  /**
-   * Array of tool execution hooks.
-   * Hooks run before or after tool calls based on matching conditions.
-   * Optional; omit if no tool hooks are needed.
-   */
+  /** Array of tool execution hooks. */
   tool?: ToolHook[]
 
-  /**
-   * Array of session lifecycle hooks.
-   * Hooks run on session events (start, idle, end) based on matching conditions.
-   * Optional; omit if no session hooks are needed.
-   */
+  /** Array of session lifecycle hooks. */
   session?: SessionHook[]
 }
-
-// ============================================================================
-// RUNTIME EXECUTION TRACKING
-// ============================================================================
 
 /**
  * Result of executing a single hook command
@@ -508,151 +197,56 @@ export interface CommandHooksConfig {
  * output, exit code, and any errors that occurred.
  */
 export interface HookExecutionResult {
-  /**
-   * ID of the hook that was executed
-   */
+  /** ID of the hook that was executed */
   hookId: string
 
-  /**
-   * Whether the hook executed successfully (exit code 0)
-   */
+  /** Whether the hook executed successfully (exit code 0) */
   success: boolean
 
-  /**
-   * Exit code from the last command in the hook's run array
-   * - 0: success
-   * - non-zero: command failed
-   * - undefined: command did not execute (e.g., binary not found)
-   */
+  /** Exit code from the last command (0 = success, undefined = not executed) */
   exitCode?: number
 
-  /**
-   * Captured standard output from the command(s).
-   * Truncated to the configured limit (default 4096 chars).
-   * May be empty if command produced no output.
-   */
+  /** Captured standard output (truncated to configured limit) */
   stdout?: string
 
-  /**
-   * Captured standard error from the command(s).
-   * Truncated to the configured limit (default 4096 chars).
-   * May be empty if command produced no error output.
-   */
+  /** Captured standard error (truncated to configured limit) */
   stderr?: string
 
-  /**
-   * Error message if the hook failed to execute.
-   * Examples:
-   * - "Command not found: pnpm"
-   * - "Timeout executing hook"
-   * - "Failed to inject message into session"
-   */
+  /** Error message if the hook failed to execute */
   error?: string
 }
-
-// ============================================================================
-// TEMPLATE SUBSTITUTION CONTEXT
-// ============================================================================
 
 /**
  * Context object for template placeholder substitution
  *
  * When injecting hook results into a session, the template string is processed
- * with placeholder substitution using values from this context. All fields are
- * optional as not all contexts have all values available.
- *
- * @example
- * ```typescript
- * const context: TemplateContext = {
- *   id: "tests-after-task",
- *   agent: "build",
- *   tool: "task",
- *   cmd: "pnpm test --runInBand",
- *   stdout: "✓ All tests passed",
- *   stderr: "",
- *   exitCode: 0
- * }
- *
- * const template = "Hook {id} for {tool} completed: exit {exitCode}"
- * // Result: "Hook tests-after-task for task completed: exit 0"
- * ```
+ * with placeholder substitution using values from this context.
+ * All fields are optional as not all contexts have all values available.
  */
 export interface TemplateContext {
-  /**
-   * Hook ID (always available)
-   */
+  /** Hook ID (always available) */
   id: string
 
-  /**
-   * Agent name (available for tool hooks and session hooks)
-   * May be undefined if agent context is not available
-   */
+  /** Agent name (available for tool and session hooks) */
   agent?: string
 
-  /**
-   * Tool name (available for tool hooks only)
-   * May be undefined for session hooks
-   */
+  /** Tool name (available for tool hooks only) */
   tool?: string
 
-  /**
-   * Command string that was executed (available when hook runs)
-   * May be undefined if command execution failed before running
-   */
+  /** Command string that was executed */
   cmd?: string
 
-  /**
-   * Captured standard output from command execution
-   * Truncated to configured limit (default 4096 chars)
-   * May be undefined or empty if command produced no output
-   */
+  /** Captured standard output (truncated to configured limit) */
   stdout?: string
 
-  /**
-   * Captured standard error from command execution
-   * Truncated to configured limit (default 4096 chars)
-   * May be undefined or empty if command produced no error output
-   */
+  /** Captured standard error (truncated to configured limit) */
   stderr?: string
 
-  /**
-   * Exit code from command execution
-   * - 0: success
-   * - non-zero: command failed
-   * May be undefined if command did not execute
-   */
+  /** Exit code from command execution (0 = success) */
   exitCode?: number
 
-  /**
-   * Additional context fields for future expansion
-   * Examples: subagentSummary, taskResult, etc.
-   */
+  /** Additional context fields for future expansion */
   [key: string]: unknown
-}
-
-// ============================================================================
-// UTILITY TYPES
-// ============================================================================
-
-/**
- * Normalized representation of a hook's matching conditions
- *
- * Converts flexible input formats (string | string[]) into consistent
- * array format for easier matching logic.
- */
-export interface NormalizedToolHookWhen {
-  phase: "before" | "after"
-  tool: string[]
-  callingAgent: string[]
-  slashCommand: string[]
-}
-
-/**
- * Normalized representation of session hook matching conditions
- */
-export interface NormalizedSessionHookWhen {
-  event: "session.created" | "session.idle" | "session.end"
-  agent: string[]
 }
 
 /**
@@ -662,14 +256,10 @@ export interface NormalizedSessionHookWhen {
  * Used for reporting configuration issues without blocking execution.
  */
 export interface HookValidationError {
-  /**
-   * Hook ID (if available; may be undefined if id field is missing)
-   */
+  /** Hook ID (if available) */
   hookId?: string
 
-  /**
-   * Type of validation error
-   */
+  /** Type of validation error */
   type:
     | "missing_id"
     | "missing_when"
@@ -681,39 +271,11 @@ export interface HookValidationError {
     | "duplicate_id"
     | "unknown"
 
-  /**
-   * Human-readable error message
-   */
+  /** Human-readable error message */
   message: string
 
-  /**
-   * Severity level
-   */
+  /** Severity level */
   severity: "error" | "warning"
-}
-
-/**
- * Loaded and merged hooks for a specific context
- *
- * Represents the final set of hooks that apply to a given agent/session/tool call,
- * after merging global and entity-specific hooks with proper precedence.
- */
-export interface MergedHooksContext {
-  /**
-   * Tool hooks that apply to this context
-   */
-  toolHooks: ToolHook[]
-
-  /**
-   * Session hooks that apply to this context
-   */
-  sessionHooks: SessionHook[]
-
-  /**
-   * Validation errors found during loading/merging
-   * Hooks with errors are included but marked for error reporting
-   */
-  validationErrors: HookValidationError[]
 }
 
 /**
@@ -722,34 +284,21 @@ export interface MergedHooksContext {
  * Information about the current execution context that hooks may need
  */
 export interface HookExecutionContext {
-  /**
-   * Current session ID
-   */
+  /** Current session ID */
   sessionId: string
 
-  /**
-   * Current agent name
-   */
+  /** Current agent name */
   agent: string
 
-  /**
-   * Tool name (for tool hooks)
-   */
+  /** Tool name (for tool hooks) */
   tool?: string
 
-  /**
-   * Slash command name (if applicable)
-   */
+  /** Slash command name (if applicable) */
   slashCommand?: string
 
-   /**
-    * Tool call ID provided by OpenCode (if available)
-    */
-   callId?: string
+  /** Tool call ID provided by OpenCode (if available) */
+  callId?: string
 
-   /**
-    * Tool arguments (available for tool.execute.before hooks)
-    * For task tool, this includes: description, prompt, subagentType
-    */
-   toolArgs?: Record<string, unknown>
+  /** Tool arguments (available for tool.execute.before hooks) */
+  toolArgs?: Record<string, unknown>
 }

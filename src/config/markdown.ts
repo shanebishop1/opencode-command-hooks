@@ -7,6 +7,7 @@
  */
 
 import type { AgentHooks, AgentHookEntry, CommandHooksConfig, ToolHook } from "../types/hooks.js";
+import { isValidCommandHooksConfig } from "../schemas.js";
 import { load as parseYaml } from "js-yaml";
 import { logger } from "../logging.js";
 
@@ -239,29 +240,7 @@ function convertAgentHookEntryToToolHook(
   };
 }
 
-/**
- * Check if a value is a valid CommandHooksConfig object
- */
-function isValidCommandHooksConfig(
-  value: unknown,
-): value is CommandHooksConfig {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
 
-  const obj = value as Record<string, unknown>;
-
-  // Both tool and session are optional
-  if (obj.tool !== undefined && !Array.isArray(obj.tool)) {
-    return false;
-  }
-
-  if (obj.session !== undefined && !Array.isArray(obj.session)) {
-    return false;
-  }
-
-  return true;
-}
 
 /**
  * Extract agent name from file path
