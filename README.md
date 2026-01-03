@@ -1,8 +1,8 @@
 # 🪝 OpenCode Command Hooks
 
-Run shell commands automatically on OpenCode tool + session events, configured in JSON/YAML. Optionally inject the output into the session.
+Use simple configs to easily integrate shell command hooks when specified tools/subagents are called. Optionally, inject a command hook's output directly into the session for your agent to read.
 
-Typical uses: run tests after a subagent finishes, lint after writes, or bootstrap on session start—without asking the agent to do it.
+Example use cases: run tests after a subagent finishes a task, auto-lint after writes, etc. You can also configure the hooks to only run when specified arguments are passed to a given tool.
 
 ## Markdown Frontmatter Hooks
 
@@ -16,18 +16,24 @@ hooks:
   after:
     - run: "npm run test"
       inject: "Test Output:\n{stdout}\n{stderr}"
----
+````
 
 ### How It Works
 
-1. **Runs automatically** on the configured lifecycle event (tool/session).
-2. **Executes shell commands** sequentially (if you give an array).
-3. **Captures output** (truncated for safety).
+1. **Runs automatically** on the configured event
+2. **Executes shell commands** (sequentially, if you pass an array)
+3. **Captures output** (truncated to configured limit, default 30,000 characters)
 4. **Optionally reports results** via `inject` (to the session) and/or `toast` (to the UI).
 
-### Simplified vs Global Config Format
+## Why?
 
-**JSON Config**
+When working with a fleet of subagents, automatic validation of the state of your codebase is really useful. By setting up quality gates (lint/typecheck/test/etc.) or other automation, you can catch and prevent errors quickly and reliably.  
+
+Doing this by asking your orchestrator agent to use the bash tool (or call a validator subagent) is non-deterministic and can cost a lot of tokens over time. You could always write your own custom plugin to achieve this automatic validation behavior, but I found myself writing the same boilerplate, error handling, output capture, and session injection logic over and over again. This plugin removes that overhead and provides a simple, opinionated system for integrating command hooks into your Opencode workflow.
+
+---
+
+### JSON Config
 
 ```jsonc
 {
@@ -45,9 +51,8 @@ hooks:
   ],
 }
 ```
-````
 
-**Markdown Frontmatter Config**
+### Markdown Frontmatter Config
 
 ```yaml
 hooks:
@@ -76,7 +81,7 @@ toast:
   duration: 5000 # optional (milliseconds)
 ```
 
-### Template Variables
+### Inject String Template Variables
 
 - `{id}` - Hook ID
 - `{agent}` - Agent name (if available)
@@ -107,12 +112,6 @@ hooks:
 ````
 
 ---
-
-## Why?
-
-When working with a fleet of subagents, automatic validation of the state of your codebase is really useful. By setting up quality gates (tests, lint, typechecks, etc.) or other automation, you can catch and prevent errors quickly and reliably.  
-
-Doing this by having your orchestrator agent use the bash tool (or call a validator subagent) is non-deterministic and can cost a lot of tokens over time. You could always write a custom plugin to achieve this, but I found myself writing the same boilerplate, error handling, output capture, session injection logic over and over again. This plugin removes that overhead and provides an simple, opinionated system for integrating command hooks into your Opencode flow.
 
 ### Automatic Context Injection
 
@@ -173,6 +172,7 @@ Create `.opencode/command-hooks.jsonc` in your project (the plugin searches upwa
 
 ```jsonc
 {
+  "truncationLimit": 30000,
   "tool": [
     // Tool hooks
   ],
@@ -181,6 +181,14 @@ Create `.opencode/command-hooks.jsonc` in your project (the plugin searches upwa
   ],
 }
 ```
+
+#### Global Configuration Options
+
+| Option | Type | Required | Description |
+| ------ | ---- | -------- | ----------- |
+| `truncationLimit` | `number` | ❌ No | Maximum characters to capture from command output. Defaults to 30,000 (matching OpenCode's bash tool). Must be a positive integer. |
+| `tool` | `ToolHook[]` | ❌ No | Array of tool execution hooks |
+| `session` | `SessionHook[]` | ❌ No | Array of session lifecycle hooks |
 
 ### Markdown Frontmatter
 
