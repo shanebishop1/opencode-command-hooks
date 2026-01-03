@@ -40,36 +40,21 @@ async function notifyConfigError(
   }
 }
 
-const TOOL_ARGS_TTL_MS = 5 * 60 * 1000
-const toolCallArgsCache = new Map<
-  string,
-  { args: Record<string, unknown>; cleanup?: ReturnType<typeof setTimeout> }
->()
+const toolCallArgsCache = new Map<string, Record<string, unknown>>()
 const notifiedConfigErrors = new Set<string>()
 
 function storeToolArgs(callId: string | undefined, args: Record<string, unknown> | undefined): void {
   if (!callId || !args) return
-  const existing = toolCallArgsCache.get(callId)
-  if (existing?.cleanup) {
-    clearTimeout(existing.cleanup)
-  }
-  const cleanup = setTimeout(() => {
-    toolCallArgsCache.delete(callId)
-  }, TOOL_ARGS_TTL_MS)
-  toolCallArgsCache.set(callId, { args, cleanup })
+  toolCallArgsCache.set(callId, args)
 }
 
 function getToolArgs(callId: string | undefined): Record<string, unknown> | undefined {
   if (!callId) return undefined
-  return toolCallArgsCache.get(callId)?.args
+  return toolCallArgsCache.get(callId)
 }
 
 function deleteToolArgs(callId: string | undefined): void {
   if (!callId) return
-  const entry = toolCallArgsCache.get(callId)
-  if (entry?.cleanup) {
-    clearTimeout(entry.cleanup)
-  }
   toolCallArgsCache.delete(callId)
 }
 
