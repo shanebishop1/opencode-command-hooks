@@ -98,10 +98,10 @@
         "phase": "after",
         "tool": "playwright_browser_navigate",
         "toolArgs": {
-          "url": ["http://localhost:3000"]
+          "url": ["http://localhost:3000", "localhost:3000"]
         }
       },
-      "run": ["touch ab.txt"],
+      "run": ["touch ab.txt && echo 'hi' >> ab.txt"],
       "toast": {
         "message": "played"
       }
