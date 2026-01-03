@@ -78,7 +78,7 @@ function writeTestOpencodeConfig(): void {
     mkdirSync(TEST_CONFIG_DIR, { recursive: true })
   }
   const pluginConfig = {
-    plugin: [join(process.cwd(), "index.ts")],
+    plugin: [join(process.cwd(), "dist", "index.js")],
   }
   writeFileSync(TEST_OPENCODE_CONFIG, JSON.stringify(pluginConfig, null, 2))
 }
