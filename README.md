@@ -2,7 +2,7 @@
 
 Use simple configs to easily integrate shell command hooks when specified tools/subagents are called. Optionally, inject a command hook's output directly into the session for your agent to read.
 
-Example use cases: run tests after a subagent finishes a task, auto-lint after writes, etc. You can also configure the hooks to only run when specified arguments are passed to a given tool.
+Example use cases: run tests after a subagent finishes a task, auto-lint after writes, etc. You can also configure the hooks to run only when specified arguments are passed to a given tool.
 
 ## Markdown Frontmatter Hooks
 
@@ -10,12 +10,13 @@ Define hooks in agent markdown frontmatter so they live with the agent.
 
 ````markdown
 ---
-description: Engineer agent
+description: Analyzes the codebase and implements code changes.
 mode: subagent
 hooks:
   after:
     - run: "npm run test"
       inject: "Test Output:\n{stdout}\n{stderr}"
+---
 ````
 
 ### How It Works
