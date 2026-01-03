@@ -100,9 +100,9 @@ export function parseAgentHooks(
 ): AgentHooks | null {
   const parsed = parseYamlFrontmatter(yamlContent);
 
-  if (parsed === null || typeof parsed !== "object" || parsed === null) {
-    return null;
-  }
+   if (parsed === null || typeof parsed !== "object") {
+     return null;
+   }
 
   const config = parsed as Record<string, unknown>;
   const hooks = config.hooks;
