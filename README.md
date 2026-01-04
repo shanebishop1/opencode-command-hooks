@@ -1,4 +1,4 @@
-# 🪝 OpenCode Command Hooks
+# 🪝 OpenCode Command Hooks 🪝
 
 Use simple configs to declaratively define shell command hooks on tool/subagent invocations. With a single line of configuration, you can inject a hook's output directly into context for your agent to read.
 
