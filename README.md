@@ -16,6 +16,7 @@ hooks:
       inject: "Test Output:\n{stdout}\n{stderr}"
 ---
 ```
+**This plugin was not built by the OpenCode team nor is it affiliated with them.**
 
 ## Table of Contents
 
