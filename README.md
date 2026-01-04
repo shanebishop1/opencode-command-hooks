@@ -6,7 +6,7 @@ Use simple configs to declaratively define shell command hooks on tool/subagent 
 
 Define hooks in just a couple lines of markdown frontmatter. Putting them here is also really nice because you can see your entire agent's config in one place.
 
-````yaml
+```yaml
 ---
 description: Analyzes the codebase and implements code changes.
 mode: subagent
@@ -15,7 +15,7 @@ hooks:
     - run: "npm run test"
       inject: "Test Output:\n{stdout}\n{stderr}"
 ---
-````
+```
 
 ## Table of Contents
 
@@ -34,11 +34,11 @@ hooks:
 
 ## Why?
 
-When working with a fleet of subagents, automatic validation of the state of your codebase is really useful. By setting up quality gates (lint/typecheck/test/etc.) or other automation, you can catch and prevent errors quickly and reliably.  
+When working with a fleet of subagents, automatic validation of the state of your codebase is really useful. By setting up quality gates (lint/typecheck/test/etc.) or other automation, you can catch and prevent errors quickly and reliably.
 
-Doing this by asking your orchestrator agent to use the bash tool (or call a validator subagent) is non-deterministic and can cost a lot of tokens over time. You could always write your own custom plugin to achieve this automatic validation behavior, but I found myself writing the same boilerplate, error handling, output capture, and session injection logic over and over again.  
+Doing this by asking your orchestrator agent to use the bash tool (or call a validator subagent) is non-deterministic and can cost a lot of tokens over time. You could always write your own custom plugin to achieve this automatic validation behavior, but I found myself writing the same boilerplate, error handling, output capture, and session injection logic over and over again.
 
-Though this plugin is mostly a wrapper around accessing hooks that Opencode already exposes, it provides basic plumbing that reduces overhead, giving you a simple, opinionated system for integrating command hooks into your Opencode workflow. I also just like having hooks/config for my agents all colocated in one place (markdown files) and thought that maybe somebody else would like this too.
+Though this plugin is mostly a wrapper around accessing hooks that OpenCode already exposes, it provides basic plumbing that reduces overhead, giving you a simple, opinionated system for integrating command hooks into your OpenCode workflow. I also just like having hooks/config for my agents all colocated in one place (markdown files) and thought that maybe somebody else would like this too.
 
 ---
 
@@ -136,14 +136,12 @@ You can set up tool hooks to only trigger on specific arguments via `when.toolAr
   "when": {
     "phase": "after",
     "tool": "playwright_browser_navigate",
-    "toolArgs": { "url": "http://localhost:3000]" }
+    "toolArgs": { "url": "http://localhost:3000]" },
   },
-  "run": [
-    "osascript -e 'display notification \"Agent triggered playwright\"'"
-  ],
+  "run": ["osascript -e 'display notification \"Agent triggered playwright\"'"],
   "toast": {
-    "message": "Agent used the playwright {tool} tool"
-  }
+    "message": "Agent used the playwright {tool} tool",
+  },
 }
 ```
 
@@ -166,7 +164,7 @@ Add to your `opencode.json`:
 
 ```jsonc
 {
-  "plugin": ["opencode-command-hooks"]
+  "plugin": ["opencode-command-hooks"],
 }
 ```
 
@@ -192,11 +190,11 @@ Create `.opencode/command-hooks.jsonc` in your project (the plugin searches upwa
 
 #### JSON Config Options
 
-| Option | Type  | Description |
-| ------ | ----  | ----------- |
-| `truncationLimit` | `number`  | Maximum characters to capture from command output. Defaults to 30,000 (matching OpenCode's bash tool). Must be a positive integer. |
-| `tool` | `ToolHook[]` | Array of tool execution hooks |
-| `session` | `SessionHook[]`| Array of session lifecycle hooks |
+| Option            | Type            | Description                                                                                                                        |
+| ----------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `truncationLimit` | `number`        | Maximum characters to capture from command output. Defaults to 30,000 (matching OpenCode's bash tool). Must be a positive integer. |
+| `tool`            | `ToolHook[]`    | Array of tool execution hooks                                                                                                      |
+| `session`         | `SessionHook[]` | Array of session lifecycle hooks                                                                                                   |
 
 ### Markdown Frontmatter
 
@@ -349,8 +347,10 @@ All inject/toast string templates support these placeholders:
 ---
 
 ## Why Use This Plugin?
+
 **It lets you easily set up bash hooks with ~3-5 lines of YAML which are cleanly colocated with your subagent configuration.**
 Conversely, rolling your own looks something like this (for each project and set of hooks you want to set up):
+
 ```ts
 import type { Plugin } from "@opencode-ai/plugin";
 
@@ -377,22 +377,26 @@ export const MyHooks: Plugin = async ({ $, client }) => {
       try {
         // Run commands sequentially, even if they fail
         let lastResult = { exitCode: 0, stdout: "", stderr: "" };
-        
+
         for (const cmd of ["npm run typecheck", "npm run lint"]) {
           try {
             const result = await $`sh -c ${cmd}`.nothrow().quiet();
             const stdout = result.stdout?.toString() || "";
             const stderr = result.stderr?.toString() || "";
-            
+
             // Truncate to 30k chars to match OpenCode's bash tool
             lastResult = {
               exitCode: result.exitCode ?? 0,
-              stdout: stdout.length > 30000 
-                ? stdout.slice(0, 30000) + "\n[Output truncated: exceeded 30000 character limit]"
-                : stdout,
-              stderr: stderr.length > 30000
-                ? stderr.slice(0, 30000) + "\n[Output truncated: exceeded 30000 character limit]"
-                : stderr,
+              stdout:
+                stdout.length > 30000
+                  ? stdout.slice(0, 30000) +
+                    "\n[Output truncated: exceeded 30000 character limit]"
+                  : stdout,
+              stderr:
+                stderr.length > 30000
+                  ? stderr.slice(0, 30000) +
+                    "\n[Output truncated: exceeded 30000 character limit]"
+                  : stderr,
             };
           } catch (err) {
             lastResult = { exitCode: 1, stdout: "", stderr: String(err) };
