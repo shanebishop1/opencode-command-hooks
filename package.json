@@ -1,6 +1,6 @@
 {
   "name": "opencode-command-hooks",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "OpenCode plugin for declaratively attaching shell commands to agent/tool/slash-command lifecycle events",
   "type": "module",
   "main": "dist/index.js",
