@@ -1,6 +1,6 @@
 # 🪝 OpenCode Command Hooks 🪝
 
-Use simple configs to declaratively define shell command hooks on tool/subagent invocations. With a single line of configuration, you can inject a hook's output directly into context for your agent to read.
+Use simple configs to declaratively define shell command hooks on tool/subagent invocations. With a single line of config, you can inject a hook's output directly into context for your agent to read.
 
 ## Markdown Frontmatter Hooks
 
@@ -12,7 +12,7 @@ description: Analyzes the codebase and implements code changes.
 mode: subagent
 hooks:
   after:
-    - run: "npm run test"
+    - run: "npm test"
       inject: "Test Output:\n{stdout}\n{stderr}"
 ---
 ```
