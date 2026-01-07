@@ -161,7 +161,7 @@ const showToast = async (
 /**
  * Inject a message into a session using the OpenCode SDK
  *
- * Uses client.session.promptAsync() with noReply: true to inject context
+ * Uses client.session.promptAsync() to inject context
  * without triggering an AI response.
  *
  * @param client - OpenCode SDK client
@@ -180,7 +180,6 @@ const injectMessage = async (
      await client.session.promptAsync({
        path: { id: sessionId },
        body: {
-         noReply: true,
          parts: [{ type: "text", text: message }],
        },
      })
