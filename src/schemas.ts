@@ -64,6 +64,7 @@ export const ToolHookSchema = z.object({
     run: z.union([z.string(), z.array(z.string())]),
     inject: z.string().optional(),
     toast: ToastSchema,
+    overrideGlobal: z.boolean().optional(),
 });
 
 // ============================================================================
@@ -91,6 +92,7 @@ export const SessionHookSchema = z.object({
     run: z.union([z.string(), z.array(z.string())]),
     inject: z.string().optional(),
     toast: ToastSchema,
+    overrideGlobal: z.boolean().optional(),
 });
 
 // ============================================================================
@@ -105,6 +107,7 @@ export const SessionHookSchema = z.object({
  */
 export const ConfigSchema = z.object({
   truncationLimit: z.number().int().positive().optional(),
+  ignoreGlobalConfig: z.boolean().optional(),
   tool: z.array(ToolHookSchema).optional(),
   session: z.array(SessionHookSchema).optional(),
 });

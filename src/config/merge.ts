@@ -96,52 +96,92 @@ const validateConfigForDuplicates = (
 }
 
 /**
- * Merge two hook arrays with markdown taking precedence
+ * Merge two hook arrays with project/markdown taking precedence
  *
- * Combines global and markdown hooks, where markdown hooks with the same ID
- * replace global hooks. Markdown hooks with unique IDs are appended.
+ * Combines global and project hooks with the following rules:
+ * 1. Project hooks with `overrideGlobal: true` suppress global hooks matching the same event key
+ * 2. Project hooks with same `id` replace global hooks
+ * 3. Project hooks with unique `id` are appended
  *
- * Order is preserved: global hooks first (except those replaced), then new markdown hooks.
+ * Order is preserved: global hooks first (except those filtered/replaced), then new project hooks.
  *
- * @param globalHooks - Hooks from global config
- * @param markdownHooks - Hooks from markdown config
+ * @param globalHooks - Hooks from user global config (~/.config/opencode/)
+ * @param projectHooks - Hooks from project config (.opencode/) or markdown
+ * @param getEventKey - Function to extract the event key for override matching
  * @returns Merged hook array
  *
  * @example
  * ```typescript
  * const global = [
- *   { id: "hook-1", ... },
- *   { id: "hook-2", ... }
+ *   { id: "hook-1", when: { event: "session.created" }, ... },
+ *   { id: "hook-2", when: { event: "session.idle" }, ... }
  * ]
- * const markdown = [
- *   { id: "hook-1", ... },  // replaces global hook-1
- *   { id: "hook-3", ... }   // new hook
+ * const project = [
+ *   { id: "hook-3", when: { event: "session.created" }, overrideGlobal: true, ... }
  * ]
- * mergeHookArrays(global, markdown)
- * // Returns: [{ id: "hook-1", ... (markdown version) }, { id: "hook-2", ... }, { id: "hook-3", ... }]
+ * mergeHookArrays(global, project, h => h.when.event)
+ * // Returns: [{ id: "hook-2", ... }, { id: "hook-3", ... }]
+ * // hook-1 was filtered out because hook-3 has overrideGlobal for same event
  * ```
  */
 const mergeHookArrays = <T extends ToolHook | SessionHook>(
    globalHooks: T[],
-   markdownHooks: T[],
+   projectHooks: T[],
+   getEventKey: (hook: T) => string,
 ): T[] => {
-   // Create a map of markdown hooks by ID for quick lookup
-   const markdownMap = new Map<string, T>()
-   const markdownIds = new Set<string>()
+   // Step 1: Find project hooks with overrideGlobal: true and collect their event keys
+   const overriddenKeys = new Set<string>()
+   const wildcardOverridePhases = new Set<string>()
 
-   for (const hook of markdownHooks) {
-     markdownMap.set(hook.id, hook)
-     markdownIds.add(hook.id)
+   for (const hook of projectHooks) {
+     if (hook.overrideGlobal) {
+       const key = getEventKey(hook)
+       overriddenKeys.add(key)
+
+       // For tool hooks: if tool is "*", mark the phase as fully overridden
+       // Key format for tool hooks is "phase:tool", e.g., "after:\"*\"" or "after:\"bash\""
+       if (key.includes('"*"')) {
+         const phase = key.split(':')[0]
+         wildcardOverridePhases.add(phase)
+         logger.debug(`Wildcard override for phase "${phase}" from project hook "${hook.id}"`)
+       }
+     }
    }
 
-   // Start with global hooks, replacing those that appear in markdown
+   // Step 2: Filter out global hooks that match overridden keys
+   const filteredGlobalHooks = globalHooks.filter(hook => {
+     const key = getEventKey(hook)
+
+     // Check for wildcard phase override (tool hooks only)
+     const phase = key.split(':')[0]
+     if (wildcardOverridePhases.has(phase)) {
+       logger.debug(`Skipping global hook "${hook.id}" due to wildcard overrideGlobal on phase "${phase}"`)
+       return false
+     }
+
+     // Check for exact event key override
+     if (overriddenKeys.has(key)) {
+       logger.debug(`Skipping global hook "${hook.id}" due to overrideGlobal on event key "${key}"`)
+       return false
+     }
+
+     return true
+   })
+
+   // Step 3: Create a map of project hooks by ID for quick lookup
+   const projectMap = new Map<string, T>()
+   for (const hook of projectHooks) {
+     projectMap.set(hook.id, hook)
+   }
+
+   // Step 4: Start with filtered global hooks, replacing those that appear in project
    const result: T[] = []
    const processedIds = new Set<string>()
 
-   for (const hook of globalHooks) {
-     if (markdownMap.has(hook.id)) {
-       // Replace with markdown version
-       result.push(markdownMap.get(hook.id)!)
+   for (const hook of filteredGlobalHooks) {
+     if (projectMap.has(hook.id)) {
+       // Replace with project version
+       result.push(projectMap.get(hook.id)!)
      } else {
        // Keep global hook
        result.push(hook)
@@ -149,8 +189,8 @@ const mergeHookArrays = <T extends ToolHook | SessionHook>(
      processedIds.add(hook.id)
    }
 
-   // Add markdown hooks that weren't replacements
-   for (const hook of markdownHooks) {
+   // Step 5: Add project hooks that weren't replacements
+   for (const hook of projectHooks) {
      if (!processedIds.has(hook.id)) {
        result.push(hook)
      }
@@ -205,17 +245,22 @@ export const mergeConfigs = (
    const markdownErrors = validateConfigForDuplicates(markdown, "markdown")
    errors.push(...markdownErrors)
 
-   // Merge tool hooks
+   // Merge tool hooks with phase+tool matching for overrideGlobal
    const globalToolHooks = global.tool ?? []
    const markdownToolHooks = markdown.tool ?? []
-   const mergedToolHooks = mergeHookArrays(globalToolHooks, markdownToolHooks)
+   const mergedToolHooks = mergeHookArrays(
+     globalToolHooks,
+     markdownToolHooks,
+     (hook: ToolHook) => `${hook.when.phase}:${JSON.stringify(hook.when.tool ?? "*")}`
+   )
 
-    // Merge session hooks
+    // Merge session hooks with event matching for overrideGlobal
     const globalSessionHooks = global.session ?? []
     const markdownSessionHooks = markdown.session ?? []
     const mergedSessionHooks = mergeHookArrays(
       globalSessionHooks,
       markdownSessionHooks,
+      (hook: SessionHook) => hook.when.event
     )
 
     // Build merged config

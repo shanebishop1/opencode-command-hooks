@@ -85,6 +85,12 @@ export interface ToolHook {
     /** Duration in milliseconds. */
     duration?: number
   }
+
+  /**
+   * When true, prevents global hooks with matching phase+tool from running.
+   * If tool is "*", overrides ALL global hooks for that phase.
+   */
+  overrideGlobal?: boolean
 }
 
 /**
@@ -151,6 +157,11 @@ export interface SessionHook {
     /** Duration in milliseconds. */
     duration?: number
   }
+
+  /**
+   * When true, prevents global hooks with matching event from running.
+   */
+  overrideGlobal?: boolean
 }
 
 /**
@@ -182,6 +193,9 @@ export interface SessionHookWhen {
 export interface CommandHooksConfig {
   /** Truncation limit for command output in characters. Defaults to 30,000. */
   truncationLimit?: number
+
+  /** When true, ignore ~/.config/opencode/command-hooks.jsonc entirely. */
+  ignoreGlobalConfig?: boolean
 
   /** Array of tool execution hooks. */
   tool?: ToolHook[]

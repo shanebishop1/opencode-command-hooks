@@ -1,12 +1,17 @@
 /**
  * Global configuration parser for loading hooks from .opencode/command-hooks.jsonc
  *
- * Searches for .opencode/command-hooks.jsonc starting from the current working
- * directory and walking up the directory tree. Parses JSONC format as CommandHooksConfig.
+ * Loads both user global config (~/.config/opencode/command-hooks.jsonc) and
+ * project config (.opencode/command-hooks.jsonc), merging them with project taking precedence.
+ *
+ * Supports:
+ * - `ignoreGlobalConfig: true` in project config to skip user global entirely
+ * - `overrideGlobal: true` on individual hooks to suppress matching global hooks
  */
 
 import type { CommandHooksConfig } from "../types/hooks.js";
 import { isValidCommandHooksConfig } from "../schemas.js";
+import { mergeConfigs } from "./merge.js";
 import { join, dirname } from "path";
 import { homedir } from "os";
 import { logger } from "../logging.js";
@@ -116,18 +121,16 @@ const parseJson = (content: string): unknown => {
 
 
 /**
- * Find command hooks config file by walking up directory tree
- * Looks for .opencode/command-hooks.jsonc in project directories,
- * then falls back to user global config at ~/.config/opencode/command-hooks.jsonc
+ * Find project config file by walking up directory tree
+ * Looks for .opencode/command-hooks.jsonc in project directories
  */
-const findConfigFile = async (startDir: string): Promise<string | null> => {
+const findProjectConfigFile = async (startDir: string): Promise<string | null> => {
    let currentDir = startDir;
 
    // Limit search depth to avoid infinite loops
    const maxDepth = 20;
    let depth = 0;
 
-   // First, search project directories walking up
    while (depth < maxDepth) {
      // Try .opencode/command-hooks.jsonc
      const configPath = join(currentDir, ".opencode", "command-hooks.jsonc");
@@ -152,112 +155,164 @@ const findConfigFile = async (startDir: string): Promise<string | null> => {
     depth++;
   }
 
-  logger.debug(
-    `No project config file found after searching ${depth} directories, checking user global config`,
-  );
-
-  // Fall back to user global config
-  const userConfigPath = getUserConfigPath();
-  try {
-    const file = Bun.file(userConfigPath);
-    if (await file.exists()) {
-      logger.debug(`Found user global config file: ${userConfigPath}`);
-      return userConfigPath;
-    }
-  } catch {
-    // User config doesn't exist or isn't accessible
-  }
-
-  logger.debug(`No config file found (checked project dirs and ${userConfigPath})`);
+  logger.debug(`No project config file found after searching ${depth} directories`);
   return null;
 }
 
+const emptyConfig = (): CommandHooksConfig => ({ tool: [], session: [] });
+
 /**
- * Load and parse global command hooks configuration
+ * Load and parse config from a specific file path
  *
- * Searches for .opencode/command-hooks.jsonc starting from the current working
- * directory and walking up. Parses the entire file as CommandHooksConfig.
+ * @param configPath - Path to the config file
+ * @param source - Source identifier for logging ("project" or "user global")
+ * @returns GlobalConfigResult with parsed config or error
+ */
+const loadConfigFromPath = async (
+  configPath: string,
+  source: string
+): Promise<GlobalConfigResult> => {
+  // Read file
+  let content: string;
+  try {
+    const file = Bun.file(configPath);
+    if (!(await file.exists())) {
+      return { config: emptyConfig(), error: null };
+    }
+    content = await file.text();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.info(`Failed to read ${source} config file ${configPath}: ${message}`);
+    return {
+      config: emptyConfig(),
+      error: `Failed to read ${source} config file ${configPath}: ${message}`,
+    };
+  }
+
+  // Parse JSONC
+  let parsed: unknown;
+  try {
+    const stripped = stripJsoncComments(content);
+    parsed = parseJson(stripped);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.info(`Failed to parse ${source} config file ${configPath}: ${message}`);
+    return {
+      config: emptyConfig(),
+      error: `Failed to parse ${source} config file ${configPath}: ${message}`,
+    };
+  }
+
+  // Validate entire file as CommandHooksConfig
+  if (!isValidCommandHooksConfig(parsed)) {
+    logger.info(
+      `${source} config file is not a valid CommandHooksConfig (expected { tool?: [], session?: [] }), using empty config`,
+    );
+    return {
+      config: emptyConfig(),
+      error: `${source} config file is not a valid CommandHooksConfig`,
+    };
+  }
+
+  // Return with defaults for missing arrays
+  const result: CommandHooksConfig = {
+    truncationLimit: parsed.truncationLimit,
+    ignoreGlobalConfig: parsed.ignoreGlobalConfig,
+    tool: parsed.tool ?? [],
+    session: parsed.session ?? [],
+  };
+
+  logger.debug(
+    `Loaded ${source} config: truncationLimit=${result.truncationLimit}, ${result.tool?.length ?? 0} tool hooks, ${result.session?.length ?? 0} session hooks`,
+  );
+
+  return { config: result, error: null };
+}
+
+/**
+ * Load and merge command hooks configuration from both sources
+ *
+ * Loads both user global config (~/.config/opencode/command-hooks.jsonc) and
+ * project config (.opencode/command-hooks.jsonc), then merges them.
+ *
+ * Merge behavior:
+ * - If project config has `ignoreGlobalConfig: true`, skip user global entirely
+ * - Otherwise, merge with project hooks taking precedence:
+ *   - Same hook `id` → project version wins
+ *   - Hook with `overrideGlobal: true` → suppresses matching global hooks
+ *   - Different `id` without override → both run (concatenation)
  *
  * Error handling:
- * - If no config file found: returns empty config (not an error)
- * - If config file is malformed: logs warning, returns empty config
- * - If file is not a valid CommandHooksConfig: logs warning, returns empty config
+ * - If no config files found: returns empty config (not an error)
+ * - If user global has parse error: warns and uses project config only
+ * - If project has parse error: returns error
  * - Never throws errors - always returns a valid config
  *
  * @returns Promise resolving to GlobalConfigResult
  */
 export const loadGlobalConfig = async (): Promise<GlobalConfigResult> => {
-   let configPath: string | null = null;
-   try {
-     // Find config file
-     logger.debug(`loadGlobalConfig: starting search from: ${process.cwd()}`)
-     configPath = await findConfigFile(process.cwd());
+  try {
+    logger.debug(`loadGlobalConfig: starting search from: ${process.cwd()}`);
 
-    if (!configPath) {
-      logger.debug(
-        "No .opencode/command-hooks.jsonc file found, using empty config",
-      );
-      return { config: { tool: [], session: [] }, error: null };
+    // Step 1: Load project config first (to check ignoreGlobalConfig flag)
+    const projectConfigPath = await findProjectConfigFile(process.cwd());
+    const projectResult = projectConfigPath
+      ? await loadConfigFromPath(projectConfigPath, "project")
+      : { config: emptyConfig(), error: null };
+
+    // If project config had an error, return it
+    if (projectResult.error) {
+      return projectResult;
     }
 
-    // Read file
-    let content: string;
-    try {
-      const file = Bun.file(configPath);
-      content = await file.text();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      logger.info(`Failed to read config file ${configPath}: ${message}`);
-      return {
-        config: { tool: [], session: [] },
-        error: `Failed to read config file ${configPath}: ${message}`,
-      };
+    // Step 2: If project says ignore global, return project only
+    if (projectResult.config.ignoreGlobalConfig) {
+      logger.debug("Project config has ignoreGlobalConfig: true, skipping user global");
+      return projectResult;
     }
 
-    // Parse JSONC
-    let parsed: unknown;
-    try {
-      const stripped = stripJsoncComments(content);
-      parsed = parseJson(stripped);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      logger.info(`Failed to parse config file ${configPath}: ${message}`);
-      return {
-        config: { tool: [], session: [] },
-        error: `Failed to parse config file ${configPath}: ${message}`,
-      };
-    }
+    // Step 3: Load user global config
+    const userGlobalPath = getUserConfigPath();
+    const userGlobalResult = await loadConfigFromPath(userGlobalPath, "user global");
 
-    // Validate entire file as CommandHooksConfig
-    if (!isValidCommandHooksConfig(parsed)) {
+    // Step 4: If user global had parse error, log and use project only
+    if (userGlobalResult.error) {
       logger.info(
-        "Config file is not a valid CommandHooksConfig (expected { tool?: [], session?: [] }), using empty config",
+        `Failed to load user global config (${userGlobalPath}): ${userGlobalResult.error}. Using project config only.`
       );
-      return {
-        config: { tool: [], session: [] },
-        error:
-          "Config file is not a valid CommandHooksConfig (expected { tool?: [], session?: [] })",
-      };
+      return projectResult;
     }
 
-     // Return with defaults for missing arrays
-     const result: CommandHooksConfig = {
-       truncationLimit: parsed.truncationLimit,
-       tool: parsed.tool ?? [],
-       session: parsed.session ?? [],
-     };
+    // Step 5: If neither config has hooks, return empty
+    const hasUserGlobalHooks =
+      (userGlobalResult.config.tool?.length ?? 0) > 0 ||
+      (userGlobalResult.config.session?.length ?? 0) > 0;
+    const hasProjectHooks =
+      (projectResult.config.tool?.length ?? 0) > 0 ||
+      (projectResult.config.session?.length ?? 0) > 0;
 
-     logger.debug(
-       `Loaded global config: truncationLimit=${result.truncationLimit}, ${result.tool?.length ?? 0} tool hooks, ${result.session?.length ?? 0} session hooks`,
-     );
+    if (!hasUserGlobalHooks && !hasProjectHooks) {
+      logger.debug("No hooks found in either config, using empty config");
+      return { config: emptyConfig(), error: null };
+    }
 
-     return { config: result, error: null };
+    // Step 6: Merge configs - user global as base, project as override
+    const { config: mergedConfig } = mergeConfigs(
+      userGlobalResult.config,
+      projectResult.config
+    );
+
+    logger.debug(
+      `Merged configs: ${mergedConfig.tool?.length ?? 0} tool hooks, ${mergedConfig.session?.length ?? 0} session hooks`
+    );
+
+    return { config: mergedConfig, error: null };
   } catch (error) {
     // Catch-all for unexpected errors
     const message = error instanceof Error ? error.message : String(error);
     logger.info(`Unexpected error loading global config: ${message}`);
     return {
-      config: { tool: [], session: [] },
+      config: emptyConfig(),
       error: `Unexpected error loading global config: ${message}`,
     };
   }
