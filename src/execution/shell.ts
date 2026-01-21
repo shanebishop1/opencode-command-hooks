@@ -181,7 +181,7 @@ const executeShellCommand = async (
      // Use Bun's $ template literal to execute the command
      // The nothrow() method prevents throwing on non-zero exit codes
      // The quiet() method suppresses output and returns Buffers
-     const result = await Bun.$`sh -c ${command}`.nothrow().quiet()
+     const result = await Bun.$`${{ raw: command }}`.nothrow().quiet()
 
      // Extract stdout and stderr as text
      // result.stdout and result.stderr are Buffers, convert to string
