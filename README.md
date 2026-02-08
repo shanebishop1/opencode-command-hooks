@@ -75,11 +75,12 @@ hooks:
 
 ### Hook Configuration Options
 
-| Option   | Type                   | Description                       |
-| -------- | ---------------------- | --------------------------------- |
-| `run`    | `string` \| `string[]` | Command(s) to execute             |
-| `inject` | `string`               | Message injected into the session |
-| `toast`  | `object`               | Toast notification configuration  |
+| Option           | Type                   | Description                                                              |
+| ---------------- | ---------------------- | ------------------------------------------------------------------------ |
+| `run`            | `string` \| `string[]` | Command(s) to execute                                                    |
+| `inject`         | `string`               | Message injected into the session                                        |
+| `toast`          | `object`               | Toast notification configuration                                         |
+| `overrideGlobal` | `boolean`              | When `true`, suppresses global hooks matching the same event/phase+tool |
 
 ### Toast Configuration
 
@@ -173,13 +174,21 @@ Add to your `opencode.json`:
 
 ## Configuration
 
-### JSON Config
+### Config Locations
 
-Create `.opencode/command-hooks.jsonc` in your project (the plugin searches upward from the current working directory):
+The plugin loads hooks from two locations:
+
+1. **User global**: `~/.config/opencode/command-hooks.jsonc` — hooks that apply to all projects
+2. **Project**: `.opencode/command-hooks.jsonc` — project-specific hooks (searches upward from cwd)
+
+Both are merged by default. See [Configuration Precedence](#configuration-precedence) for details.
+
+### JSON Config
 
 ```jsonc
 {
   "truncationLimit": 30000,
+  "ignoreGlobalConfig": false,
   "tool": [
     // Tool hooks
   ],
@@ -191,11 +200,12 @@ Create `.opencode/command-hooks.jsonc` in your project (the plugin searches upwa
 
 #### JSON Config Options
 
-| Option            | Type            | Description                                                                                                                        |
-| ----------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `truncationLimit` | `number`        | Maximum characters to capture from command output. Defaults to 30,000 (matching OpenCode's bash tool). Must be a positive integer. |
-| `tool`            | `ToolHook[]`    | Array of tool execution hooks                                                                                                      |
-| `session`         | `SessionHook[]` | Array of session lifecycle hooks                                                                                                   |
+| Option              | Type            | Description                                                                                                                        |
+| ------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `truncationLimit`   | `number`        | Maximum characters to capture from command output. Defaults to 30,000 (matching OpenCode's bash tool). Must be a positive integer. |
+| `ignoreGlobalConfig`| `boolean`       | When `true`, skip loading `~/.config/opencode/command-hooks.jsonc`. Defaults to `false`.                                           |
+| `tool`              | `ToolHook[]`    | Array of tool execution hooks                                                                                                      |
+| `session`           | `SessionHook[]` | Array of session lifecycle hooks                                                                                                   |
 
 ### Markdown Frontmatter
 
@@ -216,11 +226,50 @@ hooks:
 
 ### Configuration Precedence
 
-1. Hooks are loaded from `.opencode/command-hooks.jsonc`
-2. Markdown hooks are converted to normal hooks with auto-generated IDs
-3. If a markdown hook and a global hook share the same `id`, the markdown hook wins
-4. Duplicate IDs within the same source are errors
-5. Global config is cached to avoid repeated file reads
+Hooks are loaded from two locations and merged:
+
+1. **User global config**: `~/.config/opencode/command-hooks.jsonc`
+2. **Project config**: `.opencode/command-hooks.jsonc` (searches upward from cwd)
+
+**Merge behavior:**
+
+| Scenario | Result |
+|----------|--------|
+| Different hook IDs | Both run (concatenation) |
+| Same hook ID | Project replaces global |
+| `overrideGlobal: true` on hook | Suppresses all global hooks for same event/phase+tool |
+| `ignoreGlobalConfig: true` in project | Skips global config entirely |
+
+**Example: Override all global hooks for an event**
+
+```jsonc
+{
+  "session": [
+    {
+      "id": "my-session-idle",
+      "when": { "event": "session.idle" },
+      "run": "echo only this runs",
+      "overrideGlobal": true
+    }
+  ]
+}
+```
+
+**Example: Ignore global config entirely**
+
+```jsonc
+{
+  "ignoreGlobalConfig": true,
+  "tool": [
+    // Only these hooks will run
+  ]
+}
+```
+
+Additional precedence rules:
+- Markdown hooks are converted to normal hooks with auto-generated IDs
+- If a markdown hook and a config hook share the same `id`, the markdown hook wins
+- Duplicate IDs within the same source are errors
 
 ---
 
