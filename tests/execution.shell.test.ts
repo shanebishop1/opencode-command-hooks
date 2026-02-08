@@ -19,7 +19,7 @@ describe("Shell command execution", () => {
     })
 
     it("captures stderr from failed commands", async () => {
-      const result = await executeCommand("sh -c 'echo error >&2; exit 1'")
+      const result = await executeCommand("printf 'error' 1>&2; exit 1")
 
       expect(result.success).toBe(false)
       expect(result.exitCode).toBe(1)
@@ -59,7 +59,7 @@ describe("Shell command execution", () => {
     })
 
     it("handles commands with environment variables", async () => {
-      const result = await executeCommand("TEST_VAR=hello sh -c 'echo $TEST_VAR'")
+      const result = await executeCommand("TEST_VAR=hello && echo $TEST_VAR")
 
       expect(result.success).toBe(true)
       expect(result.stdout).toContain("hello")
@@ -179,7 +179,7 @@ describe("Shell command execution", () => {
 
     it("handles Bun shell with quiet mode", async () => {
       // quiet() suppresses output, so we should get clean stdout/stderr
-      const result = await executeCommand("echo 'test' && echo 'error' >&2")
+      const result = await executeCommand("echo 'test' && printf 'error' 1>&2")
 
       expect(result.stdout).toContain("test")
       expect(result.stderr).toContain("error")
@@ -207,7 +207,7 @@ describe("Shell command execution", () => {
     })
 
     it("handles commands with syntax errors", async () => {
-      const result = await executeCommand("sh -c 'invalid syntax )'")
+      const result = await executeCommand("(invalid syntax")
 
       expect(result.success).toBe(false)
       expect(result.exitCode).toBeGreaterThan(0)
