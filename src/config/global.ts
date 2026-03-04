@@ -10,7 +10,7 @@
  */
 
 import type { CommandHooksConfig } from "../types/hooks.js";
-import { isValidCommandHooksConfig } from "../schemas.js";
+import { ConfigSchema } from "../schemas.js";
 import { mergeConfigs } from "./merge.js";
 import { join, dirname } from "path";
 import { homedir } from "os";
@@ -203,23 +203,30 @@ const loadConfigFromPath = async (
     };
   }
 
-  // Validate entire file as CommandHooksConfig
-  if (!isValidCommandHooksConfig(parsed)) {
+  // Validate and parse with the full schema
+  const parseResult = ConfigSchema.safeParse(parsed);
+  if (!parseResult.success) {
+    const issueSummary = parseResult.error.issues
+      .map(issue => {
+        const path = issue.path.length > 0 ? issue.path.join(".") : "root";
+        return `${path}: ${issue.message}`;
+      })
+      .join("; ");
     logger.info(
-      `${source} config file is not a valid CommandHooksConfig (expected { tool?: [], session?: [] }), using empty config`,
+      `${source} config file failed schema validation, using empty config: ${issueSummary}`
     );
     return {
       config: emptyConfig(),
-      error: `${source} config file is not a valid CommandHooksConfig`,
+      error: `${source} config file failed schema validation`,
     };
   }
 
   // Return with defaults for missing arrays
   const result: CommandHooksConfig = {
-    truncationLimit: parsed.truncationLimit,
-    ignoreGlobalConfig: parsed.ignoreGlobalConfig,
-    tool: parsed.tool ?? [],
-    session: parsed.session ?? [],
+    truncationLimit: parseResult.data.truncationLimit,
+    ignoreGlobalConfig: parseResult.data.ignoreGlobalConfig,
+    tool: parseResult.data.tool ?? [],
+    session: parseResult.data.session ?? [],
   };
 
   logger.debug(
