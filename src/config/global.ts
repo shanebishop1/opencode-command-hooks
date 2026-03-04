@@ -14,6 +14,7 @@ import { ConfigSchema } from "../schemas.js";
 import { mergeConfigs } from "./merge.js";
 import { join, dirname } from "path";
 import { homedir } from "os";
+import { stat } from "fs/promises";
 import { logger } from "../logging.js";
 
 /**
@@ -30,6 +31,21 @@ export type GlobalConfigResult = {
   config: CommandHooksConfig;
   error: string | null;
 };
+
+const CONFIG_CACHE_TTL_MS = 250;
+
+type ProjectConfigPathCacheEntry = {
+  path: string | null;
+  cachedAt: number;
+};
+
+type ConfigBlobCacheEntry = GlobalConfigResult & {
+  mtimeMs: number | null;
+  cachedAt: number;
+};
+
+const projectConfigPathCache = new Map<string, ProjectConfigPathCacheEntry>();
+const configBlobCache = new Map<string, ConfigBlobCacheEntry>();
 
 /**
  * Strip comments from JSONC content
@@ -120,6 +136,17 @@ const parseJson = (content: string): unknown => {
   }
 }
 
+const getFileMtimeMs = async (path: string): Promise<number | null> => {
+  try {
+    const stats = await stat(path);
+    if (!stats.isFile()) {
+      return null;
+    }
+    return stats.mtimeMs;
+  } catch {
+    return null;
+  }
+}
 
 
 /**
@@ -127,6 +154,19 @@ const parseJson = (content: string): unknown => {
  * Looks for .opencode/command-hooks.jsonc in project directories
  */
 const findProjectConfigFile = async (startDir: string): Promise<string | null> => {
+   const now = Date.now();
+   const cached = projectConfigPathCache.get(startDir);
+   if (cached && now - cached.cachedAt < CONFIG_CACHE_TTL_MS) {
+     if (cached.path === null) {
+       return null;
+     }
+
+     const cachedPathStillExists = (await getFileMtimeMs(cached.path)) !== null;
+     if (cachedPathStillExists) {
+       return cached.path;
+     }
+   }
+
    let currentDir = startDir;
 
    // Limit search depth to avoid infinite loops
@@ -134,17 +174,13 @@ const findProjectConfigFile = async (startDir: string): Promise<string | null> =
    let depth = 0;
 
    while (depth < maxDepth) {
-     // Try .opencode/command-hooks.jsonc
      const configPath = join(currentDir, ".opencode", "command-hooks.jsonc");
-    try {
-      const file = Bun.file(configPath);
-       if (await file.exists()) {
+     const mtimeMs = await getFileMtimeMs(configPath);
+       if (mtimeMs !== null) {
          logger.debug(`Found project config file: ${configPath}`);
+         projectConfigPathCache.set(startDir, { path: configPath, cachedAt: now });
          return configPath;
        }
-    } catch {
-      // Continue searching
-    }
 
     // Move up one directory
     const parentDir = dirname(currentDir);
@@ -158,10 +194,16 @@ const findProjectConfigFile = async (startDir: string): Promise<string | null> =
   }
 
   logger.debug(`No project config file found after searching ${depth} directories`);
+  projectConfigPathCache.set(startDir, { path: null, cachedAt: now });
   return null;
 }
 
 const emptyConfig = (): CommandHooksConfig => ({ tool: [], session: [] });
+
+export const clearGlobalConfigCacheForTests = (): void => {
+  projectConfigPathCache.clear();
+  configBlobCache.clear();
+}
 
 /**
  * Load and parse config from a specific file path
@@ -174,21 +216,39 @@ const loadConfigFromPath = async (
   configPath: string,
   source: string
 ): Promise<GlobalConfigResult> => {
+  const now = Date.now();
+  const mtimeMs = await getFileMtimeMs(configPath);
+  const cached = configBlobCache.get(configPath);
+
+  if (cached) {
+    if (mtimeMs === null && cached.mtimeMs === null && now - cached.cachedAt < CONFIG_CACHE_TTL_MS) {
+      return { config: cached.config, error: cached.error };
+    }
+
+    if (mtimeMs !== null && cached.mtimeMs === mtimeMs) {
+      return { config: cached.config, error: cached.error };
+    }
+  }
+
+  if (mtimeMs === null) {
+    const missingResult: GlobalConfigResult = { config: emptyConfig(), error: null };
+    configBlobCache.set(configPath, { ...missingResult, mtimeMs: null, cachedAt: now });
+    return missingResult;
+  }
+
   // Read file
   let content: string;
   try {
-    const file = Bun.file(configPath);
-    if (!(await file.exists())) {
-      return { config: emptyConfig(), error: null };
-    }
-    content = await file.text();
+    content = await Bun.file(configPath).text();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.info(`Failed to read ${source} config file ${configPath}: ${message}`);
-    return {
+    const readErrorResult: GlobalConfigResult = {
       config: emptyConfig(),
       error: `Failed to read ${source} config file ${configPath}: ${message}`,
     };
+    configBlobCache.set(configPath, { ...readErrorResult, mtimeMs, cachedAt: now });
+    return readErrorResult;
   }
 
   // Parse JSONC
@@ -199,10 +259,12 @@ const loadConfigFromPath = async (
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.info(`Failed to parse ${source} config file ${configPath}: ${message}`);
-    return {
+    const parseErrorResult: GlobalConfigResult = {
       config: emptyConfig(),
       error: `Failed to parse ${source} config file ${configPath}: ${message}`,
     };
+    configBlobCache.set(configPath, { ...parseErrorResult, mtimeMs, cachedAt: now });
+    return parseErrorResult;
   }
 
   // Validate and parse with the full schema
@@ -217,10 +279,12 @@ const loadConfigFromPath = async (
     logger.info(
       `${source} config file failed schema validation, using empty config: ${issueSummary}`
     );
-    return {
+    const validationErrorResult: GlobalConfigResult = {
       config: emptyConfig(),
       error: `${source} config file failed schema validation`,
     };
+    configBlobCache.set(configPath, { ...validationErrorResult, mtimeMs, cachedAt: now });
+    return validationErrorResult;
   }
 
   // Return with defaults for missing arrays
@@ -235,7 +299,9 @@ const loadConfigFromPath = async (
     `Loaded ${source} config: truncationLimit=${result.truncationLimit}, ${result.tool?.length ?? 0} tool hooks, ${result.session?.length ?? 0} session hooks`,
   );
 
-  return { config: result, error: null };
+  const successResult: GlobalConfigResult = { config: result, error: null };
+  configBlobCache.set(configPath, { ...successResult, mtimeMs, cachedAt: now });
+  return successResult;
 }
 
 /**

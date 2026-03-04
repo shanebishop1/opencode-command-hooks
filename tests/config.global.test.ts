@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { loadGlobalConfig } from "../src/config/global";
+import { clearGlobalConfigCacheForTests, loadGlobalConfig } from "../src/config/global";
 import { writeFile, rm, mkdir, mkdtemp } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -34,8 +34,13 @@ describe("Global Configuration", () => {
     return loadGlobalConfig();
   };
 
+  const sleep = async (ms: number): Promise<void> => {
+    await new Promise(resolve => setTimeout(resolve, ms));
+  };
+
   beforeEach(async () => {
     originalCwd = process.cwd();
+    clearGlobalConfigCacheForTests();
 
     testRootDir = await mkdtemp(join(tmpdir(), "opencode-global-config-test-"));
     testProjectDir = join(testRootDir, "project");
@@ -52,6 +57,7 @@ describe("Global Configuration", () => {
   afterEach(async () => {
     process.chdir(originalCwd);
     process.env.HOME = originalHome;
+    clearGlobalConfigCacheForTests();
 
     try {
       await rm(testRootDir, { recursive: true, force: true });
@@ -238,6 +244,67 @@ describe("Global Configuration", () => {
       expect(result.error).toBeNull();
       expect(result.config.tool).toHaveLength(1);
       expect(result.config.tool?.[0].id).toBe("parent-hook");
+    });
+  });
+
+  describe("Caching and invalidation", () => {
+    it("should pick up project config changes after file updates", async () => {
+      await writeProjectConfig({
+        tool: [
+          {
+            id: "version-one",
+            when: { phase: "after" },
+            run: "echo v1",
+          },
+        ],
+      });
+
+      const firstLoad = await loadFromDir();
+      expect(firstLoad.error).toBeNull();
+      expect(firstLoad.config.tool).toHaveLength(1);
+      expect(firstLoad.config.tool?.[0].id).toBe("version-one");
+
+      await sleep(20);
+      await writeProjectConfig({
+        tool: [
+          {
+            id: "version-two",
+            when: { phase: "after" },
+            run: "echo v2",
+          },
+        ],
+      });
+
+      const secondLoad = await loadFromDir();
+      expect(secondLoad.error).toBeNull();
+      expect(secondLoad.config.tool).toHaveLength(1);
+      expect(secondLoad.config.tool?.[0].id).toBe("version-two");
+    });
+
+    it("should refresh a cached discovery miss after TTL", async () => {
+      const firstLoad = await loadFromDir();
+      expect(firstLoad.error).toBeNull();
+      expect(firstLoad.config.tool).toEqual([]);
+
+      await writeProjectConfig({
+        tool: [
+          {
+            id: "new-project-hook",
+            when: { phase: "after" },
+            run: "echo refreshed",
+          },
+        ],
+      });
+
+      const immediateLoad = await loadFromDir();
+      expect(immediateLoad.error).toBeNull();
+      expect(immediateLoad.config.tool).toEqual([]);
+
+      await sleep(300);
+      const refreshedLoad = await loadFromDir();
+      expect(refreshedLoad.error).toBeNull();
+      expect(refreshedLoad.config.tool).toHaveLength(1);
+      expect(refreshedLoad.config.tool?.[0].id).toBe("new-project-hook");
     });
   });
 
