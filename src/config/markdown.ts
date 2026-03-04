@@ -7,7 +7,7 @@
  */
 
 import type { AgentHooks, AgentHookEntry, CommandHooksConfig, ToolHook } from "../types/hooks.js";
-import { isValidCommandHooksConfig } from "../schemas.js";
+import { isValidCommandHooksConfig, SimplifiedHookEntrySchema } from "../schemas.js";
 import { load as parseYaml } from "js-yaml";
 import { logger } from "../logging.js";
 
@@ -35,22 +35,30 @@ import { logger } from "../logging.js";
  * Returns the YAML between the delimiters
  */
 export const extractYamlFrontmatter = (content: string): string | null => {
-  // Check if content starts with ---
-  if (!content.startsWith("---")) {
+  const normalized = content.replace(/\r\n/g, "\n");
+  const lines = normalized.split("\n");
+  const firstLine = (lines[0] ?? "").replace(/^\uFEFF/, "");
+
+  // Opening delimiter must be the first line
+  if (firstLine !== "---") {
     return null;
   }
 
-  // Find the second --- delimiter
-  // Start searching from position 3 (after the first ---)
-  const secondDelimiterIndex = content.indexOf("---", 3);
+  let closingDelimiterLine = -1;
+  for (let i = 1; i < lines.length; i += 1) {
+    if (/^\s*---\s*$/.test(lines[i])) {
+      closingDelimiterLine = i;
+      break;
+    }
+  }
 
-  if (secondDelimiterIndex === -1) {
+  if (closingDelimiterLine === -1) {
     // No closing delimiter found
     return null;
   }
 
   // Extract YAML between the delimiters
-  const yamlContent = content.substring(3, secondDelimiterIndex).trim();
+  const yamlContent = lines.slice(1, closingDelimiterLine).join("\n").trim();
 
   return yamlContent;
 }
@@ -119,13 +127,41 @@ export const parseAgentHooks = (
   const agentHooks = hooks as Record<string, unknown>;
   const result: AgentHooks = {};
 
+  const parseHookEntries = (
+    phase: "before" | "after",
+    entries: unknown[],
+  ): AgentHookEntry[] => {
+    const validEntries: AgentHookEntry[] = [];
+
+    entries.forEach((entry, index) => {
+      const parsedEntry = SimplifiedHookEntrySchema.safeParse(entry);
+      if (!parsedEntry.success) {
+        const issues = parsedEntry.error.issues
+          .map((issue) => {
+            const issuePath = issue.path.length > 0 ? issue.path.join(".") : "root";
+            return `${issuePath}: ${issue.message}`;
+          })
+          .join("; ");
+
+        logger.info(
+          `Skipping invalid hooks.${phase}[${index}] entry: ${issues}`,
+        );
+        return;
+      }
+
+      validEntries.push(parsedEntry.data);
+    });
+
+    return validEntries;
+  };
+
   // Parse before array
   if (agentHooks.before !== undefined) {
     if (!Array.isArray(agentHooks.before)) {
       logger.debug("hooks.before is not an array");
       return null;
     }
-    result.before = agentHooks.before as AgentHookEntry[];
+    result.before = parseHookEntries("before", agentHooks.before);
   }
 
   // Parse after array
@@ -134,7 +170,7 @@ export const parseAgentHooks = (
       logger.debug("hooks.after is not an array");
       return null;
     }
-    result.after = agentHooks.after as AgentHookEntry[];
+    result.after = parseHookEntries("after", agentHooks.after);
   }
 
   // Return null if both are empty/undefined
@@ -381,4 +417,3 @@ export const loadMarkdownConfig = async (
       return { tool: [], session: [] };
     }
 }
-
