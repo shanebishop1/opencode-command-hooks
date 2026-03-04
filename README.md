@@ -80,7 +80,7 @@ hooks:
 | `run`            | `string` \| `string[]` | Command(s) to execute                                                    |
 | `inject`         | `string`               | Message injected into the session                                        |
 | `toast`          | `object`               | Toast notification configuration                                         |
-| `overrideGlobal` | `boolean`              | When `true`, suppresses global hooks matching the same event/phase+tool |
+| `overrideGlobal` | `boolean`              | When `true`, suppresses global hooks matching the same event/phase+tool. Must be a JSON boolean (`true`/`false`), not a string. |
 
 ### Toast Configuration
 
@@ -202,8 +202,8 @@ Both are merged by default. See [Configuration Precedence](#configuration-preced
 
 | Option              | Type            | Description                                                                                                                        |
 | ------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `truncationLimit`   | `number`        | Maximum characters to capture from command output. Defaults to 30,000 (matching OpenCode's bash tool). Must be a positive integer. |
-| `ignoreGlobalConfig`| `boolean`       | When `true`, skip loading `~/.config/opencode/command-hooks.jsonc`. Defaults to `false`.                                           |
+| `truncationLimit`   | `number`        | Maximum characters to capture from command output. Defaults to 30,000 (matching OpenCode's bash tool). Must be a positive integer. Project config overrides global when both are set. |
+| `ignoreGlobalConfig`| `boolean`       | When `true`, skip loading `~/.config/opencode/command-hooks.jsonc`. Defaults to `false`. Must be a JSON boolean (`true`/`false`), not a string. |
 | `tool`              | `ToolHook[]`    | Array of tool execution hooks                                                                                                      |
 | `session`           | `SessionHook[]` | Array of session lifecycle hooks                                                                                                   |
 
@@ -239,6 +239,7 @@ Hooks are loaded from two locations and merged:
 | Same hook ID | Project replaces global |
 | `overrideGlobal: true` on hook | Suppresses all global hooks for same event/phase+tool |
 | `ignoreGlobalConfig: true` in project | Skips global config entirely |
+| Both set `truncationLimit` | Project value wins |
 
 **Example: Override all global hooks for an event**
 
@@ -270,6 +271,8 @@ Additional precedence rules:
 - Markdown hooks are converted to normal hooks with auto-generated IDs
 - If a markdown hook and a config hook share the same `id`, the markdown hook wins
 - Duplicate IDs within the same source are errors
+- Tool override matching uses canonical keys, so `"bash"` and `["bash"]` are treated as equivalent
+- Config files are schema-validated; invalid value types (for example `"false"` for a boolean field) make that source invalid
 
 ---
 
