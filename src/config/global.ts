@@ -21,7 +21,9 @@ import { logger } from "../logging.js";
  * Uses ~/.config/opencode/ following XDG convention
  */
 const getUserConfigPath = (): string => {
-  return join(homedir(), ".config", "opencode", "command-hooks.jsonc");
+  const envHome = process.env.HOME || process.env.USERPROFILE;
+  const baseHome = envHome && envHome.length > 0 ? envHome : homedir();
+  return join(baseHome, ".config", "opencode", "command-hooks.jsonc");
 };
 
 export type GlobalConfigResult = {
