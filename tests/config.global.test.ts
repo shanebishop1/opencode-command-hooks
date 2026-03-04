@@ -1,65 +1,79 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { loadGlobalConfig } from "../src/config/global";
-import { writeFile, rm, mkdir } from "fs/promises";
+import { writeFile, rm, mkdir, mkdtemp } from "fs/promises";
 import { join } from "path";
-import { tmpdir, homedir } from "os";
+import { tmpdir } from "os";
 
 describe("Global Configuration", () => {
-  const testProjectDir = join(tmpdir(), "opencode-global-config-test");
-  const userConfigDir = join(homedir(), ".config", "opencode");
-  const userConfigPath = join(userConfigDir, "command-hooks.jsonc");
+  let testRootDir: string;
+  let testProjectDir: string;
+  let userConfigDir: string;
+  let userConfigPath: string;
   let originalCwd: string;
-  let createdUserConfig = false;
+  const originalHome = process.env.HOME;
+
+  const writeUserConfig = async (config: unknown | string): Promise<void> => {
+    await mkdir(userConfigDir, { recursive: true });
+    await writeFile(
+      userConfigPath,
+      typeof config === "string" ? config : JSON.stringify(config),
+    );
+  };
+
+  const writeProjectConfig = async (config: unknown): Promise<void> => {
+    const projectConfigDir = join(testProjectDir, ".opencode");
+    await mkdir(projectConfigDir, { recursive: true });
+    await writeFile(
+      join(projectConfigDir, "command-hooks.jsonc"),
+      JSON.stringify(config),
+    );
+  };
+
+  const loadFromDir = async (dir = testProjectDir) => {
+    process.chdir(dir);
+    return loadGlobalConfig();
+  };
 
   beforeEach(async () => {
     originalCwd = process.cwd();
-    // Create test project directory (without .opencode config)
+
+    testRootDir = await mkdtemp(join(tmpdir(), "opencode-global-config-test-"));
+    testProjectDir = join(testRootDir, "project");
+    const testHomeDir = join(testRootDir, "home");
+    userConfigDir = join(testHomeDir, ".config", "opencode");
+    userConfigPath = join(userConfigDir, "command-hooks.jsonc");
+
+    process.env.HOME = testHomeDir;
+
     await mkdir(testProjectDir, { recursive: true });
-    // Ensure user config directory exists
     await mkdir(userConfigDir, { recursive: true });
   });
 
   afterEach(async () => {
     process.chdir(originalCwd);
-    // Clean up test directories
+    process.env.HOME = originalHome;
+
     try {
-      await rm(testProjectDir, { recursive: true, force: true });
+      await rm(testRootDir, { recursive: true, force: true });
     } catch {
       // Ignore cleanup errors
-    }
-    // Only clean up user config if we created it
-    if (createdUserConfig) {
-      try {
-        await rm(userConfigPath, { force: true });
-        createdUserConfig = false;
-      } catch {
-        // Ignore cleanup errors
-      }
     }
   });
 
   describe("User global config fallback", () => {
     it("should load from ~/.config/opencode/command-hooks.jsonc when no project config exists", async () => {
-      // Create user global config
-      await writeFile(
-        userConfigPath,
-        JSON.stringify({
-          tool: [
-            {
-              id: "user-global-hook",
-              when: { phase: "after", tool: ["bash"] },
-              run: "echo user global",
-            },
-          ],
-          session: [],
-        })
-      );
-      createdUserConfig = true;
+      await writeUserConfig({
+        tool: [
+          {
+            id: "user-global-hook",
+            when: { phase: "after", tool: ["bash"] },
+            run: "echo user global",
+          },
+        ],
+        session: [],
+      });
 
-      // Change to project dir without .opencode config
-      process.chdir(testProjectDir);
-
-      const result = await loadGlobalConfig();
+      const result = await loadFromDir();
 
       expect(result.error).toBeNull();
       expect(result.config.tool).toHaveLength(1);
@@ -67,43 +81,29 @@ describe("Global Configuration", () => {
     });
 
     it("should concat hooks from both global and project configs", async () => {
-      // Create user global config
-      await writeFile(
-        userConfigPath,
-        JSON.stringify({
-          tool: [
-            {
-              id: "user-hook",
-              when: { phase: "after" },
-              run: "echo user",
-            },
-          ],
-        })
-      );
-      createdUserConfig = true;
+      await writeUserConfig({
+        tool: [
+          {
+            id: "user-hook",
+            when: { phase: "after" },
+            run: "echo user",
+          },
+        ],
+      });
 
-      // Create project config with different hook ID
-      const projectConfigDir = join(testProjectDir, ".opencode");
-      await mkdir(projectConfigDir, { recursive: true });
-      await writeFile(
-        join(projectConfigDir, "command-hooks.jsonc"),
-        JSON.stringify({
-          tool: [
-            {
-              id: "project-hook",
-              when: { phase: "after" },
-              run: "echo project",
-            },
-          ],
-        })
-      );
+      await writeProjectConfig({
+        tool: [
+          {
+            id: "project-hook",
+            when: { phase: "after" },
+            run: "echo project",
+          },
+        ],
+      });
 
-      process.chdir(testProjectDir);
-
-      const result = await loadGlobalConfig();
+      const result = await loadFromDir();
 
       expect(result.error).toBeNull();
-      // Both hooks should be present (concatenation)
       expect(result.config.tool).toHaveLength(2);
       const hookIds = result.config.tool?.map(h => h.id) ?? [];
       expect(hookIds).toContain("user-hook");
@@ -111,59 +111,36 @@ describe("Global Configuration", () => {
     });
 
     it("should let project hook replace global hook with same id", async () => {
-      // Create user global config
-      await writeFile(
-        userConfigPath,
-        JSON.stringify({
-          tool: [
-            {
-              id: "shared-hook",
-              when: { phase: "after" },
-              run: "echo global version",
-            },
-          ],
-        })
-      );
-      createdUserConfig = true;
+      await writeUserConfig({
+        tool: [
+          {
+            id: "shared-hook",
+            when: { phase: "after" },
+            run: "echo global version",
+          },
+        ],
+      });
 
-      // Create project config with SAME hook ID
-      const projectConfigDir = join(testProjectDir, ".opencode");
-      await mkdir(projectConfigDir, { recursive: true });
-      await writeFile(
-        join(projectConfigDir, "command-hooks.jsonc"),
-        JSON.stringify({
-          tool: [
-            {
-              id: "shared-hook",
-              when: { phase: "after" },
-              run: "echo project version",
-            },
-          ],
-        })
-      );
+      await writeProjectConfig({
+        tool: [
+          {
+            id: "shared-hook",
+            when: { phase: "after" },
+            run: "echo project version",
+          },
+        ],
+      });
 
-      process.chdir(testProjectDir);
-
-      const result = await loadGlobalConfig();
+      const result = await loadFromDir();
 
       expect(result.error).toBeNull();
-      // Only one hook (project replaced global)
       expect(result.config.tool).toHaveLength(1);
       expect(result.config.tool?.[0].id).toBe("shared-hook");
       expect(result.config.tool?.[0].run).toBe("echo project version");
     });
 
     it("should return empty config when neither project nor user config exists", async () => {
-      // Ensure no user config exists for this test
-      try {
-        await rm(userConfigPath, { force: true });
-      } catch {
-        // Ignore if doesn't exist
-      }
-
-      process.chdir(testProjectDir);
-
-      const result = await loadGlobalConfig();
+      const result = await loadFromDir();
 
       expect(result.error).toBeNull();
       expect(result.config.tool).toEqual([]);
@@ -171,24 +148,18 @@ describe("Global Configuration", () => {
     });
 
     it("should load session hooks from user global config", async () => {
-      await writeFile(
-        userConfigPath,
-        JSON.stringify({
-          session: [
-            {
-              id: "user-session-hook",
-              when: { event: "session.created" },
-              run: "echo session started",
-              inject: "Session initialized",
-            },
-          ],
-        })
-      );
-      createdUserConfig = true;
+      await writeUserConfig({
+        session: [
+          {
+            id: "user-session-hook",
+            when: { event: "session.created" },
+            run: "echo session started",
+            inject: "Session initialized",
+          },
+        ],
+      });
 
-      process.chdir(testProjectDir);
-
-      const result = await loadGlobalConfig();
+      const result = await loadFromDir();
 
       expect(result.error).toBeNull();
       expect(result.config.session).toHaveLength(1);
@@ -197,25 +168,19 @@ describe("Global Configuration", () => {
     });
 
     it("should handle JSONC comments in user global config", async () => {
-      await writeFile(
-        userConfigPath,
-        `{
-          // This is a comment
-          "tool": [
-            {
-              "id": "commented-hook",
-              "when": { "phase": "after" },
-              "run": "echo with comments"
-            }
-          ]
-          /* Block comment */
-        }`
-      );
-      createdUserConfig = true;
+      await writeUserConfig(`{
+        // This is a comment
+        "tool": [
+          {
+            "id": "commented-hook",
+            "when": { "phase": "after" },
+            "run": "echo with comments"
+          }
+        ]
+        /* Block comment */
+      }`);
 
-      process.chdir(testProjectDir);
-
-      const result = await loadGlobalConfig();
+      const result = await loadFromDir();
 
       expect(result.error).toBeNull();
       expect(result.config.tool).toHaveLength(1);
@@ -223,46 +188,31 @@ describe("Global Configuration", () => {
     });
 
     it("should use project config only when global config has parse errors", async () => {
-      // Create malformed user global config
-      await writeFile(userConfigPath, "{ invalid json }");
-      createdUserConfig = true;
+      await writeUserConfig("{ invalid json }");
 
-      // Create valid project config
-      const projectConfigDir = join(testProjectDir, ".opencode");
-      await mkdir(projectConfigDir, { recursive: true });
-      await writeFile(
-        join(projectConfigDir, "command-hooks.jsonc"),
-        JSON.stringify({
-          tool: [
-            {
-              id: "project-hook",
-              when: { phase: "after" },
-              run: "echo project",
-            },
-          ],
-        })
-      );
+      await writeProjectConfig({
+        tool: [
+          {
+            id: "project-hook",
+            when: { phase: "after" },
+            run: "echo project",
+          },
+        ],
+      });
 
-      process.chdir(testProjectDir);
+      const result = await loadFromDir();
 
-      const result = await loadGlobalConfig();
-
-      // Should succeed with project config only (global parse error logged but not returned)
       expect(result.error).toBeNull();
       expect(result.config.tool).toHaveLength(1);
       expect(result.config.tool?.[0].id).toBe("project-hook");
     });
 
-    it("should return error when only global config exists and is malformed", async () => {
-      await writeFile(userConfigPath, "{ invalid json }");
-      createdUserConfig = true;
+    it("should return empty config when only global config exists and is malformed", async () => {
+      await writeUserConfig("{ invalid json }");
 
-      process.chdir(testProjectDir);
+      const result = await loadFromDir();
 
-      const result = await loadGlobalConfig();
-
-      // No project config, so global error is returned
-      expect(result.error).toBeNull(); // Actually returns empty config since no project
+      expect(result.error).toBeNull();
       expect(result.config.tool).toEqual([]);
       expect(result.config.session).toEqual([]);
     });
@@ -270,30 +220,20 @@ describe("Global Configuration", () => {
 
   describe("Project config discovery", () => {
     it("should find project config in parent directory", async () => {
-      // Create nested directory structure
       const nestedDir = join(testProjectDir, "src", "components");
       await mkdir(nestedDir, { recursive: true });
 
-      // Create config at project root
-      const projectConfigDir = join(testProjectDir, ".opencode");
-      await mkdir(projectConfigDir, { recursive: true });
-      await writeFile(
-        join(projectConfigDir, "command-hooks.jsonc"),
-        JSON.stringify({
-          tool: [
-            {
-              id: "parent-hook",
-              when: { phase: "before" },
-              run: "echo from parent",
-            },
-          ],
-        })
-      );
+      await writeProjectConfig({
+        tool: [
+          {
+            id: "parent-hook",
+            when: { phase: "before" },
+            run: "echo from parent",
+          },
+        ],
+      });
 
-      // Change to nested directory
-      process.chdir(nestedDir);
-
-      const result = await loadGlobalConfig();
+      const result = await loadFromDir(nestedDir);
 
       expect(result.error).toBeNull();
       expect(result.config.tool).toHaveLength(1);
@@ -301,139 +241,253 @@ describe("Global Configuration", () => {
     });
   });
 
-  describe("ignoreGlobalConfig flag", () => {
-    it("should skip global config when project has ignoreGlobalConfig: true", async () => {
-      // Create user global config
-      await writeFile(
-        userConfigPath,
-        JSON.stringify({
-          tool: [
-            {
-              id: "global-hook",
-              when: { phase: "after" },
-              run: "echo global",
-            },
-          ],
-        })
-      );
-      createdUserConfig = true;
+  describe("Strict schema validation", () => {
+    it("should reject project config when ignoreGlobalConfig is not a boolean", async () => {
+      await writeProjectConfig({
+        ignoreGlobalConfig: "false",
+        tool: [
+          {
+            id: "project-hook",
+            when: { phase: "after" },
+            run: "echo project",
+          },
+        ],
+      });
 
-      // Create project config with ignoreGlobalConfig
-      const projectConfigDir = join(testProjectDir, ".opencode");
-      await mkdir(projectConfigDir, { recursive: true });
-      await writeFile(
-        join(projectConfigDir, "command-hooks.jsonc"),
-        JSON.stringify({
-          ignoreGlobalConfig: true,
-          tool: [
-            {
-              id: "project-hook",
-              when: { phase: "after" },
-              run: "echo project",
-            },
-          ],
-        })
-      );
+      const result = await loadFromDir();
 
-      process.chdir(testProjectDir);
+      expect(result.error).toContain("project config file failed schema validation");
+      expect(result.config.tool).toEqual([]);
+      expect(result.config.session).toEqual([]);
+    });
 
-      const result = await loadGlobalConfig();
+    it("should reject project config when overrideGlobal is not a boolean", async () => {
+      await writeProjectConfig({
+        tool: [
+          {
+            id: "project-hook",
+            when: { phase: "after", tool: "bash" },
+            run: "echo project",
+            overrideGlobal: "true",
+          },
+        ],
+      });
+
+      const result = await loadFromDir();
+
+      expect(result.error).toContain("project config file failed schema validation");
+      expect(result.config.tool).toEqual([]);
+      expect(result.config.session).toEqual([]);
+    });
+
+    it("should ignore invalid global boolean values and still use project config", async () => {
+      await writeUserConfig({
+        ignoreGlobalConfig: "false",
+        tool: [
+          {
+            id: "global-hook",
+            when: { phase: "after" },
+            run: "echo global",
+          },
+        ],
+      });
+
+      await writeProjectConfig({
+        tool: [
+          {
+            id: "project-hook",
+            when: { phase: "after" },
+            run: "echo project",
+          },
+        ],
+      });
+
+      const result = await loadFromDir();
 
       expect(result.error).toBeNull();
-      // Only project hook, global was ignored
       expect(result.config.tool).toHaveLength(1);
       expect(result.config.tool?.[0].id).toBe("project-hook");
     });
   });
 
-  describe("overrideGlobal flag", () => {
-    it("should skip global session hooks when project hook has overrideGlobal", async () => {
-      // Create user global config with session.created hook
-      await writeFile(
-        userConfigPath,
-        JSON.stringify({
-          session: [
-            {
-              id: "global-session-hook",
-              when: { event: "session.created" },
-              run: "echo global session",
-            },
-          ],
-        })
-      );
-      createdUserConfig = true;
+  describe("ignoreGlobalConfig flag", () => {
+    it("should skip global config when project has ignoreGlobalConfig: true", async () => {
+      await writeUserConfig({
+        tool: [
+          {
+            id: "global-hook",
+            when: { phase: "after" },
+            run: "echo global",
+          },
+        ],
+      });
 
-      // Create project config with overrideGlobal for same event
-      const projectConfigDir = join(testProjectDir, ".opencode");
-      await mkdir(projectConfigDir, { recursive: true });
-      await writeFile(
-        join(projectConfigDir, "command-hooks.jsonc"),
-        JSON.stringify({
-          session: [
-            {
-              id: "project-session-hook",
-              when: { event: "session.created" },
-              run: "echo project session",
-              overrideGlobal: true,
-            },
-          ],
-        })
-      );
+      await writeProjectConfig({
+        ignoreGlobalConfig: true,
+        tool: [
+          {
+            id: "project-hook",
+            when: { phase: "after" },
+            run: "echo project",
+          },
+        ],
+      });
 
-      process.chdir(testProjectDir);
-
-      const result = await loadGlobalConfig();
+      const result = await loadFromDir();
 
       expect(result.error).toBeNull();
-      // Only project hook (global was overridden)
+      expect(result.config.tool).toHaveLength(1);
+      expect(result.config.tool?.[0].id).toBe("project-hook");
+    });
+  });
+
+  describe("truncationLimit precedence", () => {
+    it("should use project truncationLimit when global does not set one", async () => {
+      await writeUserConfig({
+        tool: [
+          {
+            id: "global-hook",
+            when: { phase: "after" },
+            run: "echo global",
+          },
+        ],
+      });
+
+      await writeProjectConfig({
+        truncationLimit: 11111,
+        tool: [
+          {
+            id: "project-hook",
+            when: { phase: "after" },
+            run: "echo project",
+          },
+        ],
+      });
+
+      const result = await loadFromDir();
+
+      expect(result.error).toBeNull();
+      expect(result.config.truncationLimit).toBe(11111);
+    });
+
+    it("should let project truncationLimit override global truncationLimit", async () => {
+      await writeUserConfig({
+        truncationLimit: 9999,
+        tool: [
+          {
+            id: "global-hook",
+            when: { phase: "after" },
+            run: "echo global",
+          },
+        ],
+      });
+
+      await writeProjectConfig({
+        truncationLimit: 1234,
+        tool: [
+          {
+            id: "project-hook",
+            when: { phase: "after" },
+            run: "echo project",
+          },
+        ],
+      });
+
+      const result = await loadFromDir();
+
+      expect(result.error).toBeNull();
+      expect(result.config.truncationLimit).toBe(1234);
+    });
+
+    it("should keep global truncationLimit when project does not set one", async () => {
+      await writeUserConfig({
+        truncationLimit: 2222,
+        tool: [
+          {
+            id: "global-hook",
+            when: { phase: "after" },
+            run: "echo global",
+          },
+        ],
+      });
+
+      await writeProjectConfig({
+        tool: [
+          {
+            id: "project-hook",
+            when: { phase: "after" },
+            run: "echo project",
+          },
+        ],
+      });
+
+      const result = await loadFromDir();
+
+      expect(result.error).toBeNull();
+      expect(result.config.truncationLimit).toBe(2222);
+    });
+  });
+
+  describe("overrideGlobal flag", () => {
+    it("should skip global session hooks when project hook has overrideGlobal", async () => {
+      await writeUserConfig({
+        session: [
+          {
+            id: "global-session-hook",
+            when: { event: "session.created" },
+            run: "echo global session",
+          },
+        ],
+      });
+
+      await writeProjectConfig({
+        session: [
+          {
+            id: "project-session-hook",
+            when: { event: "session.created" },
+            run: "echo project session",
+            overrideGlobal: true,
+          },
+        ],
+      });
+
+      const result = await loadFromDir();
+
+      expect(result.error).toBeNull();
       expect(result.config.session).toHaveLength(1);
       expect(result.config.session?.[0].id).toBe("project-session-hook");
     });
 
     it("should not skip global hooks for different events when overrideGlobal is set", async () => {
-      // Create user global config with multiple session hooks
-      await writeFile(
-        userConfigPath,
-        JSON.stringify({
-          session: [
-            {
-              id: "global-created-hook",
-              when: { event: "session.created" },
-              run: "echo global created",
-            },
-            {
-              id: "global-idle-hook",
-              when: { event: "session.idle" },
-              run: "echo global idle",
-            },
-          ],
-        })
-      );
-      createdUserConfig = true;
+      await writeUserConfig({
+        session: [
+          {
+            id: "global-created-hook",
+            when: { event: "session.created" },
+            run: "echo global created",
+          },
+          {
+            id: "global-idle-hook",
+            when: { event: "session.idle" },
+            run: "echo global idle",
+          },
+        ],
+      });
 
-      // Create project config with overrideGlobal only for session.created
-      const projectConfigDir = join(testProjectDir, ".opencode");
-      await mkdir(projectConfigDir, { recursive: true });
-      await writeFile(
-        join(projectConfigDir, "command-hooks.jsonc"),
-        JSON.stringify({
-          session: [
-            {
-              id: "project-created-hook",
-              when: { event: "session.created" },
-              run: "echo project created",
-              overrideGlobal: true,
-            },
-          ],
-        })
-      );
+      await writeProjectConfig({
+        session: [
+          {
+            id: "project-created-hook",
+            when: { event: "session.created" },
+            run: "echo project created",
+            overrideGlobal: true,
+          },
+        ],
+      });
 
-      process.chdir(testProjectDir);
-
-      const result = await loadGlobalConfig();
+      const result = await loadFromDir();
 
       expect(result.error).toBeNull();
-      // Should have project's created hook + global's idle hook
       expect(result.config.session).toHaveLength(2);
       const sessionIds = result.config.session?.map(h => h.id) ?? [];
       expect(sessionIds).toContain("project-created-hook");
@@ -442,49 +496,35 @@ describe("Global Configuration", () => {
     });
 
     it("should skip global tool hooks matching phase+tool when project hook has overrideGlobal", async () => {
-      // Create user global config
-      await writeFile(
-        userConfigPath,
-        JSON.stringify({
-          tool: [
-            {
-              id: "global-after-bash",
-              when: { phase: "after", tool: "bash" },
-              run: "echo global after bash",
-            },
-            {
-              id: "global-after-write",
-              when: { phase: "after", tool: "write" },
-              run: "echo global after write",
-            },
-          ],
-        })
-      );
-      createdUserConfig = true;
+      await writeUserConfig({
+        tool: [
+          {
+            id: "global-after-bash",
+            when: { phase: "after", tool: "bash" },
+            run: "echo global after bash",
+          },
+          {
+            id: "global-after-write",
+            when: { phase: "after", tool: "write" },
+            run: "echo global after write",
+          },
+        ],
+      });
 
-      // Create project config with overrideGlobal for after:bash
-      const projectConfigDir = join(testProjectDir, ".opencode");
-      await mkdir(projectConfigDir, { recursive: true });
-      await writeFile(
-        join(projectConfigDir, "command-hooks.jsonc"),
-        JSON.stringify({
-          tool: [
-            {
-              id: "project-after-bash",
-              when: { phase: "after", tool: "bash" },
-              run: "echo project after bash",
-              overrideGlobal: true,
-            },
-          ],
-        })
-      );
+      await writeProjectConfig({
+        tool: [
+          {
+            id: "project-after-bash",
+            when: { phase: "after", tool: "bash" },
+            run: "echo project after bash",
+            overrideGlobal: true,
+          },
+        ],
+      });
 
-      process.chdir(testProjectDir);
-
-      const result = await loadGlobalConfig();
+      const result = await loadFromDir();
 
       expect(result.error).toBeNull();
-      // Should have project's after:bash + global's after:write
       expect(result.config.tool).toHaveLength(2);
       const toolIds = result.config.tool?.map(h => h.id) ?? [];
       expect(toolIds).toContain("project-after-bash");
@@ -492,60 +532,153 @@ describe("Global Configuration", () => {
       expect(toolIds).not.toContain("global-after-bash");
     });
 
-    it("should skip ALL global tool hooks for phase when project uses overrideGlobal with tool: '*'", async () => {
-      // Create user global config with multiple after hooks
-      await writeFile(
-        userConfigPath,
-        JSON.stringify({
-          tool: [
-            {
-              id: "global-after-bash",
-              when: { phase: "after", tool: "bash" },
-              run: "echo global after bash",
-            },
-            {
-              id: "global-after-write",
-              when: { phase: "after", tool: "write" },
-              run: "echo global after write",
-            },
-            {
-              id: "global-before-bash",
-              when: { phase: "before", tool: "bash" },
-              run: "echo global before bash",
-            },
-          ],
-        })
-      );
-      createdUserConfig = true;
+    it("should treat tool string and single-item array as equivalent for override matching", async () => {
+      await writeUserConfig({
+        tool: [
+          {
+            id: "global-after-bash",
+            when: { phase: "after", tool: "bash" },
+            run: "echo global bash",
+          },
+          {
+            id: "global-after-write",
+            when: { phase: "after", tool: "write" },
+            run: "echo global write",
+          },
+        ],
+      });
 
-      // Create project config with overrideGlobal for after:* (wildcard)
-      const projectConfigDir = join(testProjectDir, ".opencode");
-      await mkdir(projectConfigDir, { recursive: true });
-      await writeFile(
-        join(projectConfigDir, "command-hooks.jsonc"),
-        JSON.stringify({
-          tool: [
-            {
-              id: "project-after-all",
-              when: { phase: "after", tool: "*" },
-              run: "echo project after all",
-              overrideGlobal: true,
-            },
-          ],
-        })
-      );
+      await writeProjectConfig({
+        tool: [
+          {
+            id: "project-after-bash",
+            when: { phase: "after", tool: ["bash"] },
+            run: "echo project bash",
+            overrideGlobal: true,
+          },
+        ],
+      });
 
-      process.chdir(testProjectDir);
-
-      const result = await loadGlobalConfig();
+      const result = await loadFromDir();
 
       expect(result.error).toBeNull();
-      // Should have project's after:* + global's before:bash (before phase not affected)
+      const toolIds = result.config.tool?.map(h => h.id) ?? [];
+      expect(toolIds).toContain("project-after-bash");
+      expect(toolIds).toContain("global-after-write");
+      expect(toolIds).not.toContain("global-after-bash");
+    });
+
+    it("should treat single-item array and tool string as equivalent for override matching", async () => {
+      await writeUserConfig({
+        tool: [
+          {
+            id: "global-after-bash",
+            when: { phase: "after", tool: ["bash"] },
+            run: "echo global bash",
+          },
+          {
+            id: "global-after-write",
+            when: { phase: "after", tool: "write" },
+            run: "echo global write",
+          },
+        ],
+      });
+
+      await writeProjectConfig({
+        tool: [
+          {
+            id: "project-after-bash",
+            when: { phase: "after", tool: "bash" },
+            run: "echo project bash",
+            overrideGlobal: true,
+          },
+        ],
+      });
+
+      const result = await loadFromDir();
+
+      expect(result.error).toBeNull();
+      const toolIds = result.config.tool?.map(h => h.id) ?? [];
+      expect(toolIds).toContain("project-after-bash");
+      expect(toolIds).toContain("global-after-write");
+      expect(toolIds).not.toContain("global-after-bash");
+    });
+
+    it("should normalize multi-tool arrays (sort + dedupe) for override matching", async () => {
+      await writeUserConfig({
+        tool: [
+          {
+            id: "global-after-bash-write",
+            when: { phase: "after", tool: ["bash", "write"] },
+            run: "echo global bash write",
+          },
+          {
+            id: "global-after-edit",
+            when: { phase: "after", tool: "edit" },
+            run: "echo global edit",
+          },
+        ],
+      });
+
+      await writeProjectConfig({
+        tool: [
+          {
+            id: "project-after-bash-write",
+            when: { phase: "after", tool: ["write", "bash", "bash"] },
+            run: "echo project bash write",
+            overrideGlobal: true,
+          },
+        ],
+      });
+
+      const result = await loadFromDir();
+
+      expect(result.error).toBeNull();
+      const toolIds = result.config.tool?.map(h => h.id) ?? [];
+      expect(toolIds).toContain("project-after-bash-write");
+      expect(toolIds).toContain("global-after-edit");
+      expect(toolIds).not.toContain("global-after-bash-write");
+    });
+
+    it("should skip ALL global tool hooks for phase when project uses overrideGlobal with tool: '*'", async () => {
+      await writeUserConfig({
+        tool: [
+          {
+            id: "global-after-bash",
+            when: { phase: "after", tool: "bash" },
+            run: "echo global after bash",
+          },
+          {
+            id: "global-after-write",
+            when: { phase: "after", tool: "write" },
+            run: "echo global after write",
+          },
+          {
+            id: "global-before-bash",
+            when: { phase: "before", tool: "bash" },
+            run: "echo global before bash",
+          },
+        ],
+      });
+
+      await writeProjectConfig({
+        tool: [
+          {
+            id: "project-after-all",
+            when: { phase: "after", tool: "*" },
+            run: "echo project after all",
+            overrideGlobal: true,
+          },
+        ],
+      });
+
+      const result = await loadFromDir();
+
+      expect(result.error).toBeNull();
       expect(result.config.tool).toHaveLength(2);
       const toolIds = result.config.tool?.map(h => h.id) ?? [];
       expect(toolIds).toContain("project-after-all");
       expect(toolIds).toContain("global-before-bash");
-      // Both global after hooks should be gone
       expect(toolIds).not.toContain("global-after-bash");
       expect(toolIds).not.toContain("global-after-write");
     });
