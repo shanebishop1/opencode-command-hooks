@@ -224,6 +224,59 @@ command_hooks:
       }
     });
 
+    it("should parse frontmatter when YAML includes --- inside string values", async () => {
+      const agentPath = join(testProjectDir, ".opencode", "agent", "dash-in-yaml.md");
+      await writeFile(
+        agentPath,
+        `---
+description: "Agent with --- in YAML values"
+command_hooks:
+  tool:
+    - id: "dash-hook"
+      when:
+        phase: "after"
+      run: "echo contains --- marker"
+---
+# Agent content`
+      );
+
+      const originalCwd = process.cwd();
+      try {
+        process.chdir(testProjectDir);
+        const config = await loadAgentConfig("dash-in-yaml");
+        expect(config.tool).toHaveLength(1);
+        expect(config.tool?.[0].id).toBe("dash-hook");
+        expect(config.tool?.[0].run).toBe("echo contains --- marker");
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it("should return empty config when frontmatter closing delimiter is missing", async () => {
+      const agentPath = join(testProjectDir, ".opencode", "agent", "missing-delimiter.md");
+      await writeFile(
+        agentPath,
+        `---
+description: Missing closing delimiter
+command_hooks:
+  tool:
+    - id: "broken-hook"
+      when:
+        phase: "after"
+      run: "echo broken"
+# Agent content`
+      );
+
+      const originalCwd = process.cwd();
+      try {
+        process.chdir(testProjectDir);
+        const config = await loadAgentConfig("missing-delimiter");
+        expect(config).toEqual({ tool: [], session: [] });
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
     it("should return empty config for agent file without command_hooks", async () => {
       const agentPath = join(testProjectDir, ".opencode", "agent", "no-hooks.md");
       await writeFile(
@@ -394,7 +447,7 @@ hooks:
       }
     });
 
-    it("should handle invalid simplified hooks gracefully", async () => {
+    it("should skip invalid simplified entries and keep valid ones", async () => {
       const agentPath = join(testProjectDir, ".opencode", "agent", "invalid-simple.md");
       await writeFile(
         agentPath,
@@ -415,9 +468,9 @@ hooks:
         process.chdir(testProjectDir);
         const config = await loadAgentConfig("invalid-simple");
 
-        // Should still load the valid before hook and potentially the after hook (with invalid parts ignored)
-        expect(config.tool).toHaveLength(2);
+        expect(config.tool).toHaveLength(1);
         expect(config.tool?.[0].id).toBe("invalid-simple-before-0");
+        expect(config.tool?.[0].run).toBe("echo valid");
       } finally {
         process.chdir(originalCwd);
       }
@@ -440,6 +493,58 @@ hooks:
         const config = await loadAgentConfig("malformed-simple");
 
         // Should return empty config due to malformed hooks
+        expect(config).toEqual({ tool: [], session: [] });
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it("should skip simplified entries with invalid run values", async () => {
+      const agentPath = join(testProjectDir, ".opencode", "agent", "invalid-run.md");
+      await writeFile(
+        agentPath,
+        `---
+description: Agent with invalid run type
+hooks:
+  after:
+    - run: 42
+    - run: "echo valid"
+---`
+      );
+
+      const originalCwd = process.cwd();
+      try {
+        process.chdir(testProjectDir);
+        const config = await loadAgentConfig("invalid-run");
+        expect(config.tool).toHaveLength(1);
+        expect(config.tool?.[0].id).toBe("invalid-run-after-1");
+        expect(config.tool?.[0].run).toBe("echo valid");
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it("should return empty config when all simplified entries are invalid", async () => {
+      const agentPath = join(testProjectDir, ".opencode", "agent", "all-invalid-simple.md");
+      await writeFile(
+        agentPath,
+        `---
+description: All invalid simplified entries
+hooks:
+  before:
+    - run: 123
+      inject: "still invalid because run is not a string or string[]"
+  after:
+    - run: ["npm run test"]
+      toast:
+        title: "Missing message field"
+---`
+      );
+
+      const originalCwd = process.cwd();
+      try {
+        process.chdir(testProjectDir);
+        const config = await loadAgentConfig("all-invalid-simple");
         expect(config).toEqual({ tool: [], session: [] });
       } finally {
         process.chdir(originalCwd);

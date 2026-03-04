@@ -39,17 +39,31 @@ const ToolHookWhenSchema = z.object({
   tool: StringOrArray.optional(),
   callingAgent: StringOrArray.optional(),
   slashCommand: StringOrArray.optional(),
+  toolArgs: z.record(StringOrArray).optional(),
 });
 
 /**
  * Toast notification configuration
  */
-const ToastSchema = z.object({
+const ToastBodySchema = z.object({
    title: z.string().optional(),
    message: z.string(),
    variant: z.enum(["info", "success", "warning", "error"]).optional(),
    duration: z.number().optional(),
-}).optional();
+});
+
+const ToastSchema = ToastBodySchema.optional();
+
+/**
+ * Simplified hook entry schema for markdown frontmatter `hooks` format
+ */
+export const SimplifiedHookEntrySchema = z
+  .object({
+    run: z.union([z.string(), z.array(z.string())]),
+    inject: z.string().optional(),
+    toast: ToastBodySchema.optional(),
+  })
+  .strict();
 
 /**
  * Tool hook configuration
