@@ -17,6 +17,30 @@ import type {
 import { logger } from "../logging.js"
 
 /**
+ * Normalize tool selector into a stable event-key fragment.
+ *
+ * Ensures equivalent representations match:
+ * - undefined and "*" are both wildcard
+ * - "bash" and ["bash"] are equivalent
+ * - arrays are deduped + sorted for stable equality
+ */
+const normalizeToolMatcherForKey = (tool: ToolHook["when"]["tool"]): string => {
+  if (tool === undefined) {
+    return "*"
+  }
+
+  if (Array.isArray(tool)) {
+    const deduped = Array.from(new Set(tool))
+    if (deduped.length === 0 || deduped.includes("*")) {
+      return "*"
+    }
+    return deduped.sort().join(",")
+  }
+
+  return tool === "*" ? "*" : tool
+}
+
+/**
  * Find duplicate IDs within a hook array
  *
  * Scans through an array of hooks and returns a list of IDs that appear
@@ -139,9 +163,9 @@ const mergeHookArrays = <T extends ToolHook | SessionHook>(
        overriddenKeys.add(key)
 
        // For tool hooks: if tool is "*", mark the phase as fully overridden
-       // Key format for tool hooks is "phase:tool", e.g., "after:\"*\"" or "after:\"bash\""
-       if (key.includes('"*"')) {
-         const phase = key.split(':')[0]
+       // Key format for tool hooks is "phase:tool", e.g., "after:*" or "after:bash"
+       if (key.endsWith(":*")) {
+         const phase = key.split(":")[0]
          wildcardOverridePhases.add(phase)
          logger.debug(`Wildcard override for phase "${phase}" from project hook "${hook.id}"`)
        }
@@ -153,7 +177,7 @@ const mergeHookArrays = <T extends ToolHook | SessionHook>(
      const key = getEventKey(hook)
 
      // Check for wildcard phase override (tool hooks only)
-     const phase = key.split(':')[0]
+     const phase = key.split(":")[0]
      if (wildcardOverridePhases.has(phase)) {
        logger.debug(`Skipping global hook "${hook.id}" due to wildcard overrideGlobal on phase "${phase}"`)
        return false
@@ -251,7 +275,7 @@ export const mergeConfigs = (
    const mergedToolHooks = mergeHookArrays(
      globalToolHooks,
      markdownToolHooks,
-     (hook: ToolHook) => `${hook.when.phase}:${JSON.stringify(hook.when.tool ?? "*")}`
+     (hook: ToolHook) => `${hook.when.phase}:${normalizeToolMatcherForKey(hook.when.tool)}`
    )
 
     // Merge session hooks with event matching for overrideGlobal
@@ -263,10 +287,9 @@ export const mergeConfigs = (
       (hook: SessionHook) => hook.when.event
     )
 
-    // Build merged config
-     // Preserve truncationLimit from global config (markdown cannot override this)
+    // Build merged config with project/markdown truncationLimit taking precedence
      const mergedConfig: CommandHooksConfig = {
-       truncationLimit: global.truncationLimit,
+       truncationLimit: markdown.truncationLimit ?? global.truncationLimit,
        tool: mergedToolHooks.length > 0 ? mergedToolHooks : [],
        session: mergedSessionHooks.length > 0 ? mergedSessionHooks : [],
      }
