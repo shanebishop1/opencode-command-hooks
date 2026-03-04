@@ -363,3 +363,4 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
   }
 }
 
+export default CommandHooksPlugin
