@@ -517,7 +517,7 @@ hooks:
         process.chdir(testProjectDir);
         const config = await loadAgentConfig("invalid-run");
         expect(config.tool).toHaveLength(1);
-        expect(config.tool?.[0].id).toBe("invalid-run-after-1");
+        expect(config.tool?.[0].id).toBe("invalid-run-after-0");
         expect(config.tool?.[0].run).toBe("echo valid");
       } finally {
         process.chdir(originalCwd);
