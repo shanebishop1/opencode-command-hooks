@@ -18,8 +18,9 @@
   "scripts": {
     "build": "tsc",
     "test": "bun test",
-    "lint": "eslint src --ext .ts",
+    "lint": "eslint src tests --ext .ts",
     "typecheck": "tsc --noEmit",
+    "ci:check": "npm run lint && npm run typecheck && (command -v bun >/dev/null 2>&1 && bun test || echo \"bun not found; skipping tests\")",
     "typecheck:bun": "bun --bun tsc --noEmit",
     "typecheck:bun-build": "bun build src/index.ts --target=bun",
     "typecheck:bun-run": "bun run src/index.ts",
