@@ -251,11 +251,6 @@ const convertAgentHookEntryToToolHook = (
   phase: "before" | "after",
   index: number,
 ): ToolHook | null => {
-  if (!entry.run) {
-    logger.debug("Hook entry missing required 'run' field");
-    return null;
-  }
-
   const hookId = `${agentName}-${phase}-${index}`;
 
   return {

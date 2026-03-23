@@ -25,8 +25,8 @@ export interface AgentHooks {
 
 /** Single hook entry in the simplified agent hooks format */
 export interface AgentHookEntry {
-  /** Command(s) to execute. Array runs sequentially. */
-  run: string | string[]
+  /** Optional command(s) to execute. Array runs sequentially. */
+  run?: string | string[]
 
   /** Optional template for injecting hook results into the session. Supports placeholder substitution. */
   inject?: string
@@ -61,8 +61,8 @@ export interface ToolHook {
   /** Matching conditions that determine when this hook should run. */
   when: ToolHookWhen
 
-  /** Command(s) to execute. Array runs sequentially; failures don't block. */
-  run: string | string[]
+  /** Optional command(s) to execute. Array runs sequentially; failures don't block. */
+  run?: string | string[]
 
   /**
    * Optional template for injecting hook results into the session.
@@ -133,8 +133,8 @@ export interface SessionHook {
   /** Matching conditions that determine when this hook should run. */
   when: SessionHookWhen
 
-  /** Command(s) to execute. Array runs sequentially; failures don't block. */
-  run: string | string[]
+  /** Optional command(s) to execute. Array runs sequentially; failures don't block. */
+  run?: string | string[]
 
   /**
    * Optional template for injecting hook results into the session.
