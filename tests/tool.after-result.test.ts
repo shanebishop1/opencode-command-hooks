@@ -90,6 +90,68 @@ describe("tool after hooks", () => {
     });
   });
 
+  it("executes inject-only after hook without run", async () => {
+    writeConfig({
+      tool: [
+        {
+          id: "inject-only-after",
+          when: { phase: "after", tool: ["bash"] },
+          inject: "after only inject",
+        },
+      ],
+      session: [],
+    });
+
+    const { CommandHooksPlugin } = await import("../src/index.js");
+    const { client, promptCalls, toastCalls } = createMockClient();
+
+    const plugin = await CommandHooksPlugin({ client } as never);
+    await plugin["tool.execute.after"]?.(
+      { tool: "bash", sessionID: "s-inject", callID: "c-inject" },
+      { title: "ok", output: "done", metadata: {} },
+    );
+
+    expect(promptCalls).toHaveLength(1);
+    const promptParts = (promptCalls[0].body as { parts: Array<{ text: string }> }).parts;
+    expect(promptParts[0].text).toBe("after only inject");
+    expect(toastCalls).toHaveLength(0);
+  });
+
+  it("executes toast-only before hook without run", async () => {
+    writeConfig({
+      tool: [
+        {
+          id: "toast-only-before",
+          when: { phase: "before", tool: ["bash"] },
+          toast: {
+            title: "Toast Only",
+            message: "before only toast",
+            variant: "info",
+          },
+        },
+      ],
+      session: [],
+    });
+
+    const { CommandHooksPlugin } = await import("../src/index.js");
+    const { client, promptCalls, toastCalls } = createMockClient();
+
+    const plugin = await CommandHooksPlugin({ client } as never);
+    await plugin["tool.execute.before"]?.(
+      { tool: "bash", sessionID: "s-toast", callID: "c-toast" },
+      { args: { command: "ls" } },
+    );
+
+    expect(promptCalls).toHaveLength(0);
+    expect(toastCalls).toHaveLength(1);
+    expect(toastCalls[0].body).toEqual({
+      title: "Toast Only",
+      message: "before only toast",
+      variant: "info",
+      duration: undefined,
+    });
+  });
+
   it("skips tool.execute.after when output is missing", async () => {
     writeConfig({
       tool: [
@@ -109,7 +171,7 @@ describe("tool after hooks", () => {
     const plugin = await CommandHooksPlugin({ client } as never);
     await plugin["tool.execute.after"]?.(
       { tool: "bash", sessionID: "s1", callID: "c-missing-output" },
-      undefined,
+      undefined as never,
     );
 
     expect(promptCalls).toHaveLength(0);

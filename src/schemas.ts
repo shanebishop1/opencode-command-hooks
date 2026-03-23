@@ -15,6 +15,7 @@ import { z } from "zod";
  * String or array of strings - used for flexible matching fields
  */
 const StringOrArray = z.union([z.string(), z.array(z.string())]);
+const RunSchema = z.union([z.string(), z.array(z.string())]);
 
 /**
  * Phase for tool hooks: "before" or "after"
@@ -59,11 +60,14 @@ const ToastSchema = ToastBodySchema.optional();
  */
 export const SimplifiedHookEntrySchema = z
   .object({
-    run: z.union([z.string(), z.array(z.string())]),
+    run: RunSchema.optional(),
     inject: z.string().optional(),
     toast: ToastBodySchema.optional(),
   })
-  .strict();
+  .strict()
+  .refine((hook) => hook.run !== undefined || hook.inject !== undefined || hook.toast !== undefined, {
+    message: "Hook must provide at least one of run, inject, or toast",
+  });
 
 /**
  * Tool hook configuration
@@ -75,10 +79,12 @@ export const SimplifiedHookEntrySchema = z
 export const ToolHookSchema = z.object({
     id: z.string().min(1, "Hook ID must not be empty"),
     when: ToolHookWhenSchema,
-    run: z.union([z.string(), z.array(z.string())]),
+    run: RunSchema.optional(),
     inject: z.string().optional(),
     toast: ToastSchema,
     overrideGlobal: z.boolean().optional(),
+}).refine((hook) => hook.run !== undefined || hook.inject !== undefined || hook.toast !== undefined, {
+  message: "Hook must provide at least one of run, inject, or toast",
 });
 
 // ============================================================================
@@ -103,10 +109,12 @@ const SessionHookWhenSchema = z.object({
 export const SessionHookSchema = z.object({
     id: z.string().min(1, "Hook ID must not be empty"),
     when: SessionHookWhenSchema,
-    run: z.union([z.string(), z.array(z.string())]),
+    run: RunSchema.optional(),
     inject: z.string().optional(),
     toast: ToastSchema,
     overrideGlobal: z.boolean().optional(),
+}).refine((hook) => hook.run !== undefined || hook.inject !== undefined || hook.toast !== undefined, {
+  message: "Hook must provide at least one of run, inject, or toast",
 });
 
 // ============================================================================

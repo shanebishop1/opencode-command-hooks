@@ -218,52 +218,47 @@ const executeHook = async (
    )
 
    try {
-     // Execute the hook's commands
+     // Execute optional hook commands
      if (truncationLimit !== undefined) {
        logger.debug(`Executing with truncateOutput: ${truncationLimit}`)
      } else {
        logger.debug(`Executing with default truncation (30000)`)
      }
-     const results = await executeCommands(hook.run, hook.id, truncationLimit !== undefined ? { truncateOutput: truncationLimit } : undefined)
 
-     logger.debug(
-       `Hook "${hook.id}" executed ${results.length} command(s)`
-     )
+     const results = hook.run
+       ? await executeCommands(
+           hook.run,
+           hook.id,
+           truncationLimit !== undefined ? { truncateOutput: truncationLimit } : undefined
+         )
+       : []
 
-     // If inject is configured, prepare and inject the message
-     if (hook.inject) {
-       const lastResult = results[results.length - 1]
+      logger.debug(
+        `Hook "${hook.id}" executed ${results.length} command(s)`
+      )
 
-       const templateContext: TemplateContext = {
-         id: hook.id,
-         agent: context.agent,
-         tool: context.tool, // Will be undefined for session hooks
-         cmd: Array.isArray(hook.run) ? hook.run[0] : hook.run,
-         stdout: lastResult?.stdout,
-         stderr: lastResult?.stderr,
-         exitCode: lastResult?.exitCode,
-       }
+      const lastResult = results[results.length - 1]
+      const firstCmd = Array.isArray(hook.run) ? hook.run[0] : hook.run
+      const templateContext: TemplateContext = {
+        id: hook.id,
+        agent: context.agent,
+        tool: context.tool,
+        cmd: firstCmd,
+        stdout: lastResult?.stdout,
+        stderr: lastResult?.stderr,
+        exitCode: lastResult?.exitCode,
+      }
 
-       const message = interpolateTemplate(hook.inject, templateContext)
-       await injectMessage(client, context.sessionId, message)
-     }
+      // If inject is configured, prepare and inject the message
+      if (hook.inject) {
+        const message = interpolateTemplate(hook.inject, templateContext)
+        await injectMessage(client, context.sessionId, message)
+      }
 
-     // If toast is configured, interpolate and show toast notification
-     if (hook.toast) {
-       const lastResult = results[results.length - 1]
-
-       const templateContext: TemplateContext = {
-         id: hook.id,
-         agent: context.agent,
-         tool: context.tool,
-         cmd: Array.isArray(hook.run) ? hook.run[0] : hook.run,
-         stdout: lastResult?.stdout,
-         stderr: lastResult?.stderr,
-         exitCode: lastResult?.exitCode,
-       }
-
-       const toastTitle = hook.toast.title ? interpolateTemplate(hook.toast.title, templateContext) : undefined
-       const toastMessage = interpolateTemplate(hook.toast.message, templateContext)
+      // If toast is configured, interpolate and show toast notification
+      if (hook.toast) {
+        const toastTitle = hook.toast.title ? interpolateTemplate(hook.toast.title, templateContext) : undefined
+        const toastMessage = interpolateTemplate(hook.toast.message, templateContext)
 
        await showToast(
          client,

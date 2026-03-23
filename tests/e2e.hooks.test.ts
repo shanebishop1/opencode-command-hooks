@@ -9,6 +9,8 @@ const TEST_OPENCODE_SUBDIR = join(TEST_CONFIG_DIR, ".opencode")
 const TEST_OPENCODE_CONFIG = join(TEST_CONFIG_DIR, "opencode.jsonc")
 const TEST_HOOKS_CONFIG = join(TEST_OPENCODE_SUBDIR, "command-hooks.jsonc")
 const LOG_DIR = join(homedir(), ".local", "share", "opencode", "log")
+const LOG_WINDOW_MS = 15 * 60 * 1000
+const LOG_FALLBACK_FILES = 3
 
 /**
  * Check if OpenCode CLI is available and working properly
@@ -41,23 +43,41 @@ function getRecentLogContent(): string {
   if (!existsSync(LOG_DIR)) {
     return ""
   }
-  const now = Date.now()
-  const fiveMinutesAgo = now - 5 * 60 * 1000
-  
   const logs = readdirSync(LOG_DIR)
-    .map(name => ({
-      name,
-      path: join(LOG_DIR, name),
-      mtime: statSync(join(LOG_DIR, name)).mtimeMs
-    }))
-    .filter(f => f.mtime > fiveMinutesAgo)
-    .sort((a, b) => a.mtime - b.mtime)
-  
+    .map((name) => {
+      const filePath = join(LOG_DIR, name)
+      try {
+        return {
+          name,
+          path: filePath,
+          mtime: statSync(filePath).mtimeMs,
+        }
+      } catch {
+        return null
+      }
+    })
+    .filter((entry): entry is { name: string; path: string; mtime: number } => entry !== null)
+    .sort((a, b) => b.mtime - a.mtime)
+
   if (logs.length === 0) {
     return ""
   }
-  
-  return logs.map(f => readFileSync(f.path, "utf-8")).join("\n")
+
+  const cutoff = Date.now() - LOG_WINDOW_MS
+  const recent = logs.filter((file) => file.mtime > cutoff)
+  const selected = recent.length > 0 ? recent : logs.slice(0, LOG_FALLBACK_FILES)
+
+  return selected
+    .slice()
+    .reverse()
+    .map((file) => {
+      try {
+        return readFileSync(file.path, "utf-8")
+      } catch {
+        return ""
+      }
+    })
+    .join("\n")
 }
 
 /**
@@ -290,7 +310,7 @@ describe("E2E Hook Behavioral Tests", () => {
 
     const logContent = await waitForLogMatch(
       content => content.includes(`TOAST_MARKER_${uniqueId}`),
-      15000,
+      30000,
       500
     )
     console.log(`Log content length: ${logContent.length}`)

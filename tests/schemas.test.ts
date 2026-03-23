@@ -249,18 +249,31 @@ describe("Zod Schemas", () => {
       expect(result).toBeNull();
     });
 
-     it("should allow inject as string template", () => {
-       const hook = {
-         id: "hook",
-         when: { phase: "after" },
-         run: "echo test",
-         inject: "Command completed",
-       };
+      it("should allow inject as string template", () => {
+        const hook = {
+          id: "hook",
+          when: { phase: "after" },
+          run: "echo test",
+          inject: "Command completed",
+        };
 
-       const result = parseToolHook(hook);
-       expect(result).not.toBeNull();
-       expect(result?.inject).toBe("Command completed");
-     });
+        const result = parseToolHook(hook);
+        expect(result).not.toBeNull();
+        expect(result?.inject).toBe("Command completed");
+      });
+
+      it("should allow inject-only tool hooks without run", () => {
+        const hook = {
+          id: "inject-only",
+          when: { phase: "after", tool: "bash" },
+          inject: "Only inject",
+        };
+
+        const result = parseToolHook(hook);
+        expect(result).not.toBeNull();
+        expect(result?.run).toBeUndefined();
+        expect(result?.inject).toBe("Only inject");
+      });
 
      it("should allow toast configuration on tool hook", () => {
        const hook = {
@@ -317,8 +330,8 @@ describe("Zod Schemas", () => {
        expect(result).toBeNull();
      });
 
-     it("should allow toast with valid variant on tool hook", () => {
-       const variants: Array<"info" | "success" | "warning" | "error"> = ["info", "success", "warning", "error"];
+      it("should allow toast with valid variant on tool hook", () => {
+        const variants: Array<"info" | "success" | "warning" | "error"> = ["info", "success", "warning", "error"];
        
        for (const variant of variants) {
          const hook = {
@@ -348,9 +361,25 @@ describe("Zod Schemas", () => {
          },
        };
 
-       const result = parseToolHook(hook);
-       expect(result).toBeNull();
-     });
+        const result = parseToolHook(hook);
+        expect(result).toBeNull();
+      });
+
+      it("should allow toast-only tool hooks without run", () => {
+        const hook = {
+          id: "toast-only",
+          when: { phase: "before", tool: "task" },
+          toast: {
+            message: "Only toast",
+            variant: "info",
+          },
+        };
+
+        const result = parseToolHook(hook);
+        expect(result).not.toBeNull();
+        expect(result?.run).toBeUndefined();
+        expect(result?.toast?.message).toBe("Only toast");
+      });
 
       it("should allow toast configuration on session hook", () => {
         const hook = {
@@ -372,6 +401,19 @@ describe("Zod Schemas", () => {
         expect(result?.toast?.message).toBe("Agent {agent} is ready");
         expect(result?.toast?.variant).toBe("info");
         expect(result?.toast?.duration).toBe(2000);
+      });
+
+      it("should allow inject-only session hooks without run", () => {
+        const hook = {
+          id: "session-inject-only",
+          when: { event: "session.idle" },
+          inject: "session only inject",
+        };
+
+        const result = parseSessionHook(hook);
+        expect(result).not.toBeNull();
+        expect(result?.run).toBeUndefined();
+        expect(result?.inject).toBe("session only inject");
       });
     });
 
