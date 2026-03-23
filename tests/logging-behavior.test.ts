@@ -7,6 +7,18 @@ import { $ } from "bun"
 const LOG_WINDOW_MS = 15 * 60 * 1000
 const LOG_FALLBACK_FILES = 3
 
+const isOpenCodeAvailable = async (): Promise<boolean> => {
+  try {
+    const whichResult = await $`which opencode 2>&1`.text()
+    if (!whichResult || whichResult.includes("not found")) {
+      return false
+    }
+    return true
+  } catch {
+    return false
+  }
+}
+
 const getLogFiles = (dir: string) => {
   if (!existsSync(dir)) {
     return [] as Array<{ name: string; path: string; mtime: number }>
@@ -68,6 +80,12 @@ const waitForLogMarker = async (dir: string, marker: string, timeoutMs = 20000, 
 
 describe("Logging smoke test", () => {
   it("client.app.log() writes to OpenCode log files", async () => {
+    const hasOpenCode = await isOpenCodeAvailable()
+    if (!hasOpenCode) {
+      console.log("OpenCode CLI not available - skipping logging smoke test")
+      return
+    }
+
     const logDir = join(homedir(), ".local", "share", "opencode", "log")
     const configPath = join(process.cwd(), "opencode.jsonc")
     
