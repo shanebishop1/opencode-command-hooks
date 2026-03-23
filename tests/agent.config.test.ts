@@ -11,8 +11,11 @@ describe("Agent Configuration", () => {
 
   beforeEach(async () => {
     // Create test directories
+    await mkdir(join(testAgentDir, ".opencode", "agents"), { recursive: true });
     await mkdir(join(testAgentDir, ".opencode", "agent"), { recursive: true });
+    await mkdir(join(testProjectDir, ".opencode", "agents"), { recursive: true });
     await mkdir(join(testProjectDir, ".opencode", "agent"), { recursive: true });
+    await mkdir(join(process.env.HOME || "", ".config", "opencode", "agents"), { recursive: true });
     await mkdir(join(process.env.HOME || "", ".config", "opencode", "agent"), { recursive: true });
   });
 
@@ -49,12 +52,68 @@ describe("Agent Configuration", () => {
       }
     });
 
+    it("should return project-level plural agent file if it exists", async () => {
+      const agentPath = join(testProjectDir, ".opencode", "agents", "plural-agent.md");
+      await writeFile(agentPath, "---\ndescription: Plural test agent\n---\n# Plural test agent content");
+
+      const originalCwd = process.cwd();
+      try {
+        process.chdir(testProjectDir);
+        const result = await resolveAgentPath("plural-agent");
+        expect(realpathSync(result!)).toBe(realpathSync(agentPath));
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it("should prioritize project-level plural over project-level singular", async () => {
+      const pluralPath = join(testProjectDir, ".opencode", "agents", "project-priority.md");
+      const singularPath = join(testProjectDir, ".opencode", "agent", "project-priority.md");
+
+      await writeFile(pluralPath, "---\ndescription: Project plural\n---\n# Project plural content");
+      await writeFile(singularPath, "---\ndescription: Project singular\n---\n# Project singular content");
+
+      const originalCwd = process.cwd();
+      try {
+        process.chdir(testProjectDir);
+        const result = await resolveAgentPath("project-priority");
+        expect(realpathSync(result!)).toBe(realpathSync(pluralPath));
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
     it("should return user-level agent file if project file doesn't exist", async () => {
       const userAgentPath = join(process.env.HOME || "", ".config", "opencode", "agent", "user-agent.md");
       await writeFile(userAgentPath, "---\ndescription: User agent\n---\n# User agent content");
 
       const result = await resolveAgentPath("user-agent");
       expect(realpathSync(result!)).toBe(realpathSync(userAgentPath));
+    });
+
+    it("should prioritize user-level plural over user-level singular", async () => {
+      const userPluralPath = join(process.env.HOME || "", ".config", "opencode", "agents", "user-priority.md");
+      const userSingularPath = join(process.env.HOME || "", ".config", "opencode", "agent", "user-priority.md");
+
+      await writeFile(userPluralPath, "---\ndescription: User plural\n---\n# User plural content");
+      await writeFile(userSingularPath, "---\ndescription: User singular\n---\n# User singular content");
+
+      const result = await resolveAgentPath("user-priority");
+      expect(realpathSync(result!)).toBe(realpathSync(userPluralPath));
+    });
+
+    it("should fall back to legacy singular directories", async () => {
+      const legacyProjectPath = join(testProjectDir, ".opencode", "agent", "legacy-agent.md");
+      await writeFile(legacyProjectPath, "---\ndescription: Legacy agent\n---\n# Legacy content");
+
+      const originalCwd = process.cwd();
+      try {
+        process.chdir(testProjectDir);
+        const result = await resolveAgentPath("legacy-agent");
+        expect(realpathSync(result!)).toBe(realpathSync(legacyProjectPath));
+      } finally {
+        process.chdir(originalCwd);
+      }
     });
 
     it("should return null if no agent file exists", async () => {
