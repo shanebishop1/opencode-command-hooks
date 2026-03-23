@@ -279,7 +279,7 @@ const convertAgentHookEntryToToolHook = (
  *
  * @example
  * ```typescript
- * const name = extractAgentNameFromPath("/project/.opencode/agent/engineer.md");
+ * const name = extractAgentNameFromPath("/project/.opencode/agents/engineer.md");
  * // Returns: "engineer"
  * ```
  */

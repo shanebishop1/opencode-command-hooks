@@ -1,8 +1,11 @@
 /**
  * Agent configuration resolution and loading for command hooks
  *
- * Handles finding and parsing agent markdown files (.opencode/agent/*.md or
- * ~/.config/opencode/agent/*.md) to extract command_hooks from YAML frontmatter.
+ * Handles finding and parsing agent markdown files (.opencode/agents/*.md or
+ * ~/.config/opencode/agents/*.md) to extract command_hooks from YAML frontmatter.
+ *
+ * Backward compatibility: legacy singular directories (.opencode/agent and
+ * ~/.config/opencode/agent) are also supported as fallbacks.
  * These hooks are applied when the specific subagent is invoked via the task tool.
  */
 
@@ -16,8 +19,10 @@ import { logger } from "../logging.js";
  * Resolve agent markdown file path by agent name
  *
  * Searches for agent markdown files in the following order:
- * 1. Project-level: .opencode/agent/{name}.md
- * 2. User-level: ~/.config/opencode/agent/{name}.md
+ * 1. Project-level: .opencode/agents/{name}.md
+ * 2. Project-level legacy fallback: .opencode/agent/{name}.md
+ * 3. User-level: ~/.config/opencode/agents/{name}.md
+ * 4. User-level legacy fallback: ~/.config/opencode/agent/{name}.md
  *
  * Returns the first existing path found, or null if no file exists.
  *
@@ -27,8 +32,10 @@ import { logger } from "../logging.js";
  * @example
  * ```typescript
  * const path = await resolveAgentPath("engineer");
- * // Returns: "/Users/example/project/.opencode/agent/engineer.md" (if exists)
- * // Or: "/Users/example/.config/opencode/agent/engineer.md" (if project path doesn't exist)
+ * // Returns: "/Users/example/project/.opencode/agents/engineer.md" (if exists)
+ * // Or: "/Users/example/project/.opencode/agent/engineer.md" (legacy fallback)
+ * // Or: "/Users/example/.config/opencode/agents/engineer.md" (if project paths don't exist)
+ * // Or: "/Users/example/.config/opencode/agent/engineer.md" (legacy fallback)
  * // Or: null (if neither exists)
  * ```
  */
@@ -41,30 +48,24 @@ export async function resolveAgentPath(agentName: string): Promise<string | null
 
   const agentFileName = `${agentName}.md`;
 
-  // Check project-level agent file
-  const projectAgentPath = join(process.cwd(), ".opencode", "agent", agentFileName);
-  try {
-    const projectFile = Bun.file(projectAgentPath);
-    if (await projectFile.exists()) {
-      logger.debug(`Found project agent file: ${projectAgentPath}`);
-      return projectAgentPath;
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logger.debug(`Error checking project agent file ${projectAgentPath}: ${message}`);
-  }
+  const candidatePaths = [
+    join(process.cwd(), ".opencode", "agents", agentFileName),
+    join(process.cwd(), ".opencode", "agent", agentFileName),
+    join(homedir(), ".config", "opencode", "agents", agentFileName),
+    join(homedir(), ".config", "opencode", "agent", agentFileName),
+  ];
 
-  // Check user-level agent file
-  const userAgentPath = join(homedir(), ".config", "opencode", "agent", agentFileName);
-  try {
-    const userFile = Bun.file(userAgentPath);
-    if (await userFile.exists()) {
-      logger.debug(`Found user agent file: ${userAgentPath}`);
-      return userAgentPath;
+  for (const candidatePath of candidatePaths) {
+    try {
+      const file = Bun.file(candidatePath);
+      if (await file.exists()) {
+        logger.debug(`Found agent file: ${candidatePath}`);
+        return candidatePath;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.debug(`Error checking agent file ${candidatePath}: ${message}`);
     }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logger.debug(`Error checking user agent file ${userAgentPath}: ${message}`);
   }
 
   logger.debug(`No agent file found for: ${agentName}`);
@@ -120,4 +121,3 @@ export async function loadAgentConfig(agentName: string): Promise<CommandHooksCo
 
   return config;
 }
-
