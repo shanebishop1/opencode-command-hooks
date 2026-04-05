@@ -152,7 +152,7 @@ describe("tool after hooks", () => {
     });
   });
 
-  it("skips tool.execute.after when output is missing", async () => {
+  it("runs tool.execute.after even when output is missing", async () => {
     writeConfig({
       tool: [
         {
@@ -174,7 +174,9 @@ describe("tool after hooks", () => {
       undefined as never,
     );
 
-    expect(promptCalls).toHaveLength(0);
+    expect(promptCalls).toHaveLength(1);
+    const promptParts = (promptCalls[0].body as { parts: Array<{ text: string }> }).parts;
+    expect(promptParts[0].text).toContain("Tool result: Hook executed");
     expect(toastCalls).toHaveLength(0);
   });
 
@@ -260,5 +262,49 @@ describe("tool after hooks", () => {
     } as never);
 
     expect(promptCalls).toHaveLength(0);
+  });
+
+  it("does not double-run after hooks when tool.execute.after and tool.result both fire", async () => {
+    writeConfig({
+      tool: [
+        {
+          id: "after-hook-dedupe",
+          when: { phase: "after", tool: ["bash"] },
+          run: ["echo dedupe"],
+          inject: "Deduped: {stdout}",
+        },
+      ],
+      session: [],
+    });
+
+    const { CommandHooksPlugin } = await import("../src/index.js");
+    const { client, promptCalls } = createMockClient();
+
+    const plugin = await CommandHooksPlugin({ client } as never);
+
+    await plugin["tool.execute.before"]?.(
+      { tool: "bash", sessionID: "s-dedupe", callID: "c-dedupe" },
+      { args: { command: "echo hi" } },
+    );
+
+    await plugin["tool.execute.after"]?.(
+      { tool: "bash", sessionID: "s-dedupe", callID: "c-dedupe" },
+      undefined as never,
+    );
+
+    await plugin.event?.({
+      event: {
+        type: "tool.result",
+        properties: {
+          name: "bash",
+          sessionID: "s-dedupe",
+          callID: "c-dedupe",
+        },
+      },
+    } as never);
+
+    expect(promptCalls).toHaveLength(1);
+    const promptParts = (promptCalls[0].body as { parts: Array<{ text: string }> }).parts;
+    expect(promptParts[0].text).toContain("Deduped: dedupe");
   });
 });
