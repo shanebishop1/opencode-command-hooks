@@ -137,6 +137,23 @@ describe("Agent Configuration", () => {
         process.chdir(originalCwd);
       }
     });
+
+    it("should find project-level agent file from nested directories", async () => {
+      const nestedDir = join(testProjectDir, "apps", "web", "src");
+      await mkdir(nestedDir, { recursive: true });
+
+      const projectAgentPath = join(testProjectDir, ".opencode", "agents", "nested-find.md");
+      await writeFile(projectAgentPath, "---\ndescription: Nested find\n---\n# Nested find content");
+
+      const originalCwd = process.cwd();
+      try {
+        process.chdir(nestedDir);
+        const result = await resolveAgentPath("nested-find");
+        expect(realpathSync(result!)).toBe(realpathSync(projectAgentPath));
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
   });
 
   describe("loadAgentConfig", () => {
@@ -237,6 +254,31 @@ command_hooks:
 
         expect(config.tool).toHaveLength(1);
         expect(config.session).toHaveLength(1);
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it("should reject invalid legacy command_hooks schema", async () => {
+      const agentPath = join(testProjectDir, ".opencode", "agent", "invalid-legacy.md");
+      await writeFile(
+        agentPath,
+        `---
+description: Invalid legacy command hooks
+command_hooks:
+  tool:
+    - id: "legacy-invalid"
+      when:
+        phase: "after"
+      run: 123
+---`
+      );
+
+      const originalCwd = process.cwd();
+      try {
+        process.chdir(testProjectDir);
+        const config = await loadAgentConfig("invalid-legacy");
+        expect(config).toEqual({ tool: [], session: [] });
       } finally {
         process.chdir(originalCwd);
       }

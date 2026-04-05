@@ -7,7 +7,7 @@
  */
 
 import type { AgentHooks, AgentHookEntry, CommandHooksConfig, ToolHook } from "../types/hooks.js";
-import { isValidCommandHooksConfig, SimplifiedHookEntrySchema } from "../schemas.js";
+import { ConfigSchema, SimplifiedHookEntrySchema } from "../schemas.js";
 import { load as parseYaml } from "js-yaml";
 import { logger } from "../logging.js";
 
@@ -384,18 +384,23 @@ export const loadMarkdownConfig = async (
          return { tool: [], session: [] };
        }
 
-       // Validate command_hooks structure
-       if (!isValidCommandHooksConfig(commandHooks)) {
-          logger.info(
-            `command_hooks field is not a valid object in ${filePath} (expected { tool?: [], session?: [] })`,
-          );
+       const parsedLegacy = ConfigSchema.safeParse(commandHooks);
+       if (!parsedLegacy.success) {
+         const issueSummary = parsedLegacy.error.issues
+           .map((issue) => {
+             const path = issue.path.length > 0 ? issue.path.join(".") : "root";
+             return `${path}: ${issue.message}`;
+           })
+           .join("; ");
+         logger.info(`Invalid command_hooks in ${filePath}: ${issueSummary}`);
          return { tool: [], session: [] };
        }
 
-       // Return with defaults for missing arrays
        const result: CommandHooksConfig = {
-         tool: commandHooks.tool ?? [],
-         session: commandHooks.session ?? [],
+         truncationLimit: parsedLegacy.data.truncationLimit,
+         ignoreGlobalConfig: parsedLegacy.data.ignoreGlobalConfig,
+         tool: parsedLegacy.data.tool ?? [],
+         session: parsedLegacy.data.session ?? [],
        };
 
         logger.debug(

@@ -10,10 +10,28 @@
  */
 
 import type { CommandHooksConfig } from "../types/hooks.js";
-import { join } from "path";
+import { join, dirname } from "path";
 import { homedir } from "os";
 import { loadMarkdownConfig } from "./markdown.js";
 import { logger } from "../logging.js";
+
+const PROJECT_SEARCH_MAX_DEPTH = 25;
+
+const projectDirs = (startDir: string): string[] => {
+  const out: string[] = [];
+  let current = startDir;
+  let depth = 0;
+
+  while (depth < PROJECT_SEARCH_MAX_DEPTH) {
+    out.push(current);
+    const parent = dirname(current);
+    if (parent === current) break;
+    current = parent;
+    depth += 1;
+  }
+
+  return out;
+};
 
 /**
  * Resolve agent markdown file path by agent name
@@ -48,12 +66,14 @@ export async function resolveAgentPath(agentName: string): Promise<string | null
 
   const agentFileName = `${agentName}.md`;
 
-  const candidatePaths = [
-    join(process.cwd(), ".opencode", "agents", agentFileName),
-    join(process.cwd(), ".opencode", "agent", agentFileName),
-    join(homedir(), ".config", "opencode", "agents", agentFileName),
-    join(homedir(), ".config", "opencode", "agent", agentFileName),
-  ];
+  const candidatePaths: string[] = [];
+  for (const dir of projectDirs(process.cwd())) {
+    candidatePaths.push(join(dir, ".opencode", "agents", agentFileName));
+    candidatePaths.push(join(dir, ".opencode", "agent", agentFileName));
+  }
+
+  candidatePaths.push(join(homedir(), ".config", "opencode", "agents", agentFileName));
+  candidatePaths.push(join(homedir(), ".config", "opencode", "agent", agentFileName));
 
   for (const candidatePath of candidatePaths) {
     try {
