@@ -15,6 +15,7 @@ import { mergeConfigs } from "./merge.js";
 import { join, dirname } from "path";
 import { homedir } from "os";
 import { stat } from "fs/promises";
+import { parse as parseJsoncText, printParseErrorCode, type ParseError } from "jsonc-parser";
 import { logger } from "../logging.js";
 
 /**
@@ -47,94 +48,34 @@ type ConfigBlobCacheEntry = GlobalConfigResult & {
 const projectConfigPathCache = new Map<string, ProjectConfigPathCacheEntry>();
 const configBlobCache = new Map<string, ConfigBlobCacheEntry>();
 
-/**
- * Strip comments from JSONC content
- * Handles both line comments and block comments
- */
-const stripJsoncComments = (content: string): string => {
-  let result = "";
-  let i = 0;
-  let inString = false;
-  let stringQuote: "\"" | "'" | null = null;
-  let isEscaped = false;
-
-  while (i < content.length) {
-    const current = content[i];
-    const next = content[i + 1];
-
-    if (inString) {
-      result += current;
-      if (isEscaped) {
-        isEscaped = false;
-      } else if (current === "\\") {
-        isEscaped = true;
-      } else if (current === stringQuote) {
-        inString = false;
-        stringQuote = null;
-      }
-      i++;
+const offsetToLineCol = (text: string, offset: number): { line: number; column: number } => {
+  let line = 1;
+  let column = 1;
+  for (let i = 0; i < offset && i < text.length; i++) {
+    if (text[i] === "\n") {
+      line += 1;
+      column = 1;
       continue;
     }
-
-    if (current === "\"" || current === "'") {
-      inString = true;
-      stringQuote = current as "\"" | "'";
-      result += current;
-      i++;
-      continue;
-    }
-
-    // Check for line comment
-    if (current === "/" && next === "/") {
-      // Skip until end of line
-      while (i < content.length && content[i] !== "\n") {
-        i++;
-      }
-      // Keep the newline
-      if (i < content.length) {
-        result += "\n";
-        i++;
-      }
-      continue;
-    }
-
-    // Check for block comment
-    if (current === "/" && next === "*") {
-      // Skip until */
-      i += 2;
-      while (i < content.length - 1) {
-        if (content[i] === "*" && content[i + 1] === "/") {
-          i += 2;
-          break;
-        }
-        // Preserve newlines to maintain line numbers
-        if (content[i] === "\n") {
-          result += "\n";
-        }
-        i++;
-      }
-      continue;
-    }
-
-    // Regular character
-    result += current;
-    i++;
+    column += 1;
   }
+  return { line, column };
+};
 
-  return result;
-}
+const parseJsonc = (content: string): unknown => {
+  const errors: ParseError[] = [];
+  const parsed = parseJsoncText(content, errors, {
+    allowTrailingComma: true,
+    disallowComments: false,
+  });
 
-/**
- * Parse JSON content, handling parse errors gracefully
- */
-const parseJson = (content: string): unknown => {
-  try {
-    return JSON.parse(content);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Failed to parse JSON: ${message}`);
-  }
-}
+  if (!errors.length) return parsed;
+
+  const first = errors[0];
+  const { line, column } = offsetToLineCol(content, first.offset);
+  const code = printParseErrorCode(first.error);
+  throw new Error(`${code} at line ${line}, column ${column}`);
+};
 
 const getFileMtimeMs = async (path: string): Promise<number | null> => {
   try {
@@ -254,8 +195,7 @@ const loadConfigFromPath = async (
   // Parse JSONC
   let parsed: unknown;
   try {
-    const stripped = stripJsoncComments(content);
-    parsed = parseJson(stripped);
+    parsed = parseJsonc(content);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.info(`Failed to parse ${source} config file ${configPath}: ${message}`);

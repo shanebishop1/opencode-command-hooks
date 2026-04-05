@@ -193,6 +193,24 @@ describe("Global Configuration", () => {
       expect(result.config.tool?.[0].id).toBe("commented-hook");
     });
 
+    it("should handle JSONC trailing commas in user global config", async () => {
+      await writeUserConfig(`{
+        "tool": [
+          {
+            "id": "trailing-comma-hook",
+            "when": { "phase": "after" },
+            "run": "echo trailing",
+          },
+        ],
+      }`);
+
+      const result = await loadFromDir();
+
+      expect(result.error).toBeNull();
+      expect(result.config.tool).toHaveLength(1);
+      expect(result.config.tool?.[0].id).toBe("trailing-comma-hook");
+    });
+
     it("should use project config only when global config has parse errors", async () => {
       await writeUserConfig("{ invalid json }");
 

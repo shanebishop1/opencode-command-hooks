@@ -49,6 +49,7 @@
     "@opencode-ai/plugin": "^1.0.0",
     "@opencode-ai/sdk": "^1.0.65",
     "js-yaml": "^4.1.0",
+    "jsonc-parser": "^3.3.1",
     "zod": "^3.22.4"
   },
   "devDependencies": {
