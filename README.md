@@ -79,6 +79,7 @@ hooks:
 | ---------------- | ---------------------- | ------------------------------------------------------------------------ |
 | `run`            | `string` \| `string[]` | Command(s) to execute                                                    |
 | `inject`         | `string`               | Message injected into the session                                        |
+| `noReply`        | `boolean`              | When `true`, sets `body.noReply` on injected session prompts             |
 | `toast`          | `object`               | Toast notification configuration                                         |
 | `overrideGlobal` | `boolean`              | When `true`, suppresses global hooks matching the same event/phase+tool. Must be a JSON boolean (`true`/`false`), not a string. |
 

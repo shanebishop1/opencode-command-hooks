@@ -62,6 +62,7 @@ export const SimplifiedHookEntrySchema = z
   .object({
     run: RunSchema.optional(),
     inject: z.string().optional(),
+    noReply: z.boolean().optional(),
     toast: ToastBodySchema.optional(),
   })
   .strict()
@@ -81,6 +82,7 @@ export const ToolHookSchema = z.object({
     when: ToolHookWhenSchema,
     run: RunSchema.optional(),
     inject: z.string().optional(),
+    noReply: z.boolean().optional(),
     toast: ToastSchema,
     overrideGlobal: z.boolean().optional(),
 }).refine((hook) => hook.run !== undefined || hook.inject !== undefined || hook.toast !== undefined, {
@@ -111,6 +113,7 @@ export const SessionHookSchema = z.object({
     when: SessionHookWhenSchema,
     run: RunSchema.optional(),
     inject: z.string().optional(),
+    noReply: z.boolean().optional(),
     toast: ToastSchema,
     overrideGlobal: z.boolean().optional(),
 }).refine((hook) => hook.run !== undefined || hook.inject !== undefined || hook.toast !== undefined, {

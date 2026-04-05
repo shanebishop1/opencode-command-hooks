@@ -262,6 +262,7 @@ const convertAgentHookEntryToToolHook = (
     },
     run: entry.run,
     inject: entry.inject,
+    noReply: entry.noReply,
     toast: entry.toast,
   };
 }
