@@ -51,6 +51,14 @@ export const filterSessionHooks = (
     }
     
     if (normalizedEvent !== criteria.event) return false
+
+    if (hook.when.agent && !criteria.agent) {
+      logger.debug(
+        `Session hook ${hook.id} requires agent filter ${JSON.stringify(hook.when.agent)} but event had no agent`
+      )
+      return false
+    }
+
     return matches(hook.when.agent, criteria.agent)
   })
 }
