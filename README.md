@@ -22,6 +22,7 @@ hooks:
 
 - [Features](#features)
 - [Installation](#installation)
+- [Compatibility](#compatibility)
 - [Configuration](#configuration)
 - [Examples](#examples)
 - [Template Placeholders](#template-placeholders)
@@ -170,6 +171,13 @@ Add to your `opencode.json`:
   "plugin": ["opencode-command-hooks"],
 }
 ```
+
+## Compatibility
+
+- Developed and tested against OpenCode `1.3.15`.
+- Uses `tool.execute.before` / `tool.execute.after` as the primary hook lifecycle.
+- Includes a backward-compat fallback for legacy `tool.result` events.
+- Session `agent` filtering depends on OpenCode event payloads. If an event omits agent, `when.agent` session hooks do not match.
 
 ---
 
