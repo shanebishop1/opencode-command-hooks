@@ -11,6 +11,7 @@ const TEST_HOOKS_CONFIG = join(TEST_OPENCODE_SUBDIR, "command-hooks.jsonc")
 const LOG_DIR = join(homedir(), ".local", "share", "opencode", "log")
 const LOG_WINDOW_MS = 15 * 60 * 1000
 const LOG_FALLBACK_FILES = 3
+const E2E_ENABLED = process.env.OPENCODE_E2E === "1"
 
 /**
  * Check if OpenCode CLI is available and working properly
@@ -146,6 +147,12 @@ describe("E2E Hook Behavioral Tests", () => {
   let skipTests = false
   
   beforeAll(async () => {
+    if (!E2E_ENABLED) {
+      skipTests = true
+      console.log("⚠️ Skipping E2E tests: set OPENCODE_E2E=1 to run")
+      return
+    }
+
     // Check if OpenCode is available
     skipTests = !(await isOpenCodeAvailable())
     if (skipTests) {

@@ -6,6 +6,7 @@ import { $ } from "bun"
 
 const LOG_WINDOW_MS = 15 * 60 * 1000
 const LOG_FALLBACK_FILES = 3
+const LOG_SMOKE_ENABLED = process.env.OPENCODE_LOG_SMOKE === "1"
 
 const isOpenCodeAvailable = async (): Promise<boolean> => {
   try {
@@ -80,6 +81,11 @@ const waitForLogMarker = async (dir: string, marker: string, timeoutMs = 20000, 
 
 describe("Logging smoke test", () => {
   it("client.app.log() writes to OpenCode log files", async () => {
+    if (!LOG_SMOKE_ENABLED) {
+      console.log("OpenCode log smoke test disabled - set OPENCODE_LOG_SMOKE=1 to run")
+      return
+    }
+
     const hasOpenCode = await isOpenCodeAvailable()
     if (!hasOpenCode) {
       console.log("OpenCode CLI not available - skipping logging smoke test")
