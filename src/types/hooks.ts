@@ -31,9 +31,6 @@ export interface AgentHookEntry {
   /** Optional template for injecting hook results into the session. Supports placeholder substitution. */
   inject?: string
 
-  /** Optional noReply passthrough for injected session prompts. */
-  noReply?: boolean
-
   /** Optional toast notification. Supports placeholder substitution. */
   toast?: {
     /** Optional title. Supports placeholder substitution. */
@@ -73,9 +70,6 @@ export interface ToolHook {
    * Unavailable values are replaced with empty string.
    */
   inject?: string
-
-  /** If true, injected hook messages use noReply to avoid triggering model responses. */
-  noReply?: boolean
 
   /** Optional toast notification. Supports placeholder substitution. */
   toast?: {
@@ -148,9 +142,6 @@ export interface SessionHook {
    * Unavailable values are replaced with empty string.
    */
   inject?: string
-
-  /** If true, injected hook messages use noReply to avoid triggering model responses. */
-  noReply?: boolean
 
   /** Optional toast notification. Supports placeholder substitution. */
   toast?: {

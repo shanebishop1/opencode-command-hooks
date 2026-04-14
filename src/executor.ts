@@ -180,8 +180,7 @@ const showToast = async (
 const injectMessage = async (
    client: OpencodeClient,
    sessionId: string,
-   message: string,
-   noReply?: boolean,
+   message: string
 ): Promise<void> => {
     try {
        logger.debug(`Injecting message into session ${sessionId}`)
@@ -189,7 +188,6 @@ const injectMessage = async (
      await client.session.promptAsync({
        path: { id: sessionId },
        body: {
-         noReply,
          parts: [{ type: "text", text: message }],
        },
      })
@@ -262,7 +260,7 @@ const executeHook = async (
       // If inject is configured, prepare and inject the message
       if (hook.inject) {
         const message = interpolateTemplate(hook.inject, templateContext)
-        await injectMessage(client, context.sessionId, message, hook.noReply)
+        await injectMessage(client, context.sessionId, message)
       }
 
       // If toast is configured, interpolate and show toast notification

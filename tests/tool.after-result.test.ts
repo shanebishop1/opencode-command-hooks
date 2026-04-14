@@ -117,32 +117,6 @@ describe("tool after hooks", () => {
     expect(toastCalls).toHaveLength(0);
   });
 
-  it("passes noReply through when inject hook sets it", async () => {
-    writeConfig({
-      tool: [
-        {
-          id: "inject-no-reply",
-          when: { phase: "after", tool: ["bash"] },
-          inject: "silent inject",
-          noReply: true,
-        },
-      ],
-      session: [],
-    });
-
-    const { CommandHooksPlugin } = await import("../src/index.js");
-    const { client, promptCalls } = createMockClient();
-
-    const plugin = await CommandHooksPlugin({ client } as never);
-    await plugin["tool.execute.after"]?.(
-      { tool: "bash", sessionID: "s-no-reply", callID: "c-no-reply" },
-      { title: "ok", output: "done", metadata: {} },
-    );
-
-    expect(promptCalls).toHaveLength(1);
-    expect((promptCalls[0].body as { noReply?: boolean }).noReply).toBe(true);
-  });
-
   it("executes toast-only before hook without run", async () => {
     writeConfig({
       tool: [
