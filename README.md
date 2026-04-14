@@ -79,7 +79,6 @@ hooks:
 | ---------------- | ---------------------- | ------------------------------------------------------------------------ |
 | `run`            | `string` \| `string[]` | Command(s) to execute                                                    |
 | `inject`         | `string`               | Message injected into the session                                        |
-| `noReply`        | `boolean`              | When `true`, sets `body.noReply` on injected session prompts             |
 | `toast`          | `object`               | Toast notification configuration                                         |
 | `overrideGlobal` | `boolean`              | When `true`, suppresses global hooks matching the same event/phase+tool. Must be a JSON boolean (`true`/`false`), not a string. |
 
@@ -455,12 +454,11 @@ export const MyHooks: Plugin = async ({ $, client }) => {
           }
         }
 
-        // Inject results into session (noReply prevents LLM response)
+        // Inject results into session
         const message = `Validation (exit ${lastResult.exitCode})\n\n${lastResult.stdout}\n${lastResult.stderr}`;
         await client.session.promptAsync({
           path: { id: input.sessionID },
           body: {
-            noReply: true,
             parts: [{ type: "text", text: message }],
           },
         });

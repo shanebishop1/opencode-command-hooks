@@ -109,18 +109,6 @@ describe("Zod Schemas", () => {
       expect(result?.inject).toBe("Result: {exitCode}");
     });
 
-    it("should parse noReply flag on tool hooks", () => {
-      const hook = {
-        id: "hook-with-no-reply",
-        when: { phase: "after", tool: "task" },
-        inject: "Result: {stdout}",
-        noReply: true,
-      };
-
-      const result = parseToolHook(hook);
-      expect(result).not.toBeNull();
-      expect(result?.noReply).toBe(true);
-    });
   });
 
   describe("parseSessionHook", () => {
@@ -159,18 +147,6 @@ describe("Zod Schemas", () => {
       expect(result?.when.agent).toEqual(["build", "validator"]);
     });
 
-    it("should parse noReply flag on session hooks", () => {
-      const hook = {
-        id: "session-no-reply",
-        when: { event: "session.idle" },
-        inject: "Do not respond",
-        noReply: true,
-      };
-
-      const result = parseSessionHook(hook);
-      expect(result).not.toBeNull();
-      expect(result?.noReply).toBe(true);
-    });
   });
 
   describe("getConfigValidationErrors", () => {

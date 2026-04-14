@@ -226,7 +226,7 @@ describe("E2E Hook Behavioral Tests", () => {
     expect(containsNumber4).toBe(true)
   }, 120000)
 
-  it("Test 2: Inject during session.idle - LLM does NOT respond (noReply)", async () => {
+  it("Test 2: Inject during session.idle - LLM does NOT respond", async () => {
     if (skipTests) {
       console.log("Skipping: OpenCode not available")
       return
@@ -237,14 +237,13 @@ describe("E2E Hook Behavioral Tests", () => {
     const uniqueId = generateUniqueId()
     console.log(`Unique ID: ${uniqueId}`)
     
-    // Configure a session hook that injects a message on idle with noReply: true
+    // Configure a session hook that injects a message on idle
     const config = {
       session: [
         {
           id: "test2-session-idle",
           when: { event: "session.idle" },
           inject: `IGNORE_THIS_IDLE_MESSAGE_${uniqueId}`,
-          noReply: true,
         },
       ],
     }
@@ -266,7 +265,7 @@ describe("E2E Hook Behavioral Tests", () => {
     console.log(`Log contains unique ID: ${logContent.includes(`IGNORE_THIS_IDLE_MESSAGE_${uniqueId}`)}`)
 
     // Assert: OpenCode response should NOT contain the ignore message or unique ID
-    // This proves that noReply worked and the LLM did not respond to the injection
+    // The idle injection should not alter the immediate model response
     const responseStr = String(opencodeResponse)
     const containsIgnoreMessage = responseStr.includes(`IGNORE_THIS_IDLE_MESSAGE_${uniqueId}`)
     const containsUniqueId = responseStr.includes(uniqueId)

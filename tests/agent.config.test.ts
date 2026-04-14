@@ -414,7 +414,6 @@ hooks:
       inject: |
         Validation results:
         {stdout}
-      noReply: true
       toast:
         message: "Validation complete"
         variant: "success"
@@ -445,7 +444,6 @@ hooks:
         expect(afterHook?.when.callingAgent).toEqual(["simple-agent"]);
         expect(afterHook?.run).toEqual(["npm run typecheck", "npm run lint"]);
         expect(afterHook?.inject).toContain("Validation results");
-        expect(afterHook?.noReply).toBe(true);
         expect(afterHook?.toast).toEqual({
           message: "Validation complete",
           variant: "success"
