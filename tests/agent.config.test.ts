@@ -1,29 +1,39 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { resolveAgentPath, loadAgentConfig } from "../src/config/agent";
-import { writeFile, rm, mkdir } from "fs/promises";
+import { writeFile, rm, mkdir, mkdtemp } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { realpathSync } from "fs";
 
 describe("Agent Configuration", () => {
-  const testAgentDir = join(tmpdir(), "opencode-test-agents");
-  const testProjectDir = join(tmpdir(), "opencode-test-project");
+  let testRootDir: string;
+  let testAgentDir: string;
+  let testProjectDir: string;
+  let testHomeDir: string;
+  const originalHome = process.env.HOME;
 
   beforeEach(async () => {
+    testRootDir = await mkdtemp(join(tmpdir(), "opencode-agent-config-test-"));
+    testAgentDir = join(testRootDir, "agents-root");
+    testProjectDir = join(testRootDir, "project-root");
+    testHomeDir = join(testRootDir, "home");
+    process.env.HOME = testHomeDir;
+
     // Create test directories
     await mkdir(join(testAgentDir, ".opencode", "agents"), { recursive: true });
     await mkdir(join(testAgentDir, ".opencode", "agent"), { recursive: true });
     await mkdir(join(testProjectDir, ".opencode", "agents"), { recursive: true });
     await mkdir(join(testProjectDir, ".opencode", "agent"), { recursive: true });
-    await mkdir(join(process.env.HOME || "", ".config", "opencode", "agents"), { recursive: true });
-    await mkdir(join(process.env.HOME || "", ".config", "opencode", "agent"), { recursive: true });
+    await mkdir(join(testHomeDir, ".config", "opencode", "agents"), { recursive: true });
+    await mkdir(join(testHomeDir, ".config", "opencode", "agent"), { recursive: true });
   });
 
   afterEach(async () => {
+    process.env.HOME = originalHome;
+
     // Clean up test directories
     try {
-      await rm(testAgentDir, { recursive: true, force: true });
-      await rm(testProjectDir, { recursive: true, force: true });
+      await rm(testRootDir, { recursive: true, force: true });
     } catch {
       // Ignore cleanup errors
     }

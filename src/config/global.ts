@@ -15,7 +15,7 @@ import { mergeConfigs } from "./merge.js";
 import { join, dirname } from "path";
 import { homedir } from "os";
 import { stat } from "fs/promises";
-import { parse as parseJsoncText, printParseErrorCode, type ParseError } from "jsonc-parser";
+import JsoncParser, { type ParseError } from "jsonc-parser";
 import { logger } from "../logging.js";
 
 /**
@@ -64,7 +64,7 @@ const offsetToLineCol = (text: string, offset: number): { line: number; column: 
 
 const parseJsonc = (content: string): unknown => {
   const errors: ParseError[] = [];
-  const parsed = parseJsoncText(content, errors, {
+  const parsed = JsoncParser.parse(content, errors, {
     allowTrailingComma: true,
     disallowComments: false,
   });
@@ -73,7 +73,7 @@ const parseJsonc = (content: string): unknown => {
 
   const first = errors[0];
   const { line, column } = offsetToLineCol(content, first.offset);
-  const code = printParseErrorCode(first.error);
+  const code = JsoncParser.printParseErrorCode(first.error);
   throw new Error(`${code} at line ${line}, column ${column}`);
 };
 

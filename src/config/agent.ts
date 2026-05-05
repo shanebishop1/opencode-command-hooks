@@ -17,6 +17,11 @@ import { logger } from "../logging.js";
 
 const PROJECT_SEARCH_MAX_DEPTH = 25;
 
+const userdir = (): string => {
+  const envHome = process.env.HOME || process.env.USERPROFILE;
+  return envHome && envHome.length > 0 ? envHome : homedir();
+};
+
 const projectDirs = (startDir: string): string[] => {
   const out: string[] = [];
   let current = startDir;
@@ -72,8 +77,8 @@ export async function resolveAgentPath(agentName: string): Promise<string | null
     candidatePaths.push(join(dir, ".opencode", "agent", agentFileName));
   }
 
-  candidatePaths.push(join(homedir(), ".config", "opencode", "agents", agentFileName));
-  candidatePaths.push(join(homedir(), ".config", "opencode", "agent", agentFileName));
+  candidatePaths.push(join(userdir(), ".config", "opencode", "agents", agentFileName));
+  candidatePaths.push(join(userdir(), ".config", "opencode", "agent", agentFileName));
 
   for (const candidatePath of candidatePaths) {
     try {
