@@ -307,4 +307,22 @@ describe("tool after hooks", () => {
     const promptParts = (promptCalls[0].body as { parts: Array<{ text: string }> }).parts;
     expect(promptParts[0].text).toContain("Deduped: dedupe");
   });
+
+  it("strips hook frontmatter keys before provider requests", async () => {
+    const { CommandHooksPlugin } = await import("../src/index.js");
+    const { client } = createMockClient();
+
+    const plugin = await CommandHooksPlugin({ client } as never);
+    const output = {
+      options: {
+        hooks: { after: [{ run: "npm run lint" }] },
+        command_hooks: { tool: [] },
+        safe: true,
+      },
+    };
+
+    await plugin["chat.params"]?.({} as never, output as never);
+
+    expect(output.options).toEqual({ safe: true });
+  });
 });

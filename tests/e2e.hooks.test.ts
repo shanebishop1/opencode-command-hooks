@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test"
-import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, statSync, unlinkSync } from "fs"
+import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, statSync, unlinkSync, rmSync } from "fs"
 import { join } from "path"
 import { homedir } from "os"
 import { $ } from "bun"
@@ -8,6 +8,7 @@ const TEST_CONFIG_DIR = join(process.cwd(), "tests", "fixtures", "e2e-config")
 const TEST_OPENCODE_SUBDIR = join(TEST_CONFIG_DIR, ".opencode")
 const TEST_OPENCODE_CONFIG = join(TEST_CONFIG_DIR, "opencode.jsonc")
 const TEST_HOOKS_CONFIG = join(TEST_OPENCODE_SUBDIR, "command-hooks.jsonc")
+const TEST_AGENT_DIR = join(TEST_OPENCODE_SUBDIR, "agent")
 const LOG_DIR = join(homedir(), ".local", "share", "opencode", "log")
 const LOG_WINDOW_MS = 15 * 60 * 1000
 const LOG_FALLBACK_FILES = 3
@@ -102,6 +103,15 @@ function writeTestOpencodeConfig(): void {
     plugin: [join(process.cwd(), "dist", "index.js")],
   }
   writeFileSync(TEST_OPENCODE_CONFIG, JSON.stringify(pluginConfig, null, 2))
+}
+
+function writeTestAgent(name: string, content: string): void {
+  mkdirSync(TEST_AGENT_DIR, { recursive: true })
+  writeFileSync(join(TEST_AGENT_DIR, `${name}.md`), content)
+}
+
+function removeTestAgent(name: string): void {
+  rmSync(join(TEST_AGENT_DIR, `${name}.md`), { force: true })
 }
 
 /**
@@ -467,6 +477,45 @@ describe("E2E Hook Behavioral Tests", () => {
       } catch (e) {
         console.log("Cleanup warning:", e)
       }
+    }
+  }, 120000)
+
+  it("Test 6: Agent frontmatter hooks do not leak to provider options", async () => {
+    if (skipTests) {
+      console.log("Skipping: OpenCode not available")
+      return
+    }
+
+    console.log("\n=== Test 6: Agent frontmatter hooks do not leak to provider options ===")
+    const uniqueId = generateUniqueId()
+    const marker = `FRONTMATTER_HOOK_${uniqueId}`
+
+    writeTestConfig({ tool: [], session: [] })
+    writeTestAgent("author", `---
+description: E2E author test agent
+mode: subagent
+model: cerebras/zai-glm-4.7
+hooks:
+  after:
+    - run: "echo ${marker}"
+      inject: "Frontmatter output: {stdout}"
+---
+
+Say hi tersely.
+`)
+
+    try {
+      console.log("Running OpenCode...")
+      const opencodeResponse = await runOpenCode("get author subagent to say hi")
+      console.log("OpenCode response received")
+      console.log(`Response preview: ${opencodeResponse.substring(0, 200)}...`)
+
+      const logContent = await waitForLogMatch((content) => content.includes(marker), 20000)
+      expect(opencodeResponse).not.toContain("property 'hooks' is unsupported")
+      expect(logContent).toContain(marker)
+      expect(logContent).toContain("[inject]")
+    } finally {
+      removeTestAgent("author")
     }
   }, 120000)
 })
