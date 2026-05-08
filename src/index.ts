@@ -47,6 +47,16 @@ const toolCallArgsCache = new Map<string, ToolArgsCacheEntry>()
 const afterHookCallCache = new Map<string, number>()
 const notifiedConfigErrors = new Set<string>()
 
+type ChatParamsOutput = {
+  options?: Record<string, unknown>
+}
+
+const stripHookProviderOptions = (output: ChatParamsOutput): void => {
+  if (!output.options) return
+  delete output.options.hooks
+  delete output.options.command_hooks
+}
+
 const pruneToolArgsCache = (): void => {
   const now = Date.now()
 
@@ -260,6 +270,11 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
         logger.debug("Config hook called")
         // No-op for now - we load config from .opencode/command-hooks.jsonc
         // This hook is called by OpenCode during plugin initialization
+      },
+
+      "chat.params": async (_input: unknown, output: ChatParamsOutput) => {
+        void _input
+        stripHookProviderOptions(output)
       },
 
        /**
