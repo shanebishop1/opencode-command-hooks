@@ -416,9 +416,10 @@ describe("E2E Hook Behavioral Tests", () => {
     writeTestConfig(config)
     console.log("Config written:", JSON.stringify(config, null, 2))
 
-    // Run OpenCode with a prompt to create a file
+    // Run OpenCode with a prompt that requires the write tool. Avoid bash here
+    // because this test specifically verifies hooks attached to write.
     console.log("Running OpenCode...")
-    const opencodeResponse = await runOpenCode("Create a file called hello.txt with the content 'hello' and nothing else")
+    const opencodeResponse = await runOpenCode("Use the write tool, not bash, to create a file named hello.txt with exactly this content and no trailing newline: hello")
 
     console.log("OpenCode response received")
     console.log(`Response length: ${opencodeResponse.length}`)
@@ -450,6 +451,7 @@ describe("E2E Hook Behavioral Tests", () => {
       expect(goodbyeExists).toBe(true)
 
       // Assert 4: Logs contain evidence the write tool was used
+      expect(opencodeResponse.toLowerCase()).toContain("write")
 
     } finally {
       // Clean up test files
