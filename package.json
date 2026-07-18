@@ -16,8 +16,12 @@
     "types"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "build:v2": "bun build src/v2.ts --outfile packages/v2/dist/index.js --target=bun --external @opencode-ai/plugin/v2",
+    "build:all": "npm run build && npm run build:v2",
     "test": "bun test",
+    "test:v2": "bun test tests/v2.plugin.test.ts tests/v2.package.test.ts",
+    "test:v2:e2e": "OPENCODE2_E2E=1 bun test tests/e2e.v2.test.ts",
     "lint": "eslint src tests --ext .ts",
     "typecheck": "tsc --noEmit",
     "ci:check": "npm run lint && npm run typecheck && (command -v bun >/dev/null 2>&1 && bun test || echo \"bun not found; skipping tests\")",
@@ -54,6 +58,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@opencode-ai/plugin-v2": "npm:@opencode-ai/plugin@0.0.0-next-15800",
     "@types/bun": "latest",
     "@types/js-yaml": "^4.0.5",
     "eslint": "^9.39.1",

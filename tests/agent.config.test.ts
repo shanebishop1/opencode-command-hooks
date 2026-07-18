@@ -76,6 +76,15 @@ describe("Agent Configuration", () => {
       }
     });
 
+    it("should resolve from an explicit project directory", async () => {
+      const agentPath = join(testProjectDir, ".opencode", "agents", "located-agent.md");
+      await writeFile(agentPath, "---\ndescription: Located agent\n---\n# Located agent content");
+
+      const result = await resolveAgentPath("located-agent", testProjectDir);
+
+      expect(realpathSync(result!)).toBe(realpathSync(agentPath));
+    });
+
     it("should prioritize project-level plural over project-level singular", async () => {
       const pluralPath = join(testProjectDir, ".opencode", "agents", "project-priority.md");
       const singularPath = join(testProjectDir, ".opencode", "agent", "project-priority.md");

@@ -22,6 +22,7 @@ hooks:
 
 - [Features](#features)
 - [Installation](#installation)
+- [OpenCode 2 Beta](#opencode-2-beta)
 - [Configuration](#configuration)
 - [Examples](#examples)
 - [Template Placeholders](#template-placeholders)
@@ -169,6 +170,24 @@ Add to your `opencode.json`:
   "plugin": ["opencode-command-hooks"],
 }
 ```
+
+## OpenCode 2 Beta
+
+OpenCode 2 uses a different plugin API, so the V1 package above does not load there. The opt-in beta artifact is built separately and pins the exact OpenCode 2 plugin contract it supports. It is not published while the pinned host loading test remains blocked upstream; after that gate passes, its config will be:
+
+```jsonc
+{
+  "plugins": ["opencode-command-hooks-v2@0.1.0-beta.0"]
+}
+```
+
+Version `0.1.0-beta.0` targets `@opencode-ai/cli@0.0.0-next-15800`. Keep versions exact while the upstream API is beta, and verify the plugin ID with `opencode2 api get /api/plugin`.
+
+The V2 adapter supports tool before/after hooks, `toolArgs` filters, agent frontmatter hooks, session start/idle hooks, explicit project-directory execution, and injection through synthetic context. Existing V1 config vocabulary remains valid: the V2 `subagent` tool and its `agent` argument are normalized to `task` and `subagent_type` for matching.
+
+V2 server plugins cannot currently show TUI toasts. When a matched hook requests one, the adapter emits one diagnostic and continues command execution and injection. Synthetic injections use `resume: false` so an idle hook does not create an unsolicited model turn.
+
+Run the pinned host smoke test with `npm run test:v2:e2e`. Keep the V1 package available for rollback while OpenCode 2 remains beta.
 
 ## Configuration
 

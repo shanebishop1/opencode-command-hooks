@@ -4,6 +4,10 @@
     "module": "ESNext",
     "lib": ["ES2020"],
     "moduleResolution": "bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@opencode-ai/plugin/v2": ["node_modules/@opencode-ai/plugin-v2/dist/v2/promise/index.d.ts"]
+    },
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,

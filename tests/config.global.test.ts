@@ -243,6 +243,23 @@ describe("Global Configuration", () => {
   });
 
   describe("Project config discovery", () => {
+    it("uses an explicit project directory without changing process cwd", async () => {
+      await writeProjectConfig({
+        tool: [
+          {
+            id: "explicit-directory-hook",
+            when: { phase: "before", tool: "bash" },
+            run: "pwd",
+          },
+        ],
+      });
+
+      const result = await loadGlobalConfig(testProjectDir);
+
+      expect(process.cwd()).toBe(originalCwd);
+      expect(result.config.tool?.map(hook => hook.id)).toEqual(["explicit-directory-hook"]);
+    });
+
     it("should find project config in parent directory", async () => {
       const nestedDir = join(testProjectDir, "src", "components");
       await mkdir(nestedDir, { recursive: true });

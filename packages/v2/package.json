@@ -1,0 +1,40 @@
+{
+  "name": "opencode-command-hooks-v2",
+  "version": "0.1.0-beta.0",
+  "description": "OpenCode 2 beta adapter for declarative command hooks",
+  "type": "module",
+  "main": "dist/index.js",
+  "exports": "./dist/index.js",
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "prepack": "npm --prefix ../.. run build:v2"
+  },
+  "keywords": [
+    "opencode",
+    "opencode2",
+    "plugin",
+    "hooks",
+    "shell"
+  ],
+  "author": "Shane Bishop <71288697+shanebishop1@users.noreply.github.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shanebishop1/opencode-command-hooks.git",
+    "directory": "packages/v2"
+  },
+  "bugs": {
+    "url": "https://github.com/shanebishop1/opencode-command-hooks/issues"
+  },
+  "homepage": "https://github.com/shanebishop1/opencode-command-hooks#opencode-2-beta",
+  "dependencies": {
+    "@opencode-ai/plugin": "0.0.0-next-15800"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  }
+}

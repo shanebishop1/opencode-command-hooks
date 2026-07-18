@@ -2,7 +2,7 @@ import type { Plugin } from "@opencode-ai/plugin"
 import type { Config, OpencodeClient } from "@opencode-ai/sdk"
 import type { CommandHooksConfig, HookExecutionContext } from "./types/hooks.js"
 import { createLogger, setGlobalLogger, logger } from "./logging.js"
-import { executeHooks, filterSessionHooks, filterToolHooks } from "./executor.js"
+import { executeHooks, filterSessionHooks, filterToolHooks, type HookHost } from "./executor.js"
 import { normalizeString } from "./utils.js"
 import { loadGlobalConfig } from "./config/global.js"
 import { loadAgentConfig } from "./config/agent.js"
@@ -131,7 +131,8 @@ const handleSessionEvent = async (
   eventType: "session.created" | "session.idle",
   sessionId: string | undefined,
   agent: string | undefined,
-  client: OpencodeClient
+  client: OpencodeClient,
+  host: HookHost,
 ): Promise<void> => {
   if (!sessionId) {
     logger.debug(`${eventType} event missing session ID`)
@@ -143,7 +144,7 @@ const handleSessionEvent = async (
   }
 
   try {
-    const { config: globalConfig, error: globalConfigError } = await loadGlobalConfig()
+    const { config: globalConfig, error: globalConfigError } = await loadGlobalConfig(host.cwd)
     await notifyConfigError(globalConfigError, sessionId, client)
 
     const markdownConfig = { tool: [], session: [] }
@@ -163,7 +164,7 @@ const handleSessionEvent = async (
       agent: agent || "unknown",
     }
 
-    await executeHooks(matchedHooks, context, client, mergedConfig.truncationLimit)
+    await executeHooks(matchedHooks, context, host, mergedConfig.truncationLimit)
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
     logger.error(`Error handling ${eventType} event: ${errorMessage}`)
@@ -177,7 +178,8 @@ const handleToolExecutionHook = async (
   phase: "before" | "after",
   input: { tool: string; sessionID: string; callID?: string },
   toolArgs: Record<string, unknown> | undefined,
-  client: OpencodeClient
+  client: OpencodeClient,
+  host: HookHost,
 ): Promise<void> => {
   if (phase === "before") {
     storeToolArgs(input.callID, toolArgs)
@@ -188,7 +190,7 @@ const handleToolExecutionHook = async (
   }
 
   try {
-    const { config: globalConfig, error: globalConfigError } = await loadGlobalConfig()
+    const { config: globalConfig, error: globalConfigError } = await loadGlobalConfig(host.cwd)
     await notifyConfigError(globalConfigError, input.sessionID, client)
 
     let agentConfig: CommandHooksConfig = { tool: [], session: [] }
@@ -198,7 +200,7 @@ const handleToolExecutionHook = async (
       subagentType = normalizeString(toolArgs.subagent_type) || undefined
       if (subagentType) {
         logger.debug(`Detected task tool call with subagent_type: ${subagentType}`)
-        agentConfig = await loadAgentConfig(subagentType)
+        agentConfig = await loadAgentConfig(subagentType, host.cwd)
       }
     }
 
@@ -222,7 +224,7 @@ const handleToolExecutionHook = async (
       toolArgs,
     }
 
-    await executeHooks(matchedHooks, context, client, mergedConfig.truncationLimit)
+    await executeHooks(matchedHooks, context, host, mergedConfig.truncationLimit)
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
     logger.error(`Error handling tool.execute.${phase}: ${errorMessage}`)
@@ -253,6 +255,21 @@ const handleToolExecutionHook = async (
 export const CommandHooksPlugin: Plugin = async ({ client }) => {
   const clientLogger = createLogger(client)
   setGlobalLogger(clientLogger)
+  const typedClient = client as OpencodeClient
+  const host: HookHost = {
+    cwd: process.cwd(),
+    inject: async (sessionId, message) => {
+      await typedClient.session.promptAsync({
+        path: { id: sessionId },
+        body: { parts: [{ type: "text", text: message }] },
+      })
+    },
+    toast: async ({ title, message, variant, duration }) => {
+      await typedClient.tui.showToast({
+        body: { title, message, variant: variant ?? "info", duration },
+      })
+    },
+  }
   
   try {
     logger.info("Initializing OpenCode Command Hooks plugin...")
@@ -295,7 +312,7 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
             const sessionId = info?.id ? normalizeString(info.id) : undefined
             const agent = normalizeString(event.properties?.agent)
 
-            await handleSessionEvent("session.created", sessionId, agent, client as OpencodeClient)
+             await handleSessionEvent("session.created", sessionId, agent, typedClient, host)
           }
 
           // Handle session.idle event
@@ -305,7 +322,7 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
             const sessionId = normalizeString(event.properties?.sessionID)
             const agent = normalizeString(event.properties?.agent)
 
-            await handleSessionEvent("session.idle", sessionId, agent, client as OpencodeClient)
+             await handleSessionEvent("session.idle", sessionId, agent, typedClient, host)
           }
 
           // Backward-compat fallback for older OpenCode event streams.
@@ -341,7 +358,8 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
               "after",
               { tool: toolName, sessionID: sessionId, callID: callId },
               storedToolArgs,
-              client as OpencodeClient,
+               typedClient,
+               host,
             )
           }
        },
@@ -361,7 +379,7 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
              `Tool args: ${JSON.stringify(output.args)}`
            )
 
-           await handleToolExecutionHook("before", input, output.args, client as OpencodeClient)
+           await handleToolExecutionHook("before", input, output.args, typedClient, host)
         },
 
         /**
@@ -383,7 +401,7 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
           }
 
           const storedToolArgs = getToolArgs(input.callID)
-          await handleToolExecutionHook("after", input, storedToolArgs, client as OpencodeClient)
+          await handleToolExecutionHook("after", input, storedToolArgs, typedClient, host)
         },
     }
 

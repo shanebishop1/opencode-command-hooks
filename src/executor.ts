@@ -15,7 +15,6 @@
  * Errors are logged and optionally injected into the session, but never thrown.
  */
 
-import type { OpencodeClient } from "@opencode-ai/sdk"
 import type {
    ToolHook,
    SessionHook,
@@ -25,6 +24,19 @@ import type {
 import { executeCommands } from "./execution/shell.js"
 import { interpolateTemplate } from "./execution/template.js"
 import { logger } from "./logging.js"
+
+export interface HookToast {
+  title?: string
+  message: string
+  variant?: "info" | "success" | "warning" | "error"
+  duration?: number
+}
+
+export interface HookHost {
+  cwd: string
+  inject: (sessionId: string, message: string, hookId: string) => Promise<void>
+  toast: (toast: HookToast) => Promise<void>
+}
 
 /**
  * Check if a value matches a pattern (string, array of strings, or wildcard)
@@ -138,7 +150,7 @@ const formatErrorMessage = (hookId: string, error: unknown): string => {
  * @returns Promise that resolves when toast is shown
  */
 const showToast = async (
-    client: OpencodeClient,
+    host: HookHost,
     title: string | undefined,
     message: string,
     variant: "info" | "success" | "warning" | "error" = "info",
@@ -148,14 +160,7 @@ const showToast = async (
         const finalTitle = title || "OpenCode Command Hook"
         logger.debug(`Showing toast: title="${finalTitle}", message="${message.substring(0, 50)}...", variant="${variant}", duration=${duration}`)
 
-        await client.tui.showToast({
-            body: {
-                title: finalTitle,
-                message,
-                variant,
-                duration,
-            },
-        })
+         await host.toast({ title: finalTitle, message, variant, duration })
 
         logger.info(`[toast] ${finalTitle}: ${message}`)
     } catch (error) {
@@ -178,19 +183,15 @@ const showToast = async (
  * @returns Promise that resolves when message is injected
  */
 const injectMessage = async (
-   client: OpencodeClient,
+   host: HookHost,
    sessionId: string,
-   message: string
+   message: string,
+   hookId: string,
 ): Promise<void> => {
     try {
        logger.debug(`Injecting message into session ${sessionId}`)
 
-     await client.session.promptAsync({
-       path: { id: sessionId },
-       body: {
-         parts: [{ type: "text", text: message }],
-       },
-     })
+     await host.inject(sessionId, message, hookId)
 
        logger.info(`[inject] Message injected into session ${sessionId}: ${message.substring(0, 100)}${message.length > 100 ? '...' : ''}`)
      } catch (error) {
@@ -217,7 +218,7 @@ const injectMessage = async (
 const executeHook = async (
    hook: ToolHook | SessionHook,
    context: HookExecutionContext,
-   client: OpencodeClient,
+    host: HookHost,
    truncationLimit?: number
 ): Promise<void> => {
    const hookType = isToolHook(hook) ? "tool" : "session"
@@ -237,7 +238,7 @@ const executeHook = async (
        ? await executeCommands(
            hook.run,
            hook.id,
-           truncationLimit !== undefined ? { truncateOutput: truncationLimit } : undefined
+            { truncateOutput: truncationLimit, cwd: host.cwd }
          )
        : []
 
@@ -260,7 +261,7 @@ const executeHook = async (
       // If inject is configured, prepare and inject the message
       if (hook.inject) {
         const message = interpolateTemplate(hook.inject, templateContext)
-        await injectMessage(client, context.sessionId, message)
+         await injectMessage(host, context.sessionId, message, hook.id)
       }
 
       // If toast is configured, interpolate and show toast notification
@@ -269,7 +270,7 @@ const executeHook = async (
         const toastMessage = interpolateTemplate(hook.toast.message, templateContext)
 
        await showToast(
-         client,
+          host,
          toastTitle,
          toastMessage,
          hook.toast.variant || "info",
@@ -281,7 +282,7 @@ const executeHook = async (
      logger.error(errorMessage)
 
      try {
-       await injectMessage(client, context.sessionId, errorMessage)
+        await injectMessage(host, context.sessionId, errorMessage, hook.id)
      } catch (injectionError) {
        const injectionErrorMsg =
          injectionError instanceof Error
@@ -342,7 +343,7 @@ const isToolHook = (hook: ToolHook | SessionHook): hook is ToolHook => {
 export async function executeHooks(
    hooks: (ToolHook | SessionHook)[],
    context: HookExecutionContext,
-   client: OpencodeClient,
+    host: HookHost,
    truncationLimit?: number
 ): Promise<void> {
      try {
@@ -353,7 +354,7 @@ export async function executeHooks(
        // Execute each hook
        for (const hook of hooks) {
          try {
-           await executeHook(hook, context, client, truncationLimit)
+            await executeHook(hook, context, host, truncationLimit)
         } catch (error) {
           // Catch errors from individual hook execution and continue
           // (errors are already logged and injected by the hook execution functions)

@@ -15,7 +15,8 @@ import { mergeConfigs } from "./merge.js";
 import { join, dirname } from "path";
 import { homedir } from "os";
 import { stat } from "fs/promises";
-import JsoncParser, { type ParseError } from "jsonc-parser";
+import * as JsoncParser from "jsonc-parser";
+import type { ParseError } from "jsonc-parser";
 import { logger } from "../logging.js";
 
 /**
@@ -265,12 +266,12 @@ const loadConfigFromPath = async (
  *
  * @returns Promise resolving to GlobalConfigResult
  */
-export const loadGlobalConfig = async (): Promise<GlobalConfigResult> => {
+export const loadGlobalConfig = async (startDir = process.cwd()): Promise<GlobalConfigResult> => {
   try {
-    logger.debug(`loadGlobalConfig: starting search from: ${process.cwd()}`);
+    logger.debug(`loadGlobalConfig: starting search from: ${startDir}`);
 
     // Step 1: Load project config first (to check ignoreGlobalConfig flag)
-    const projectConfigPath = await findProjectConfigFile(process.cwd());
+    const projectConfigPath = await findProjectConfigFile(startDir);
     const projectResult = projectConfigPath
       ? await loadConfigFromPath(projectConfigPath, "project")
       : { config: emptyConfig(), error: null };

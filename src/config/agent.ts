@@ -62,7 +62,10 @@ const projectDirs = (startDir: string): string[] => {
  * // Or: null (if neither exists)
  * ```
  */
-export async function resolveAgentPath(agentName: string): Promise<string | null> {
+export async function resolveAgentPath(
+  agentName: string,
+  startDir = process.cwd(),
+): Promise<string | null> {
   // Validate agent name to prevent directory traversal
   if (!agentName || agentName.includes("/") || agentName.includes("..")) {
     logger.debug(`Invalid agent name: ${agentName}`);
@@ -72,7 +75,7 @@ export async function resolveAgentPath(agentName: string): Promise<string | null
   const agentFileName = `${agentName}.md`;
 
   const candidatePaths: string[] = [];
-  for (const dir of projectDirs(process.cwd())) {
+  for (const dir of projectDirs(startDir)) {
     candidatePaths.push(join(dir, ".opencode", "agents", agentFileName));
     candidatePaths.push(join(dir, ".opencode", "agent", agentFileName));
   }
@@ -124,9 +127,12 @@ export async function resolveAgentPath(agentName: string): Promise<string | null
  * // Or: { tool: [], session: [] } if no valid hooks found
  * ```
  */
-export async function loadAgentConfig(agentName: string): Promise<CommandHooksConfig> {
+export async function loadAgentConfig(
+  agentName: string,
+  startDir = process.cwd(),
+): Promise<CommandHooksConfig> {
   // Resolve the agent path
-  const agentPath = await resolveAgentPath(agentName);
+  const agentPath = await resolveAgentPath(agentName, startDir);
 
   if (!agentPath) {
     logger.debug(`No agent file found for: ${agentName}, returning empty config`);
