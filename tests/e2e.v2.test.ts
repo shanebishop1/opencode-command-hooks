@@ -5,7 +5,7 @@ import { join, resolve } from "path"
 import { $ } from "bun"
 
 const enabled = process.env.OPENCODE2_E2E === "1"
-const cliVersion = "0.0.0-next-15800"
+const cliVersion = "0.0.0-next-15853"
 let projectDirectory = ""
 
 describe("OpenCode V2 package E2E", () => {
@@ -60,41 +60,98 @@ describe("OpenCode V2 package E2E", () => {
       XDG_CACHE_HOME: join(home, ".cache"),
       OPENCODE_CONFIG: config,
       OPENCODE_LOG_LEVEL: "trace",
+      OPENCODE_PASSWORD: "v2-e2e-password",
+      OPENCODE_SERVER_PASSWORD: "v2-e2e-password",
     }
-    const request = async (args: string[]) => {
-      const processHandle = Bun.spawn([binary, ...args], {
-        cwd: projectDirectory,
-        env: environment,
-        stdout: "pipe",
-        stderr: "pipe",
-      })
-      const timeout = setTimeout(() => processHandle.kill(), 60_000)
-      const [exitCode, stdout, stderr] = await Promise.all([
-        processHandle.exited,
-        new Response(processHandle.stdout).text(),
-        new Response(processHandle.stderr).text(),
+    const server = Bun.spawn([
+      binary,
+      "serve",
+      "--hostname",
+      "127.0.0.1",
+      "--port",
+      "0",
+    ], {
+      cwd: projectDirectory,
+      env: environment,
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    let serverOutput = ""
+    let baseUrl = ""
+    const serverStdout = (async () => {
+      const reader = server.stdout.getReader()
+      const decoder = new TextDecoder()
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        serverOutput += decoder.decode(value, { stream: true })
+        baseUrl ||= serverOutput.match(/server listening on (http:\/\/\S+)/)?.[1] ?? ""
+      }
+      serverOutput += decoder.decode()
+    })()
+    const serverStderr = new Response(server.stderr).text()
+    const stopServer = async (): Promise<void> => {
+      if (server.exitCode === null) server.kill(9)
+      await Promise.race([
+        server.exited.then(() => undefined),
+        new Promise<void>(resolve => setTimeout(resolve, 5_000)),
       ])
-      clearTimeout(timeout)
-      return { exitCode, stdout, stderr }
     }
-
-    const { exitCode, stdout, stderr } = await request([
-      "api",
-      "--standalone",
-      "get",
-      "/api/plugin",
-    ])
-
+    const headers = {
+      "x-opencode-directory": projectDirectory,
+      authorization: `Basic ${Buffer.from("opencode:v2-e2e-password").toString("base64")}`,
+    }
     const logDirectory = join(home, ".local", "share", "opencode", "log")
-    let logs = ""
+    const readLogs = async (): Promise<string> => {
+      try {
+        const files = await readdir(logDirectory)
+        return (await Promise.all(files.map(file => readFile(join(logDirectory, file), "utf8")))).join("\n")
+      } catch {
+        return ""
+      }
+    }
+    let pluginResponse = ""
+
     try {
-      const files = await readdir(logDirectory)
-      logs = (await Promise.all(files.map(file => readFile(join(logDirectory, file), "utf8")))).join("\n")
-    } catch {
-      // The assertion below still reports stdout and stderr when no log was written.
+      const serverDeadline = Date.now() + 20_000
+      while (!baseUrl && server.exitCode === null && Date.now() < serverDeadline) {
+        await new Promise(resolve => setTimeout(resolve, 25))
+      }
+      if (!baseUrl) {
+        await stopServer()
+        await serverStdout
+        throw new Error(
+          `V2 server did not become ready (exit=${server.exitCode})\nstdout:\n${serverOutput}\nstderr:\n${await serverStderr}`,
+        )
+      }
+
+      const pluginDeadline = Date.now() + 30_000
+      while (Date.now() < pluginDeadline) {
+        try {
+          const response = await fetch(`${baseUrl}/api/plugin`, { headers })
+          pluginResponse = await response.text()
+          if (response.ok && pluginResponse.includes("opencode-command-hooks.v2")) break
+        } catch {
+          // The server is still starting.
+        }
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+
+      if (!pluginResponse.includes("opencode-command-hooks.v2")) {
+        await stopServer()
+        await serverStdout
+        throw new Error(
+          `V2 plugin did not load (server exit=${server.exitCode}): ${pluginResponse}\nstdout:\n${serverOutput}\nstderr:\n${await serverStderr}\n${await readLogs()}`,
+        )
+      }
+
+    } finally {
+      await stopServer()
+      await serverStdout
     }
 
-    expect(exitCode, `${stderr}\n${logs}`).toBe(0)
-    expect(stdout, `${stderr}\n${logs}`).toContain("opencode-command-hooks.v2")
+    const logs = await readLogs()
+
+    expect(pluginResponse, logs).toContain("opencode-command-hooks.v2")
   }, 90_000)
 })

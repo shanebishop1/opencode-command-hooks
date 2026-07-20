@@ -47,3 +47,6 @@ jobs:
       - name: Verify V2 package
         run: npm pack --dry-run
         working-directory: packages/v2
+
+      - name: Test packed package in OpenCode 2
+        run: npm run test:v2:e2e

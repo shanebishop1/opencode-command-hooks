@@ -32,7 +32,7 @@
   },
   "homepage": "https://github.com/shanebishop1/opencode-command-hooks#opencode-2-beta",
   "dependencies": {
-    "@opencode-ai/plugin": "0.0.0-next-15800"
+    "@opencode-ai/plugin": "0.0.0-next-15853"
   },
   "engines": {
     "bun": ">=1.0.0"

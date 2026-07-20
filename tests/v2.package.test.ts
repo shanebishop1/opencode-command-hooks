@@ -15,6 +15,6 @@ describe("V2 package artifact", () => {
 
     expect(pack.id).toStartWith("opencode-command-hooks-v2@0.1.0-beta.")
     expect(pack.files.map(file => file.path)).toContain("dist/index.js")
-    expect(manifest.dependencies["@opencode-ai/plugin"]).toBe("0.0.0-next-15800")
+    expect(manifest.dependencies["@opencode-ai/plugin"]).toBe("0.0.0-next-15853")
   })
 })

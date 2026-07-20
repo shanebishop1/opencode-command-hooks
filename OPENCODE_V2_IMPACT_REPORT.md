@@ -1,7 +1,7 @@
 # OpenCode 2 Impact and Migration Report
 
 Status: Implemented beta prototype
-Last updated: 2026-07-17
+Last updated: 2026-07-20
 Doc Class: report
 Doc Type: research
 Report Type: engineering migration
@@ -39,15 +39,15 @@ The opt-in beta adapter is now implemented in this repository:
 
 - `src/v2/plugin.ts` owns the V2 Promise adapter and keeps callback failures non-blocking.
 - `packages/v2` produces the separate `opencode-command-hooks-v2` package without changing the V1 package identity or release tag.
-- The package pins `@opencode-ai/plugin@0.0.0-next-15800` exactly.
+- The package pins `@opencode-ai/plugin@0.0.0-next-15853` exactly.
 - Tool hooks use direct V2 event input, and `subagent`/`agent` are normalized to the existing `task`/`subagent_type` config vocabulary.
 - Session lookup supplies the authoritative project directory and agent for config discovery and command execution.
 - Injection uses `ctx.session.synthetic()` with `resume: false`; toast requests produce one explicit unsupported diagnostic.
-- The event consumer handles `session.created` and compatibility `session.idle`, deduplicates event IDs, and is closed during plugin cleanup.
+- The event consumer maps compatibility and durable execution events to `session.start`/`session.idle`, deduplicates event IDs and session starts, and is closed during plugin cleanup.
 - Unit, V1 regression, packed-artifact, and gated pinned-host E2E tests cover the adapter.
 - A dedicated V2 release workflow requires the pinned host E2E to pass before npm publication.
 
-The pinned `0.0.0-next-15800` host currently returns an empty plugin list in the standalone E2E even for native config and local discovery. Its logs show the known config-directory watcher failure and no plugin-load attempt. The reproducible test remains gated behind `OPENCODE2_E2E=1`; publishing remains blocked until that upstream host behavior is fixed or a newer exact build passes.
+The first one-shot standalone E2E queried the plugin list before asynchronous plugin activation completed. The corrected test starts an isolated persistent server, polls the location-scoped plugin endpoint until setup finishes, and passes against `0.0.0-next-15853`. It uses temporary HOME/XDG directories and a test-only server password, so it does not connect to or modify the normal OpenCode service.
 
 ## Research Question
 
@@ -603,7 +603,7 @@ Rollback triggers:
 
 - OpenCode 2 is changing daily; this report is a point-in-time analysis for 2026-07-17.
 - Some upstream beta documentation already differs from the current `v2` branch source.
-- A V2 adapter, packed package test, and pinned-host E2E smoke test are now present. The host smoke currently reproduces the upstream plugin-loading blocker described above.
+- A V2 adapter, packed package test, and isolated pinned-host E2E loading test are now present and passing.
 - No claim here should override a later stable OpenCode 2 migration guide or package contract.
 
 ## Follow-ups
@@ -613,5 +613,5 @@ Rollback triggers:
 - [x] Add packed V2 artifact verification while preserving the V1 regression suite.
 - [x] Use `opencode-command-hooks-v2` as the isolated beta package name.
 - [ ] Confirm npm ownership before publishing any prerelease.
-- [ ] Enable the pinned host E2E gate after upstream plugin loading succeeds.
+- [x] Enable the isolated pinned-host E2E loading gate.
 - [ ] Expand to a dual-host runtime matrix when the blocking host defects are resolved.

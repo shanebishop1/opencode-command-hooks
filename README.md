@@ -173,7 +173,7 @@ Add to your `opencode.json`:
 
 ## OpenCode 2 Beta
 
-OpenCode 2 uses a different plugin API, so the V1 package above does not load there. The opt-in beta artifact is built separately and pins the exact OpenCode 2 plugin contract it supports. It is not published while the pinned host loading test remains blocked upstream; after that gate passes, its config will be:
+OpenCode 2 uses a different plugin API, so the V1 package above does not load there. The opt-in beta artifact is built separately and pins the exact OpenCode 2 plugin contract it supports. Once the beta package is published, its config is:
 
 ```jsonc
 {
@@ -181,7 +181,7 @@ OpenCode 2 uses a different plugin API, so the V1 package above does not load th
 }
 ```
 
-Version `0.1.0-beta.0` targets `@opencode-ai/cli@0.0.0-next-15800`. Keep versions exact while the upstream API is beta, and verify the plugin ID with `opencode2 api get /api/plugin`.
+Version `0.1.0-beta.0` targets `@opencode-ai/cli@0.0.0-next-15853`. Keep versions exact while the upstream API is beta, and verify the plugin ID with `opencode2 api get /api/plugin` after the host finishes activating plugins.
 
 The V2 adapter supports tool before/after hooks, `toolArgs` filters, agent frontmatter hooks, session start/idle hooks, explicit project-directory execution, and injection through synthetic context. Existing V1 config vocabulary remains valid: the V2 `subagent` tool and its `agent` argument are normalized to `task` and `subagent_type` for matching.
 

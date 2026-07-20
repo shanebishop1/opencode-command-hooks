@@ -96,6 +96,7 @@ export const createV2Plugin = (): V2Plugin => ({
   setup: async (ctx) => {
     const notifiedConfigErrors = new Set<string>()
     const handledEvents = new Set<string>()
+    const startedSessions = new Set<string>()
     let warnedToastUnsupported = false
     let stopped = false
 
@@ -182,7 +183,15 @@ export const createV2Plugin = (): V2Plugin => ({
     }
 
     const handleSession = async (event: V2Event): Promise<void> => {
-      if (event.type !== "session.created" && event.type !== "session.idle") return
+      const eventType = event.type === "session.created" || event.type === "session.execution.started"
+        ? "session.created"
+        : event.type === "session.idle" ||
+            event.type === "session.execution.succeeded" ||
+            event.type === "session.execution.failed" ||
+            event.type === "session.execution.interrupted"
+          ? "session.idle"
+          : undefined
+      if (!eventType) return
       if (event.id && handledEvents.has(event.id)) return
       if (event.id) {
         handledEvents.add(event.id)
@@ -194,6 +203,10 @@ export const createV2Plugin = (): V2Plugin => ({
 
       const sessionID = normalizeString(event.data?.sessionID)
       if (!sessionID) return
+      if (eventType === "session.created") {
+        if (startedSessions.has(sessionID)) return
+        startedSessions.add(sessionID)
+      }
 
       try {
         const resolved = await sessionInfo(sessionID, {
@@ -203,7 +216,7 @@ export const createV2Plugin = (): V2Plugin => ({
         const { config, error } = await loadGlobalConfig(resolved.directory)
         notifyConfigError(error, resolved.directory)
         const hooks = filterSessionHooks(config.session ?? [], {
-          event: event.type,
+          event: eventType,
           agent: resolved.agent,
         })
         await executeHooks(

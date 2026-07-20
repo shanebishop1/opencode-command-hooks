@@ -159,6 +159,36 @@ describe("OpenCode V2 plugin", () => {
     await failingCleanup?.()
   })
 
+  it("maps durable execution lifecycle events to start and idle hooks", async () => {
+    const directory = await createProject({
+      session: [
+        { id: "durable-start", when: { event: "session.start" }, inject: "durable started" },
+        { id: "durable-idle", when: { event: "session.idle" }, inject: "durable idle" },
+      ],
+    })
+    const events = [
+      {
+        id: "execution-started",
+        type: "session.execution.started",
+        location: { directory },
+        data: { sessionID: "session-durable" },
+      },
+      {
+        id: "execution-succeeded",
+        type: "session.execution.succeeded",
+        location: { directory },
+        data: { sessionID: "session-durable" },
+      },
+    ]
+    const { context, syntheticCalls } = createContext(directory, events)
+    const cleanup = await createV2Plugin().setup(context)
+
+    await new Promise(resolve => setTimeout(resolve, 20))
+
+    expect(syntheticCalls.map(call => call.text)).toEqual(["durable started", "durable idle"])
+    await cleanup?.()
+  })
+
   it("reports V2 toast degradation once without blocking injection", async () => {
     const directory = await createProject({
       tool: [
