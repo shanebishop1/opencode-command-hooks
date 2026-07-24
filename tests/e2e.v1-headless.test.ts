@@ -16,19 +16,11 @@ let TEST_XDG_CACHE_HOME = ""
 let LOG_DIR = ""
 const LOG_WINDOW_MS = 15 * 60 * 1000
 const LOG_FALLBACK_FILES = 3
-const OPENCODE_COMMAND_TIMEOUT_MS = 30_000
+const OPENCODE_COMMAND_TIMEOUT_MS = 90_000
 const E2E_ENABLED = process.env.OPENCODE_E2E === "1"
-const E2E_MODEL = process.env.OPENCODE_E2E_MODEL ?? "cerebras/zai-glm-4.7"
+let E2E_MODEL = process.env.OPENCODE_E2E_MODEL ?? ""
 
 function createTestSandbox(): void {
-  const authJson = process.env.OPENCODE_E2E_AUTH_JSON
-  if (!authJson) {
-    throw new Error(
-      "OPENCODE_E2E_AUTH_JSON is required for the isolated real-host E2E suite."
-    )
-  }
-  JSON.parse(authJson)
-
   TEST_SANDBOX_DIR = mkdtempSync(join(tmpdir(), "opencode-command-hooks-e2e-"))
   TEST_CONFIG_DIR = join(TEST_SANDBOX_DIR, "project")
   TEST_OPENCODE_SUBDIR = join(TEST_CONFIG_DIR, ".opencode")
@@ -46,9 +38,6 @@ function createTestSandbox(): void {
   mkdirSync(TEST_XDG_DATA_HOME, { recursive: true })
   mkdirSync(TEST_XDG_CACHE_HOME, { recursive: true })
   mkdirSync(LOG_DIR, { recursive: true })
-  writeFileSync(join(TEST_XDG_DATA_HOME, "opencode", "auth.json"), authJson, {
-    mode: 0o600,
-  })
 }
 
 function getOpenCodeEnvironment(): Record<string, string | undefined> {
@@ -71,6 +60,17 @@ interface OpenCodeCommandResult {
 
 function formatOpenCodeCommand(args: string[]): string {
   return ["opencode", ...args].map(argument => JSON.stringify(argument)).join(" ")
+}
+
+function selectFreeOpenCodeModel(output: string): string {
+  const model = output
+    .split("\n")
+    .map(line => line.trim())
+    .find(line => line.startsWith("opencode/") && line.endsWith("-free"))
+  if (!model) {
+    throw new Error(`OpenCode did not advertise a credential-free model:\n${output}`)
+  }
+  return model
 }
 
 function formatOpenCodeCommandError(
@@ -276,6 +276,10 @@ describe.skipIf(!E2E_ENABLED)("V1 headless real-host E2E", () => {
 
     // Verify the executable works in the same isolated environment as the tests.
     await runOpenCodeCommand(["--version"])
+    if (!E2E_MODEL) {
+      const models = await runOpenCodeCommand(["models", "opencode"])
+      E2E_MODEL = selectFreeOpenCodeModel(models.stdout)
+    }
 
     // Enable the plugin in the test opencode config
     writeTestOpencodeConfig()

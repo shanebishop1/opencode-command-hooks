@@ -27,5 +27,3 @@ jobs:
 
       - name: Run V1 headless E2E tests
         run: npm run test:v1:e2e
-        env:
-          OPENCODE_E2E_AUTH_JSON: ${{ secrets.OPENCODE_E2E_AUTH_JSON }}
