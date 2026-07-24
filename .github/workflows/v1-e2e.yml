@@ -1,4 +1,4 @@
-name: V1 E2E
+name: V1 Headless E2E
 
 on:
   push:
@@ -25,5 +25,5 @@ jobs:
       - name: Install OpenCode V1
         run: bun install --global opencode-ai@1.18.3
 
-      - name: Run V1 E2E tests
+      - name: Run V1 headless E2E tests
         run: npm run test:v1:e2e

@@ -153,7 +153,7 @@ async function runOpenCode(prompt: string): Promise<string> {
   }
 }
 
-describe.skipIf(!E2E_ENABLED)("E2E Hook Behavioral Tests", () => {
+describe.skipIf(!E2E_ENABLED)("V1 headless real-host E2E", () => {
   beforeAll(async () => {
     // Check if OpenCode is available
     if (!(await isOpenCodeAvailable())) {
