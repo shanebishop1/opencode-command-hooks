@@ -276,7 +276,7 @@ describe.skipIf(!E2E_ENABLED)("V1 headless real-host E2E", () => {
 
     // Verify the executable works in the same isolated environment as the tests.
     await runOpenCodeCommand(["--version"])
-    
+
     // Enable the plugin in the test opencode config
     writeTestOpencodeConfig()
   })
