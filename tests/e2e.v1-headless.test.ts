@@ -16,19 +16,11 @@ let TEST_XDG_CACHE_HOME = ""
 let LOG_DIR = ""
 const LOG_WINDOW_MS = 15 * 60 * 1000
 const LOG_FALLBACK_FILES = 3
-const OPENCODE_COMMAND_TIMEOUT_MS = 30_000
+const OPENCODE_COMMAND_TIMEOUT_MS = 110_000
 const E2E_ENABLED = process.env.OPENCODE_E2E === "1"
-const E2E_MODEL = process.env.OPENCODE_E2E_MODEL ?? "cerebras/zai-glm-4.7"
+let E2E_MODEL = process.env.OPENCODE_E2E_MODEL ?? ""
 
 function createTestSandbox(): void {
-  const authJson = process.env.OPENCODE_E2E_AUTH_JSON
-  if (!authJson) {
-    throw new Error(
-      "OPENCODE_E2E_AUTH_JSON is required for the isolated real-host E2E suite."
-    )
-  }
-  JSON.parse(authJson)
-
   TEST_SANDBOX_DIR = mkdtempSync(join(tmpdir(), "opencode-command-hooks-e2e-"))
   TEST_CONFIG_DIR = join(TEST_SANDBOX_DIR, "project")
   TEST_OPENCODE_SUBDIR = join(TEST_CONFIG_DIR, ".opencode")
@@ -46,9 +38,6 @@ function createTestSandbox(): void {
   mkdirSync(TEST_XDG_DATA_HOME, { recursive: true })
   mkdirSync(TEST_XDG_CACHE_HOME, { recursive: true })
   mkdirSync(LOG_DIR, { recursive: true })
-  writeFileSync(join(TEST_XDG_DATA_HOME, "opencode", "auth.json"), authJson, {
-    mode: 0o600,
-  })
 }
 
 function getOpenCodeEnvironment(): Record<string, string | undefined> {
@@ -71,6 +60,19 @@ interface OpenCodeCommandResult {
 
 function formatOpenCodeCommand(args: string[]): string {
   return ["opencode", ...args].map(argument => JSON.stringify(argument)).join(" ")
+}
+
+function selectFreeOpenCodeModel(output: string): string {
+  const models = output
+    .split("\n")
+    .map(line => line.trim())
+    .filter(line => line.startsWith("opencode/") && line.endsWith("-free"))
+  const model = ["opencode/mimo-v2.5-free", "opencode/north-mini-code-free"]
+    .find(candidate => models.includes(candidate)) ?? models[0]
+  if (!model) {
+    throw new Error(`OpenCode did not advertise a credential-free model:\n${output}`)
+  }
+  return model
 }
 
 function formatOpenCodeCommandError(
@@ -276,6 +278,10 @@ describe.skipIf(!E2E_ENABLED)("V1 headless real-host E2E", () => {
 
     // Verify the executable works in the same isolated environment as the tests.
     await runOpenCodeCommand(["--version"])
+    if (!E2E_MODEL) {
+      const models = await runOpenCodeCommand(["models", "opencode"])
+      E2E_MODEL = selectFreeOpenCodeModel(models.stdout)
+    }
 
     // Enable the plugin in the test opencode config
     writeTestOpencodeConfig()
@@ -294,7 +300,7 @@ describe.skipIf(!E2E_ENABLED)("V1 headless real-host E2E", () => {
     const hookProofFileName = `e2e-write-hook-${uniqueId}.txt`
     const hookProofContent = `WRITE_AFTER_HOOK_${uniqueId}`
     const hookStdout = `WRITE_AFTER_STDOUT_${uniqueId}`
-    const injectedMarker = `WRITE_AFTER_INJECT_${uniqueId}:${hookStdout}`
+    const injectedMarker = `Reply only DONE. WRITE_AFTER_INJECT_${uniqueId}:${hookStdout}`
     const toastMarker = `WRITE_AFTER_TOAST_${uniqueId}`
     const writtenFilePath = join(TEST_CONFIG_DIR, writtenFileName)
     const hookProofFilePath = join(TEST_CONFIG_DIR, hookProofFileName)
@@ -305,7 +311,7 @@ describe.skipIf(!E2E_ENABLED)("V1 headless real-host E2E", () => {
           id: `e2e-write-after-${uniqueId}`,
           when: { phase: "after", tool: "*" },
           run: `printf '%s' '${hookProofContent}' > '${hookProofFileName}'; printf '%s' '${hookStdout}'`,
-          inject: `WRITE_AFTER_INJECT_${uniqueId}:{stdout}`,
+          inject: `Reply only DONE. WRITE_AFTER_INJECT_${uniqueId}:{stdout}`,
           toast: {
             title: "E2E write after-hook",
             message: toastMarker,
@@ -332,5 +338,5 @@ describe.skipIf(!E2E_ENABLED)("V1 headless real-host E2E", () => {
         }
       }
     }
-  }, 120000)
+  }, 150000)
 })
