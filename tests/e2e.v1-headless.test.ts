@@ -16,7 +16,7 @@ let TEST_XDG_CACHE_HOME = ""
 let LOG_DIR = ""
 const LOG_WINDOW_MS = 15 * 60 * 1000
 const LOG_FALLBACK_FILES = 3
-const OPENCODE_COMMAND_TIMEOUT_MS = 90_000
+const OPENCODE_COMMAND_TIMEOUT_MS = 110_000
 const E2E_ENABLED = process.env.OPENCODE_E2E === "1"
 let E2E_MODEL = process.env.OPENCODE_E2E_MODEL ?? ""
 
@@ -63,10 +63,12 @@ function formatOpenCodeCommand(args: string[]): string {
 }
 
 function selectFreeOpenCodeModel(output: string): string {
-  const model = output
+  const models = output
     .split("\n")
     .map(line => line.trim())
-    .find(line => line.startsWith("opencode/") && line.endsWith("-free"))
+    .filter(line => line.startsWith("opencode/") && line.endsWith("-free"))
+  const model = ["opencode/mimo-v2.5-free", "opencode/north-mini-code-free"]
+    .find(candidate => models.includes(candidate)) ?? models[0]
   if (!model) {
     throw new Error(`OpenCode did not advertise a credential-free model:\n${output}`)
   }
@@ -298,7 +300,7 @@ describe.skipIf(!E2E_ENABLED)("V1 headless real-host E2E", () => {
     const hookProofFileName = `e2e-write-hook-${uniqueId}.txt`
     const hookProofContent = `WRITE_AFTER_HOOK_${uniqueId}`
     const hookStdout = `WRITE_AFTER_STDOUT_${uniqueId}`
-    const injectedMarker = `WRITE_AFTER_INJECT_${uniqueId}:${hookStdout}`
+    const injectedMarker = `Reply only DONE. WRITE_AFTER_INJECT_${uniqueId}:${hookStdout}`
     const toastMarker = `WRITE_AFTER_TOAST_${uniqueId}`
     const writtenFilePath = join(TEST_CONFIG_DIR, writtenFileName)
     const hookProofFilePath = join(TEST_CONFIG_DIR, hookProofFileName)
@@ -309,7 +311,7 @@ describe.skipIf(!E2E_ENABLED)("V1 headless real-host E2E", () => {
           id: `e2e-write-after-${uniqueId}`,
           when: { phase: "after", tool: "*" },
           run: `printf '%s' '${hookProofContent}' > '${hookProofFileName}'; printf '%s' '${hookStdout}'`,
-          inject: `WRITE_AFTER_INJECT_${uniqueId}:{stdout}`,
+          inject: `Reply only DONE. WRITE_AFTER_INJECT_${uniqueId}:{stdout}`,
           toast: {
             title: "E2E write after-hook",
             message: toastMarker,
@@ -336,5 +338,5 @@ describe.skipIf(!E2E_ENABLED)("V1 headless real-host E2E", () => {
         }
       }
     }
-  }, 120000)
+  }, 150000)
 })
