@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll, afterAll } from "bun:test"
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, statSync, unlinkSync, rmSync } from "fs"
 import { join } from "path"
 import { tmpdir } from "os"
-import { $ } from "bun"
 
 const REPOSITORY_ROOT = process.cwd()
 let TEST_SANDBOX_DIR = ""
@@ -18,6 +17,7 @@ let TEST_XDG_CACHE_HOME = ""
 let LOG_DIR = ""
 const LOG_WINDOW_MS = 15 * 60 * 1000
 const LOG_FALLBACK_FILES = 3
+const OPENCODE_COMMAND_TIMEOUT_MS = 30_000
 const E2E_ENABLED = process.env.OPENCODE_E2E === "1"
 
 function createTestSandbox(): void {
@@ -52,19 +52,82 @@ function getOpenCodeEnvironment(): Record<string, string | undefined> {
   }
 }
 
+interface OpenCodeCommandResult {
+  stdout: string
+  stderr: string
+  exitCode: number
+}
+
+function formatOpenCodeCommand(args: string[]): string {
+  return ["opencode", ...args].map(argument => JSON.stringify(argument)).join(" ")
+}
+
+function formatOpenCodeCommandError(
+  message: string,
+  args: string[],
+  stdout: string,
+  stderr: string
+): Error {
+  return new Error(
+    `${message}\nCommand: ${formatOpenCodeCommand(args)}\nstdout:\n${stdout}\nstderr:\n${stderr}`
+  )
+}
+
 /**
- * Check if OpenCode CLI is available and working properly
- * Tests both --version and a simple run command to ensure full functionality
+ * Run an OpenCode command in the isolated test environment. Command failures
+ * are rejected so behavioral assertions never inspect failed-process output.
  */
-async function isOpenCodeAvailable(): Promise<boolean> {
+async function runOpenCodeCommand(args: string[]): Promise<OpenCodeCommandResult> {
+  let subprocess: Bun.ReadableSubprocess
   try {
-    const whichResult = await $`which opencode 2>&1`.text()
-    if (!whichResult || whichResult.includes("not found")) {
-      return false
+    subprocess = Bun.spawn(["opencode", ...args], {
+      cwd: TEST_CONFIG_DIR,
+      env: getOpenCodeEnvironment(),
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+  } catch (error) {
+    throw new Error(
+      `Failed to start OpenCode command: ${formatOpenCodeCommand(args)}\n${String(error)}`
+    )
+  }
+
+  let timedOut = false
+  const timeout = setTimeout(() => {
+    if (subprocess.exitCode === null) {
+      timedOut = true
+      subprocess.kill("SIGKILL")
     }
-    return true
-  } catch {
-    return false
+  }, OPENCODE_COMMAND_TIMEOUT_MS)
+
+  try {
+    const [exitCode, stdout, stderr] = await Promise.all([
+      subprocess.exited,
+      new Response(subprocess.stdout).text(),
+      new Response(subprocess.stderr).text(),
+    ])
+
+    if (timedOut) {
+      throw formatOpenCodeCommandError(
+        `OpenCode command timed out after ${OPENCODE_COMMAND_TIMEOUT_MS / 1000} seconds.`,
+        args,
+        stdout,
+        stderr
+      )
+    }
+
+    if (exitCode !== 0) {
+      throw formatOpenCodeCommandError(
+        `OpenCode command exited with code ${exitCode}.`,
+        args,
+        stdout,
+        stderr
+      )
+    }
+
+    return { stdout, stderr, exitCode }
+  } finally {
+    clearTimeout(timeout)
   }
 }
 
@@ -172,38 +235,20 @@ async function waitForLogMatch(
 }
 
 /**
- * Run OpenCode with a prompt and capture the stdout response
- * This function captures the actual stdout from opencode, not just runs it silently
+ * Run OpenCode with a prompt and capture its successful output.
  */
 async function runOpenCode(prompt: string): Promise<string> {
-  try {
-    const result = await $`timeout 30 opencode -m opencode/big-pickle run ${prompt} 2>&1`
-      .cwd(TEST_CONFIG_DIR)
-      .env(getOpenCodeEnvironment())
-      .text()
-    await new Promise(resolve => setTimeout(resolve, 2000))
-    
-    // Ensure we always return a string
-    const resultStr = typeof result === 'string' ? result : String(result || '')
-    return resultStr
-  } catch (e: unknown) {
-    // Handle error case - ensure we return a string
-    const error = e as { stdout?: unknown; stderr?: unknown; message?: string }
-    const errorContent = error.stdout || error.stderr || error.message || ""
-    return typeof errorContent === 'string' ? errorContent : String(errorContent || "")
-  }
+  const result = await runOpenCodeCommand(["-m", "opencode/big-pickle", "run", prompt])
+  await new Promise(resolve => setTimeout(resolve, 2000))
+  return `${result.stdout}${result.stderr}`
 }
 
 describe.skipIf(!E2E_ENABLED)("V1 headless real-host E2E", () => {
   beforeAll(async () => {
-    // Check if OpenCode is available
-    if (!(await isOpenCodeAvailable())) {
-      throw new Error(
-        "OPENCODE_E2E=1 was set, but the OpenCode CLI is unavailable. Install OpenCode or unset OPENCODE_E2E."
-      )
-    }
-
     createTestSandbox()
+
+    // Verify the executable works in the same isolated environment as the tests.
+    await runOpenCodeCommand(["--version"])
     
     // Enable the plugin in the test opencode config
     writeTestOpencodeConfig()
