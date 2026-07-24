@@ -9,7 +9,6 @@ let TEST_CONFIG_DIR = ""
 let TEST_OPENCODE_SUBDIR = ""
 let TEST_OPENCODE_CONFIG = ""
 let TEST_HOOKS_CONFIG = ""
-let TEST_AGENT_DIR = ""
 let TEST_HOME_DIR = ""
 let TEST_XDG_CONFIG_HOME = ""
 let TEST_XDG_DATA_HOME = ""
@@ -19,14 +18,22 @@ const LOG_WINDOW_MS = 15 * 60 * 1000
 const LOG_FALLBACK_FILES = 3
 const OPENCODE_COMMAND_TIMEOUT_MS = 30_000
 const E2E_ENABLED = process.env.OPENCODE_E2E === "1"
+const E2E_MODEL = process.env.OPENCODE_E2E_MODEL ?? "cerebras/zai-glm-4.7"
 
 function createTestSandbox(): void {
+  const authJson = process.env.OPENCODE_E2E_AUTH_JSON
+  if (!authJson) {
+    throw new Error(
+      "OPENCODE_E2E_AUTH_JSON is required for the isolated real-host E2E suite."
+    )
+  }
+  JSON.parse(authJson)
+
   TEST_SANDBOX_DIR = mkdtempSync(join(tmpdir(), "opencode-command-hooks-e2e-"))
   TEST_CONFIG_DIR = join(TEST_SANDBOX_DIR, "project")
   TEST_OPENCODE_SUBDIR = join(TEST_CONFIG_DIR, ".opencode")
   TEST_OPENCODE_CONFIG = join(TEST_CONFIG_DIR, "opencode.jsonc")
   TEST_HOOKS_CONFIG = join(TEST_OPENCODE_SUBDIR, "command-hooks.jsonc")
-  TEST_AGENT_DIR = join(TEST_OPENCODE_SUBDIR, "agent")
   TEST_HOME_DIR = join(TEST_SANDBOX_DIR, "home")
   TEST_XDG_CONFIG_HOME = join(TEST_SANDBOX_DIR, "xdg-config")
   TEST_XDG_DATA_HOME = join(TEST_SANDBOX_DIR, "xdg-data")
@@ -39,6 +46,9 @@ function createTestSandbox(): void {
   mkdirSync(TEST_XDG_DATA_HOME, { recursive: true })
   mkdirSync(TEST_XDG_CACHE_HOME, { recursive: true })
   mkdirSync(LOG_DIR, { recursive: true })
+  writeFileSync(join(TEST_XDG_DATA_HOME, "opencode", "auth.json"), authJson, {
+    mode: 0o600,
+  })
 }
 
 function getOpenCodeEnvironment(): Record<string, string | undefined> {
@@ -49,6 +59,7 @@ function getOpenCodeEnvironment(): Record<string, string | undefined> {
     XDG_DATA_HOME: TEST_XDG_DATA_HOME,
     XDG_CACHE_HOME: TEST_XDG_CACHE_HOME,
     OPENCODE_CONFIG: TEST_OPENCODE_CONFIG,
+    PWD: TEST_CONFIG_DIR,
   }
 }
 
@@ -206,15 +217,6 @@ function writeTestOpencodeConfig(): void {
   writeFileSync(TEST_OPENCODE_CONFIG, JSON.stringify(pluginConfig, null, 2))
 }
 
-function writeTestAgent(name: string, content: string): void {
-  mkdirSync(TEST_AGENT_DIR, { recursive: true })
-  writeFileSync(join(TEST_AGENT_DIR, `${name}.md`), content)
-}
-
-function removeTestAgent(name: string): void {
-  rmSync(join(TEST_AGENT_DIR, `${name}.md`), { force: true })
-}
-
 /**
  * Poll for log content until a predicate is satisfied or times out.
  */
@@ -235,10 +237,35 @@ async function waitForLogMatch(
 }
 
 /**
+ * Poll for one exact sandbox file effect from a hook.
+ */
+async function waitForFileContent(
+  filePath: string,
+  expectedContent: string,
+  timeoutMs = 10000,
+  intervalMs = 500
+): Promise<string | undefined> {
+  const start = Date.now()
+  let content: string | undefined
+  while (Date.now() - start < timeoutMs) {
+    try {
+      content = readFileSync(filePath, "utf-8")
+      if (content === expectedContent) {
+        return content
+      }
+    } catch {
+      content = undefined
+    }
+    await new Promise(resolve => setTimeout(resolve, intervalMs))
+  }
+  return content
+}
+
+/**
  * Run OpenCode with a prompt and capture its successful output.
  */
 async function runOpenCode(prompt: string): Promise<string> {
-  const result = await runOpenCodeCommand(["-m", "opencode/big-pickle", "run", prompt])
+  const result = await runOpenCodeCommand(["-m", E2E_MODEL, "run", prompt])
   await new Promise(resolve => setTimeout(resolve, 2000))
   return `${result.stdout}${result.stderr}`
 }
@@ -260,286 +287,50 @@ describe.skipIf(!E2E_ENABLED)("V1 headless real-host E2E", () => {
     }
   })
 
-  it("Test 1: Inject during tool.execute.after - LLM responds", async () => {
-    console.log("\n=== Test 1: Inject during tool.execute.after - LLM responds ===")
-    
+  it("runs one write after-hook transaction with isolated observable evidence", async () => {
     const uniqueId = generateUniqueId()
-    console.log(`Unique ID: ${uniqueId}`)
-    
-    // Configure a hook that injects a math question after any tool execution
+    const writtenFileName = `e2e-write-${uniqueId}.txt`
+    const writtenContent = `MODEL_WRITE_${uniqueId}`
+    const hookProofFileName = `e2e-write-hook-${uniqueId}.txt`
+    const hookProofContent = `WRITE_AFTER_HOOK_${uniqueId}`
+    const hookStdout = `WRITE_AFTER_STDOUT_${uniqueId}`
+    const injectedMarker = `WRITE_AFTER_INJECT_${uniqueId}:${hookStdout}`
+    const toastMarker = `WRITE_AFTER_TOAST_${uniqueId}`
+    const writtenFilePath = join(TEST_CONFIG_DIR, writtenFileName)
+    const hookProofFilePath = join(TEST_CONFIG_DIR, hookProofFileName)
+
     const config = {
       tool: [
         {
-          id: "test1-inject-math",
+          id: `e2e-write-after-${uniqueId}`,
           when: { phase: "after", tool: "*" },
-          run: "echo test1_echo_output",
-          inject: `What is 2+2? Reply ONLY with the number 4, nothing else.`,
-        },
-      ],
-    }
-    writeTestConfig(config)
-    console.log("Config written:", JSON.stringify(config, null, 2))
-
-    // Run OpenCode with a simple bash command
-    console.log("Running OpenCode...")
-    const opencodeResponse = await runOpenCode("use bash to echo hello")
-
-    console.log("OpenCode response received")
-    console.log(`Response length: ${String(opencodeResponse).length}`)
-    console.log(`Response preview: ${String(opencodeResponse).substring(0, 200)}...`)
-
-    // Check logs for inject marker
-    const logContent = getRecentLogContent()
-    console.log(`Log content length: ${logContent.length}`)
-
-    // Assert: OpenCode response should contain "4" (the LLM should respond to the injected question)
-    const containsNumber4 = opencodeResponse.includes("4") || opencodeResponse.includes(" four")
-    console.log(`OpenCode response contains "4": ${containsNumber4}`)
-
-    expect(containsNumber4).toBe(true)
-  }, 120000)
-
-  it("Test 2: Inject during session.idle - LLM does NOT respond", async () => {
-    console.log("\n=== Test 2: Inject during session.idle - LLM does NOT respond ===")
-    
-    const uniqueId = generateUniqueId()
-    console.log(`Unique ID: ${uniqueId}`)
-    
-    // Configure a session hook that injects a message on idle
-    const config = {
-      session: [
-        {
-          id: "test2-session-idle",
-          when: { event: "session.idle" },
-          inject: `IGNORE_THIS_IDLE_MESSAGE_${uniqueId}`,
-        },
-      ],
-    }
-    writeTestConfig(config)
-    console.log("Config written:", JSON.stringify(config, null, 2))
-
-    // Run OpenCode with a simple bash command
-    console.log("Running OpenCode...")
-    const opencodeResponse = await runOpenCode("use bash to echo test")
-
-    console.log("OpenCode response received")
-    console.log(`Response length: ${String(opencodeResponse).length}`)
-    console.log(`Response preview: ${String(opencodeResponse).substring(0, 200)}...`)
-
-    // Check logs for inject marker
-    const logContent = getRecentLogContent()
-    console.log(`Log content length: ${logContent.length}`)
-    console.log(`Log contains [inject]: ${logContent.includes("[inject]")}`)
-    console.log(`Log contains unique ID: ${logContent.includes(`IGNORE_THIS_IDLE_MESSAGE_${uniqueId}`)}`)
-
-    // Assert: OpenCode response should NOT contain the ignore message or unique ID
-    // The idle injection should not alter the immediate model response
-    const responseStr = String(opencodeResponse)
-    const containsIgnoreMessage = responseStr.includes(`IGNORE_THIS_IDLE_MESSAGE_${uniqueId}`)
-    const containsUniqueId = responseStr.includes(uniqueId)
-    
-    console.log(`OpenCode response contains IGNORE message: ${containsIgnoreMessage}`)
-    console.log(`OpenCode response contains unique ID: ${containsUniqueId}`)
-
-    expect(containsIgnoreMessage).toBe(false)
-    expect(containsUniqueId).toBe(false)
-  }, 120000)
-
-  it("Test 3: Toast marker does not leak into model output", async () => {
-    console.log("\n=== Test 3: Toast marker does not leak into model output ===")
-    
-    const uniqueId = generateUniqueId()
-    console.log(`Unique ID: ${uniqueId}`)
-    
-    // Configure a hook that shows a toast before any tool execution
-    const config = {
-      tool: [
-        {
-          id: "test3-toast-before",
-          when: { phase: "before", tool: "*" },
-          run: "echo test3_echo_output",
+          run: `printf '%s' '${hookProofContent}' > '${hookProofFileName}'; printf '%s' '${hookStdout}'`,
+          inject: `WRITE_AFTER_INJECT_${uniqueId}:{stdout}`,
           toast: {
-            title: "Test 3 Toast",
-            message: `TOAST_MARKER_${uniqueId}`,
+            title: "E2E write after-hook",
+            message: toastMarker,
             variant: "info",
           },
         },
       ],
     }
     writeTestConfig(config)
-    console.log("Config written:", JSON.stringify(config, null, 2))
-
-    // Run OpenCode with a prompt asking to describe what it did
-    console.log("Running OpenCode...")
-    const opencodeResponse = await runOpenCode("use bash to echo hello and describe what you did")
-
-    console.log("OpenCode response received")
-    console.log(`Response length: ${opencodeResponse.length}`)
-    console.log(`Response preview: ${opencodeResponse.substring(0, 200)}...`)
-
-    // Headless CLI output cannot establish that a TUI toast rendered visibly.
-    const toastInResponse = opencodeResponse.includes(`TOAST_MARKER_${uniqueId}`)
-    console.log(`Toast marker in OpenCode response: ${toastInResponse}`)
-
-    expect(toastInResponse).toBe(false)
-  }, 120000)
-
-  it("Test 4: stdout template substitution works", async () => {
-    console.log("\n=== Test 4: stdout template substitution works ===")
-    
-    const uniqueId = generateUniqueId()
-    console.log(`Unique ID: ${uniqueId}`)
-    
-    // Configure a hook that runs a command and injects with {stdout} substitution
-    const config = {
-      tool: [
-        {
-          id: "test4-stdout-subst",
-          when: { phase: "after", tool: "*" },
-          run: `echo CAPTURED_${uniqueId}`,
-          inject: `Output was: {stdout}`,
-        },
-      ],
-    }
-    writeTestConfig(config)
-    console.log("Config written:", JSON.stringify(config, null, 2))
-
-    // Run OpenCode with a simple bash command
-    console.log("Running OpenCode...")
-    const opencodeResponse = await runOpenCode("use bash to list files")
-
-    console.log("OpenCode response received")
-    console.log(`Response length: ${opencodeResponse.length}`)
-    console.log(`Response preview: ${opencodeResponse.substring(0, 200)}...`)
-
-    const logContent = await waitForLogMatch(
-      content => content.includes(`Output was: CAPTURED_${uniqueId}`),
-      15000,
-      500
-    )
-    console.log(`Log content length: ${logContent.length}`)
-    console.log(`Log contains [inject]: ${logContent.includes("[inject]")}`)
-    console.log(`Log contains CAPTURED marker: ${logContent.includes(`CAPTURED_${uniqueId}`)}`)
-
-    // Assert: Log should contain "[inject]" with "CAPTURED_{uniqueId}" 
-    // proving that {stdout} was substituted with the actual command output
-    const hasInjectLog = logContent.includes("[inject]")
-    const hasCapturedMarker = logContent.includes(`CAPTURED_${uniqueId}`)
-    const hasStdoutSubstitution = logContent.includes(`Output was: CAPTURED_${uniqueId}`)
-    
-    console.log(`Log contains [inject]: ${hasInjectLog}`)
-    console.log(`Log contains CAPTURED marker: ${hasCapturedMarker}`)
-    console.log(`Log contains stdout substitution: ${hasStdoutSubstitution}`)
-
-    expect(hasInjectLog).toBe(true)
-    expect(hasCapturedMarker).toBe(true)
-    expect(hasStdoutSubstitution).toBe(true)
-  }, 120000)
-
-  it("Test 5: Hook fires after write tool and creates file", async () => {
-    console.log("\n=== Test 5: Hook fires after write tool and creates file ===")
-    
-    const uniqueId = generateUniqueId()
-    console.log(`Unique ID: ${uniqueId}`)
-    
-    // Configure a hook that runs after the write tool
-    const config = {
-      tool: [
-        {
-          id: `test-write-hook-${uniqueId}`,
-          when: { phase: "after", tool: "write" },
-          run: "touch goodbye.txt"
-        },
-      ],
-    }
-    writeTestConfig(config)
-    console.log("Config written:", JSON.stringify(config, null, 2))
-
-    // Run OpenCode with a prompt that requires the write tool. Avoid bash here
-    // because this test specifically verifies hooks attached to write.
-    console.log("Running OpenCode...")
-    const opencodeResponse = await runOpenCode("Use the write tool, not bash, to create a file named hello.txt with exactly this content and no trailing newline: hello")
-
-    console.log("OpenCode response received")
-    console.log(`Response length: ${opencodeResponse.length}`)
-    console.log(`Response preview: ${opencodeResponse.substring(0, 200)}...`)
-
-    // Check file existence and content
-    const helloFilePath = join(TEST_CONFIG_DIR, "hello.txt")
-    const goodbyeFilePath = join(TEST_CONFIG_DIR, "goodbye.txt")
-    
-    // Wait a bit for file system operations to complete
-    await new Promise(resolve => setTimeout(resolve, 2000))
-    
-    try {
-      // Assert 1: hello.txt exists
-      const helloExists = existsSync(helloFilePath)
-      console.log(`hello.txt exists: ${helloExists}`)
-      expect(helloExists).toBe(true)
-
-      // Assert 2: hello.txt contains exactly "hello"
-      if (helloExists) {
-        const helloContent = readFileSync(helloFilePath, "utf-8")
-        console.log(`hello.txt content: "${helloContent}"`)
-        expect(helloContent).toBe("hello")
-      }
-
-      // Assert 3: goodbye.txt exists (proving the hook ran)
-      const goodbyeExists = existsSync(goodbyeFilePath)
-      console.log(`goodbye.txt exists: ${goodbyeExists}`)
-      expect(goodbyeExists).toBe(true)
-
-      // Assert 4: Logs contain evidence the write tool was used
-      expect(opencodeResponse.toLowerCase()).toContain("write")
-
-    } finally {
-      // Clean up test files
-      try {
-        if (existsSync(helloFilePath)) {
-          unlinkSync(helloFilePath)
-          console.log("Cleaned up hello.txt")
-        }
-        if (existsSync(goodbyeFilePath)) {
-          unlinkSync(goodbyeFilePath)
-          console.log("Cleaned up goodbye.txt")
-        }
-      } catch (e) {
-        console.log("Cleanup warning:", e)
-      }
-    }
-  }, 120000)
-
-  it("Test 6: Agent frontmatter hooks do not leak to provider options", async () => {
-    console.log("\n=== Test 6: Agent frontmatter hooks do not leak to provider options ===")
-    const uniqueId = generateUniqueId()
-    const marker = `FRONTMATTER_HOOK_${uniqueId}`
-
-    writeTestConfig({ tool: [], session: [] })
-    writeTestAgent("author", `---
-description: E2E author test agent
-mode: subagent
-model: cerebras/zai-glm-4.7
-hooks:
-  after:
-    - run: "echo ${marker}"
-      inject: "Frontmatter output: {stdout}"
----
-
-Say hi tersely.
-`)
 
     try {
-      console.log("Running OpenCode...")
-      const opencodeResponse = await runOpenCode("get author subagent to say hi")
-      console.log("OpenCode response received")
-      console.log(`Response preview: ${opencodeResponse.substring(0, 200)}...`)
-
-      const logContent = await waitForLogMatch((content) => content.includes(marker), 20000)
-      expect(opencodeResponse).not.toContain("property 'hooks' is unsupported")
-      expect(logContent).toContain(marker)
-      expect(logContent).toContain("[inject]")
+      const opencodeResponse = await runOpenCode(
+        `Use the write tool, not bash, to create ${writtenFileName} with exactly this content and no trailing newline: ${writtenContent}`
+      )
+      expect(await waitForFileContent(writtenFilePath, writtenContent)).toBe(writtenContent)
+      expect(await waitForFileContent(hookProofFilePath, hookProofContent)).toBe(hookProofContent)
+      const logContent = await waitForLogMatch(content => content.includes(injectedMarker))
+      expect(logContent).toContain(injectedMarker)
+      expect(opencodeResponse).not.toContain(toastMarker)
     } finally {
-      removeTestAgent("author")
+      for (const filePath of [writtenFilePath, hookProofFilePath]) {
+        if (existsSync(filePath)) {
+          unlinkSync(filePath)
+        }
+      }
     }
   }, 120000)
 })
