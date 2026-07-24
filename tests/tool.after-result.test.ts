@@ -48,18 +48,19 @@ describe("tool after hooks", () => {
     rmSync(testDir, { recursive: true, force: true });
   });
 
-  it("executes tool.execute.after hooks and triggers inject + toast", async () => {
+  it("sends the fully interpolated after-hook toast payload to the host client", async () => {
     writeConfig({
       tool: [
         {
           id: "after-hook",
           when: { phase: "after", tool: ["bash"] },
-          run: ["echo 'Hook executed'"],
+          run: ["sh -c 'printf hook-stdout; printf hook-stderr >&2; exit 23'"],
           inject: "Tool result: {stdout}",
           toast: {
-            title: "Hook",
-            message: "after complete",
-            variant: "success",
+            title: "Hook {id} for {tool}",
+            message: "stdout={stdout}; stderr={stderr}; exit={exitCode}",
+            variant: "warning",
+            duration: 4500,
           },
         },
       ],
@@ -79,15 +80,18 @@ describe("tool after hooks", () => {
     expect((promptCalls[0].path as { id: string }).id).toBe("s1");
 
     const promptParts = (promptCalls[0].body as { parts: Array<{ text: string }> }).parts;
-    expect(promptParts[0].text).toContain("Tool result: Hook executed");
+    expect(promptParts[0].text).toContain("Tool result: hook-stdout");
 
-    expect(toastCalls).toHaveLength(1);
-    expect(toastCalls[0].body).toEqual({
-      title: "Hook",
-      message: "after complete",
-      variant: "success",
-      duration: undefined,
-    });
+    expect(toastCalls).toEqual([
+      {
+        body: {
+          title: "Hook after-hook for bash",
+          message: "stdout=hook-stdout; stderr=hook-stderr; exit=23",
+          variant: "warning",
+          duration: 4500,
+        },
+      },
+    ]);
   });
 
   it("executes inject-only after hook without run", async () => {
