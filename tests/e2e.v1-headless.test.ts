@@ -1,18 +1,56 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test"
-import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, statSync, unlinkSync, rmSync } from "fs"
+import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, statSync, unlinkSync, rmSync } from "fs"
 import { join } from "path"
-import { homedir } from "os"
+import { tmpdir } from "os"
 import { $ } from "bun"
 
-const TEST_CONFIG_DIR = join(process.cwd(), "tests", "fixtures", "e2e-config")
-const TEST_OPENCODE_SUBDIR = join(TEST_CONFIG_DIR, ".opencode")
-const TEST_OPENCODE_CONFIG = join(TEST_CONFIG_DIR, "opencode.jsonc")
-const TEST_HOOKS_CONFIG = join(TEST_OPENCODE_SUBDIR, "command-hooks.jsonc")
-const TEST_AGENT_DIR = join(TEST_OPENCODE_SUBDIR, "agent")
-const LOG_DIR = join(homedir(), ".local", "share", "opencode", "log")
+const REPOSITORY_ROOT = process.cwd()
+let TEST_SANDBOX_DIR = ""
+let TEST_CONFIG_DIR = ""
+let TEST_OPENCODE_SUBDIR = ""
+let TEST_OPENCODE_CONFIG = ""
+let TEST_HOOKS_CONFIG = ""
+let TEST_AGENT_DIR = ""
+let TEST_HOME_DIR = ""
+let TEST_XDG_CONFIG_HOME = ""
+let TEST_XDG_DATA_HOME = ""
+let TEST_XDG_CACHE_HOME = ""
+let LOG_DIR = ""
 const LOG_WINDOW_MS = 15 * 60 * 1000
 const LOG_FALLBACK_FILES = 3
 const E2E_ENABLED = process.env.OPENCODE_E2E === "1"
+
+function createTestSandbox(): void {
+  TEST_SANDBOX_DIR = mkdtempSync(join(tmpdir(), "opencode-command-hooks-e2e-"))
+  TEST_CONFIG_DIR = join(TEST_SANDBOX_DIR, "project")
+  TEST_OPENCODE_SUBDIR = join(TEST_CONFIG_DIR, ".opencode")
+  TEST_OPENCODE_CONFIG = join(TEST_CONFIG_DIR, "opencode.jsonc")
+  TEST_HOOKS_CONFIG = join(TEST_OPENCODE_SUBDIR, "command-hooks.jsonc")
+  TEST_AGENT_DIR = join(TEST_OPENCODE_SUBDIR, "agent")
+  TEST_HOME_DIR = join(TEST_SANDBOX_DIR, "home")
+  TEST_XDG_CONFIG_HOME = join(TEST_SANDBOX_DIR, "xdg-config")
+  TEST_XDG_DATA_HOME = join(TEST_SANDBOX_DIR, "xdg-data")
+  TEST_XDG_CACHE_HOME = join(TEST_SANDBOX_DIR, "xdg-cache")
+  LOG_DIR = join(TEST_XDG_DATA_HOME, "opencode", "log")
+
+  mkdirSync(TEST_CONFIG_DIR, { recursive: true })
+  mkdirSync(TEST_HOME_DIR, { recursive: true })
+  mkdirSync(TEST_XDG_CONFIG_HOME, { recursive: true })
+  mkdirSync(TEST_XDG_DATA_HOME, { recursive: true })
+  mkdirSync(TEST_XDG_CACHE_HOME, { recursive: true })
+  mkdirSync(LOG_DIR, { recursive: true })
+}
+
+function getOpenCodeEnvironment(): Record<string, string | undefined> {
+  return {
+    ...process.env,
+    HOME: TEST_HOME_DIR,
+    XDG_CONFIG_HOME: TEST_XDG_CONFIG_HOME,
+    XDG_DATA_HOME: TEST_XDG_DATA_HOME,
+    XDG_CACHE_HOME: TEST_XDG_CACHE_HOME,
+    OPENCODE_CONFIG: TEST_OPENCODE_CONFIG,
+  }
+}
 
 /**
  * Check if OpenCode CLI is available and working properly
@@ -100,7 +138,7 @@ function writeTestOpencodeConfig(): void {
     mkdirSync(TEST_CONFIG_DIR, { recursive: true })
   }
   const pluginConfig = {
-    plugin: [join(process.cwd(), "dist", "index.js")],
+    plugin: [join(REPOSITORY_ROOT, "dist", "index.js")],
   }
   writeFileSync(TEST_OPENCODE_CONFIG, JSON.stringify(pluginConfig, null, 2))
 }
@@ -139,7 +177,10 @@ async function waitForLogMatch(
  */
 async function runOpenCode(prompt: string): Promise<string> {
   try {
-    const result = await $`cd ${TEST_CONFIG_DIR} && OPENCODE_CONFIG=${TEST_OPENCODE_CONFIG} timeout 30 opencode -m opencode/big-pickle run ${prompt} 2>&1`.text()
+    const result = await $`timeout 30 opencode -m opencode/big-pickle run ${prompt} 2>&1`
+      .cwd(TEST_CONFIG_DIR)
+      .env(getOpenCodeEnvironment())
+      .text()
     await new Promise(resolve => setTimeout(resolve, 2000))
     
     // Ensure we always return a string
@@ -161,27 +202,17 @@ describe.skipIf(!E2E_ENABLED)("V1 headless real-host E2E", () => {
         "OPENCODE_E2E=1 was set, but the OpenCode CLI is unavailable. Install OpenCode or unset OPENCODE_E2E."
       )
     }
+
+    createTestSandbox()
     
     // Enable the plugin in the test opencode config
     writeTestOpencodeConfig()
   })
 
   afterAll(() => {
-    // Clean up the test config directory (optional - leave for debugging if needed)
-    // Uncomment the following code to clean up after tests:
-    /*
-    if (existsSync(TEST_CONFIG_DIR)) {
-      try {
-        const files = readdirSync(TEST_CONFIG_DIR)
-        for (const file of files) {
-          unlinkSync(join(TEST_CONFIG_DIR, file))
-        }
-        rmdirSync(TEST_CONFIG_DIR)
-      } catch (e) {
-        // Ignore cleanup errors
-      }
+    if (TEST_SANDBOX_DIR) {
+      rmSync(TEST_SANDBOX_DIR, { recursive: true, force: true })
     }
-    */
   })
 
   it("Test 1: Inject during tool.execute.after - LLM responds", async () => {

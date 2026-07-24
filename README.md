@@ -18,10 +18,6 @@ hooks:
 ```
 **This plugin was not built by the OpenCode team nor is it affiliated with them.**
 
-## Testing
-
-`npm run test:v1:e2e` runs the opt-in headless real-host suite against the installed CLI. It validates command-hook behavior through `opencode run`, not interactive TUI rendering or interactions.
-
 ## Table of Contents
 
 - [Features](#features)
