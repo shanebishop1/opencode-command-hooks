@@ -153,21 +153,13 @@ async function runOpenCode(prompt: string): Promise<string> {
   }
 }
 
-describe("E2E Hook Behavioral Tests", () => {
-  let skipTests = false
-  
+describe.skipIf(!E2E_ENABLED)("E2E Hook Behavioral Tests", () => {
   beforeAll(async () => {
-    if (!E2E_ENABLED) {
-      skipTests = true
-      console.log("⚠️ Skipping E2E tests: set OPENCODE_E2E=1 to run")
-      return
-    }
-
     // Check if OpenCode is available
-    skipTests = !(await isOpenCodeAvailable())
-    if (skipTests) {
-      console.log("⚠️ Skipping E2E tests: OpenCode is not available or not working properly")
-      return
+    if (!(await isOpenCodeAvailable())) {
+      throw new Error(
+        "OPENCODE_E2E=1 was set, but the OpenCode CLI is unavailable. Install OpenCode or unset OPENCODE_E2E."
+      )
     }
     
     // Enable the plugin in the test opencode config
@@ -193,11 +185,6 @@ describe("E2E Hook Behavioral Tests", () => {
   })
 
   it("Test 1: Inject during tool.execute.after - LLM responds", async () => {
-    if (skipTests) {
-      console.log("Skipping: OpenCode not available")
-      return
-    }
-    
     console.log("\n=== Test 1: Inject during tool.execute.after - LLM responds ===")
     
     const uniqueId = generateUniqueId()
@@ -237,11 +224,6 @@ describe("E2E Hook Behavioral Tests", () => {
   }, 120000)
 
   it("Test 2: Inject during session.idle - LLM does NOT respond", async () => {
-    if (skipTests) {
-      console.log("Skipping: OpenCode not available")
-      return
-    }
-    
     console.log("\n=== Test 2: Inject during session.idle - LLM does NOT respond ===")
     
     const uniqueId = generateUniqueId()
@@ -288,11 +270,6 @@ describe("E2E Hook Behavioral Tests", () => {
   }, 120000)
 
   it("Test 3: Toast doesn't affect LLM response", async () => {
-    if (skipTests) {
-      console.log("Skipping: OpenCode not available")
-      return
-    }
-    
     console.log("\n=== Test 3: Toast doesn't affect LLM response ===")
     
     const uniqueId = generateUniqueId()
@@ -346,11 +323,6 @@ describe("E2E Hook Behavioral Tests", () => {
   }, 120000)
 
   it("Test 4: stdout template substitution works", async () => {
-    if (skipTests) {
-      console.log("Skipping: OpenCode not available")
-      return
-    }
-    
     console.log("\n=== Test 4: stdout template substitution works ===")
     
     const uniqueId = generateUniqueId()
@@ -403,11 +375,6 @@ describe("E2E Hook Behavioral Tests", () => {
   }, 120000)
 
   it("Test 5: Hook fires after write tool and creates file", async () => {
-    if (skipTests) {
-      console.log("Skipping: OpenCode not available")
-      return
-    }
-    
     console.log("\n=== Test 5: Hook fires after write tool and creates file ===")
     
     const uniqueId = generateUniqueId()
@@ -481,11 +448,6 @@ describe("E2E Hook Behavioral Tests", () => {
   }, 120000)
 
   it("Test 6: Agent frontmatter hooks do not leak to provider options", async () => {
-    if (skipTests) {
-      console.log("Skipping: OpenCode not available")
-      return
-    }
-
     console.log("\n=== Test 6: Agent frontmatter hooks do not leak to provider options ===")
     const uniqueId = generateUniqueId()
     const marker = `FRONTMATTER_HOOK_${uniqueId}`
