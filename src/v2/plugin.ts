@@ -16,8 +16,6 @@ type V2ToolEvent = {
 type V2Event = {
   id?: string
   type: string
-  parentID?: string
-  info?: { parentID?: string }
   data?: Record<string, unknown>
   location?: { directory?: string; workspaceID?: string }
 }
@@ -25,7 +23,6 @@ type V2Event = {
 type V2SessionInfo = {
   id: string
   agent?: string
-  parentID?: string
   location: { directory: string; workspaceID?: string }
 }
 
@@ -62,19 +59,6 @@ const asRecord = (value: unknown): Record<string, unknown> | undefined =>
   typeof value === "object" && value !== null && !Array.isArray(value)
     ? value as Record<string, unknown>
     : undefined
-
-const hasOwn = (value: object, key: string): boolean =>
-  Object.prototype.hasOwnProperty.call(value, key)
-
-const eventSessionScope = (event: V2Event): "child" | undefined => {
-  if (hasOwn(event, "parentID") || (event.info && hasOwn(event.info, "parentID"))) {
-    return "child"
-  }
-  if (!event.data) return undefined
-  if (hasOwn(event.data, "parentID")) return "child"
-  const info = asRecord(event.data.info)
-  return info && hasOwn(info, "parentID") ? "child" : undefined
-}
 
 const toolContext = (event: V2ToolEvent): {
   toolName: string
@@ -146,25 +130,19 @@ export const createV2Plugin = (): V2Plugin => ({
 
     const sessionInfo = async (
       sessionID: string,
-      fallback?: { directory?: string; agent?: string; sessionScope?: "child" },
-    ): Promise<{
-      directory: string
-      agent: string | undefined
-      sessionScope: "parent" | "child" | undefined
-    }> => {
+      fallback?: { directory?: string; agent?: string },
+    ): Promise<{ directory: string; agent: string | undefined }> => {
       try {
         const session = await ctx.session.get({ sessionID })
         return {
           directory: session.location.directory,
           agent: normalizeString(session.agent) || normalizeString(fallback?.agent) || undefined,
-          sessionScope: session.parentID === undefined ? "parent" : "child",
         }
       } catch (error) {
         if (fallback?.directory) {
           return {
             directory: fallback.directory,
             agent: normalizeString(fallback.agent) || undefined,
-            sessionScope: fallback.sessionScope,
           }
         }
         throw error
@@ -234,14 +212,12 @@ export const createV2Plugin = (): V2Plugin => ({
         const resolved = await sessionInfo(sessionID, {
           directory: normalizeString(event.location?.directory) || undefined,
           agent: normalizeString(event.data?.agent) || undefined,
-          sessionScope: eventSessionScope(event),
         })
         const { config, error } = await loadGlobalConfig(resolved.directory)
         notifyConfigError(error, resolved.directory)
         const hooks = filterSessionHooks(config.session ?? [], {
           event: eventType,
           agent: resolved.agent,
-          sessionScope: resolved.sessionScope,
         })
         await executeHooks(
           hooks,
