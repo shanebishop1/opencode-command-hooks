@@ -306,9 +306,15 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
                client as OpencodeClient,
                sessionId ? activeSubagents.hasActive(sessionId) : false,
              )
-          }
+           }
 
-          // Handle session.idle event
+           if (event.type === "session.deleted") {
+             const info = event.properties?.info as { id?: string } | undefined
+             const sessionId = info?.id ? normalizeString(info.id) : undefined
+             if (sessionId) activeSubagents.clear(sessionId)
+           }
+
+           // Handle session.idle event
           if (event.type === "session.idle") {
             logger.debug("Received session.idle event")
 

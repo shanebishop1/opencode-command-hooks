@@ -2,6 +2,7 @@ export type ActiveSubagentTracker = {
   begin: (sessionId: string, callId?: string) => void
   end: (sessionId: string, callId?: string) => void
   hasActive: (sessionId: string) => boolean
+  clear: (sessionId: string) => void
 }
 
 type ActiveCalls = {
@@ -36,6 +37,9 @@ export const createActiveSubagentTracker = (): ActiveSubagentTracker => {
     hasActive: sessionId => {
       const active = sessions.get(sessionId)
       return active !== undefined && (active.ids.size > 0 || active.anonymous > 0)
+    },
+    clear: sessionId => {
+      sessions.delete(sessionId)
     },
   }
 }
