@@ -122,6 +122,21 @@ const deleteToolArgs = (callId: string | undefined): void => {
   toolCallArgsCache.delete(callId)
 }
 
+const getSessionScope = async (
+  sessionId: string,
+  client: OpencodeClient,
+): Promise<"parent" | "child" | undefined> => {
+  try {
+    const result = await client.session.get({ path: { id: sessionId } })
+    if (!result.data) return undefined
+    return result.data.parentID === undefined ? "parent" : "child"
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    logger.debug(`Could not determine scope for session ${sessionId}: ${message}`)
+    return undefined
+  }
+}
+
 
 
 /**
@@ -149,10 +164,12 @@ const handleSessionEvent = async (
 
     const markdownConfig = { tool: [], session: [] }
     const { config: mergedConfig } = mergeConfigs(globalConfig, markdownConfig)
+    const sessionScope = await getSessionScope(sessionId, client)
 
     const matchedHooks = filterSessionHooks(mergedConfig.session || [], {
       event: eventType,
       agent,
+      sessionScope,
     })
 
     logger.debug(
