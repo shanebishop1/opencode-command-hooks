@@ -7,6 +7,7 @@ import { normalizeString } from "./utils.js"
 import { loadGlobalConfig } from "./config/global.js"
 import { loadAgentConfig } from "./config/agent.js"
 import { mergeConfigs } from "./config/merge.js"
+import { createActiveSubagentTracker } from "./subagent-tracker.js"
 
 const notifyConfigError = async (
   configError: string | null,
@@ -131,7 +132,8 @@ const handleSessionEvent = async (
   eventType: "session.created" | "session.idle",
   sessionId: string | undefined,
   agent: string | undefined,
-  client: OpencodeClient
+  client: OpencodeClient,
+  hasActiveSubagents: boolean,
 ): Promise<void> => {
   if (!sessionId) {
     logger.debug(`${eventType} event missing session ID`)
@@ -152,6 +154,7 @@ const handleSessionEvent = async (
     const matchedHooks = filterSessionHooks(mergedConfig.session || [], {
       event: eventType,
       agent,
+      hasActiveSubagents,
     })
 
     logger.debug(
@@ -253,6 +256,7 @@ const handleToolExecutionHook = async (
 export const CommandHooksPlugin: Plugin = async ({ client }) => {
   const clientLogger = createLogger(client)
   setGlobalLogger(clientLogger)
+  const activeSubagents = createActiveSubagentTracker()
   
   try {
     logger.info("Initializing OpenCode Command Hooks plugin...")
@@ -295,7 +299,13 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
             const sessionId = info?.id ? normalizeString(info.id) : undefined
             const agent = normalizeString(event.properties?.agent)
 
-            await handleSessionEvent("session.created", sessionId, agent, client as OpencodeClient)
+             await handleSessionEvent(
+               "session.created",
+               sessionId,
+               agent,
+               client as OpencodeClient,
+               sessionId ? activeSubagents.hasActive(sessionId) : false,
+             )
           }
 
           // Handle session.idle event
@@ -305,7 +315,13 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
             const sessionId = normalizeString(event.properties?.sessionID)
             const agent = normalizeString(event.properties?.agent)
 
-            await handleSessionEvent("session.idle", sessionId, agent, client as OpencodeClient)
+             await handleSessionEvent(
+               "session.idle",
+               sessionId,
+               agent,
+               client as OpencodeClient,
+               sessionId ? activeSubagents.hasActive(sessionId) : false,
+             )
           }
 
           // Backward-compat fallback for older OpenCode event streams.
@@ -323,14 +339,16 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
               event.properties?.callID ?? event.properties?.callId
             )
 
-            if (!sessionId || !toolName) {
+             if (!sessionId || !toolName) {
               logger.debug(
                 "tool.result event missing sessionID or tool name"
               )
-              return
-            }
+               return
+             }
 
-            if (wasAfterHookProcessed(callId)) {
+             if (toolName === "task") activeSubagents.end(sessionId, callId)
+
+             if (wasAfterHookProcessed(callId)) {
               logger.debug(`Skipping duplicate after-hook execution for callID: ${callId}`)
               deleteToolArgs(callId)
               return
@@ -361,6 +379,8 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
              `Tool args: ${JSON.stringify(output.args)}`
            )
 
+           if (input.tool === "task") activeSubagents.begin(input.sessionID, input.callID)
+
            await handleToolExecutionHook("before", input, output.args, client as OpencodeClient)
         },
 
@@ -376,13 +396,15 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
             `Received tool.execute.after for tool: ${input.tool}`
           )
 
-          if (!toolOutput) {
+           if (!toolOutput) {
             logger.debug(
               `tool.execute.after for ${input.tool} has no output payload; running hooks with cached args only`
-            )
-          }
+             )
+           }
 
-          const storedToolArgs = getToolArgs(input.callID)
+           if (input.tool === "task") activeSubagents.end(input.sessionID, input.callID)
+
+           const storedToolArgs = getToolArgs(input.callID)
           await handleToolExecutionHook("after", input, storedToolArgs, client as OpencodeClient)
         },
     }

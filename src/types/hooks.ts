@@ -182,6 +182,9 @@ export interface SessionHookWhen {
    * Omitted: defaults to "*" in global config, "this agent" in markdown.
    */
   agent?: string | string[]
+
+  /** Skip this idle hook while the session has active subagent tool calls. */
+  excludeSubagentWait?: boolean
 }
 
 /**

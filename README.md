@@ -372,12 +372,16 @@ Tool-arg matching is exact. This example runs only when the tool arg `path` equa
     },
     {
       "id": "session-idle",
-      "when": { "event": "session.idle" },
-      "run": ["echo 'Session idle'"],
+      "when": { "event": "session.idle", "excludeSubagentWait": true },
+      "run": ["notify-user.sh 'Waiting for input'"],
     },
   ],
 }
 ```
+
+`excludeSubagentWait` is opt-in. When true, that `session.idle` hook waits until all
+active `task` subagent calls for the session have completed. Other idle hooks keep
+their existing behavior and still run while the parent is waiting on a subagent.
 
 ---
 
