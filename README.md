@@ -151,7 +151,6 @@ You can set up tool hooks to only trigger on specific arguments via `when.toolAr
 ## Features
 
 - Tool hooks (`before`/`after`) and session hooks (`start`/`idle`) via simple JSON/YAML frontmatter config
-  - Session hooks target parent sessions by default; opt into child or all sessions with `"when": { "event": "session.idle", "sessionScope": "child" }` or `"sessionScope": "any"`.
   - Hooks are **non-blocking**: failures don’t crash the session/tool.
   - Commands run **sequentially**, even if earlier ones fail.
 - Inject bash output into context with `inject` and notify user with `toast`
