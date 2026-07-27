@@ -189,6 +189,71 @@ describe("OpenCode V2 plugin", () => {
     await cleanup?.()
   })
 
+  it("suppresses opted-in idle hooks while a V2 subagent tool is active", async () => {
+    const directory = await createProject({
+      session: [
+        { id: "always", when: { event: "session.idle" }, inject: "always" },
+        {
+          id: "after-subagents",
+          when: { event: "session.idle", excludeSubagentWait: true },
+          inject: "after-subagents",
+        },
+      ],
+    })
+    const { context, callbacks, syntheticCalls } = createContext(directory)
+    let releaseFirst!: () => void
+    let releaseSecond!: () => void
+    let waitingForSecond!: () => void
+    let eventsFinished!: () => void
+    const first = new Promise<void>(resolve => { releaseFirst = resolve })
+    const second = new Promise<void>(resolve => { releaseSecond = resolve })
+    const firstProcessed = new Promise<void>(resolve => { waitingForSecond = resolve })
+    const complete = new Promise<void>(resolve => { eventsFinished = resolve })
+    context.event.subscribe = () => (async function* () {
+      await first
+      yield {
+        id: "idle-active",
+        type: "session.idle",
+        location: { directory },
+        data: { sessionID: "parent" },
+      }
+      waitingForSecond()
+      await second
+      yield {
+        id: "idle-complete",
+        type: "session.idle",
+        location: { directory },
+        data: { sessionID: "parent" },
+      }
+      eventsFinished()
+    })()
+
+    const cleanup = await createV2Plugin().setup(context)
+    const subagent = {
+      tool: "subagent",
+      sessionID: "parent",
+      callID: "subagent-1",
+      agent: "build",
+      input: { agent: "worker" },
+    }
+    await callbacks.get("execute.before")?.(subagent)
+    releaseFirst()
+    await firstProcessed
+
+    expect(syntheticCalls.map(call => call.text)).toEqual(["always"])
+
+    await callbacks.get("execute.after")?.(subagent)
+    releaseSecond()
+    await complete
+
+    expect(syntheticCalls.map(call => call.text)).toEqual([
+      "always",
+      "always",
+      "after-subagents",
+    ])
+    await cleanup?.()
+  })
+
   it("reports V2 toast degradation once without blocking injection", async () => {
     const directory = await createProject({
       tool: [

@@ -10,6 +10,8 @@ Beta package for OpenCode 2. It targets `@opencode-ai/cli@0.0.0-next-15853` and 
 
 Tool before/after hooks, argument filters, agent hooks, session start/idle hooks, shell execution, and synthetic context injection are supported. Commands run in the session's project directory.
 
+Set `"excludeSubagentWait": true` on a `session.idle` hook to suppress that hook while the session has active V2 `subagent` tool calls. The option is disabled by default.
+
 OpenCode 2 server plugins cannot currently show TUI toasts. A toast setting produces one diagnostic while command execution and injection continue.
 
 Keep the V1 package and configuration available for rollback while OpenCode 2 remains beta. Verify loading with `opencode2 api get /api/plugin`.

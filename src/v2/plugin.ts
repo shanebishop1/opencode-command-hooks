@@ -4,6 +4,7 @@ import { loadAgentConfig } from "../config/agent.js"
 import { mergeConfigs } from "../config/merge.js"
 import { executeHooks, filterSessionHooks, filterToolHooks, type HookHost } from "../executor.js"
 import { normalizeString } from "../utils.js"
+import { createActiveSubagentTracker } from "../subagent-tracker.js"
 
 type V2ToolEvent = {
   tool: string
@@ -97,6 +98,7 @@ export const createV2Plugin = (): V2Plugin => ({
     const notifiedConfigErrors = new Set<string>()
     const handledEvents = new Set<string>()
     const startedSessions = new Set<string>()
+    const activeSubagents = createActiveSubagentTracker()
     let warnedToastUnsupported = false
     let stopped = false
 
@@ -150,9 +152,14 @@ export const createV2Plugin = (): V2Plugin => ({
     }
 
     const handleTool = async (phase: "before" | "after", event: V2ToolEvent): Promise<void> => {
+      const normalized = toolContext(event)
+      if (normalized.toolName === "task") {
+        if (phase === "before") activeSubagents.begin(event.sessionID, event.callID)
+        else activeSubagents.end(event.sessionID, event.callID)
+      }
+
       try {
         const resolved = await sessionInfo(event.sessionID, { agent: event.agent })
-        const normalized = toolContext(event)
         const { config: globalConfig, error } = await loadGlobalConfig(resolved.directory)
         notifyConfigError(error, resolved.directory)
 
@@ -218,6 +225,7 @@ export const createV2Plugin = (): V2Plugin => ({
         const hooks = filterSessionHooks(config.session ?? [], {
           event: eventType,
           agent: resolved.agent,
+          hasActiveSubagents: activeSubagents.hasActive(sessionID),
         })
         await executeHooks(
           hooks,
