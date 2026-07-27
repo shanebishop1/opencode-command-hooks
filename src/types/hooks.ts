@@ -168,7 +168,7 @@ export interface SessionHook {
  * Matching conditions for session hooks
  *
  * All specified conditions must match for the hook to execute.
- * Omitted sessionScope defaults to matching parent sessions.
+ * Omitted fields default to matching all values (wildcard behavior).
  */
 export interface SessionHookWhen {
   /**
@@ -182,11 +182,6 @@ export interface SessionHookWhen {
    * Omitted: defaults to "*" in global config, "this agent" in markdown.
    */
   agent?: string | string[]
-
-  /**
-   * Session hierarchy to match. Defaults to "parent"; use "any" to match all sessions.
-   */
-  sessionScope?: "parent" | "child" | "any"
 }
 
 /**
