@@ -63,17 +63,12 @@ const asRecord = (value: unknown): Record<string, unknown> | undefined =>
     ? value as Record<string, unknown>
     : undefined
 
-const hasOwn = (value: object, key: string): boolean =>
-  Object.prototype.hasOwnProperty.call(value, key)
-
 const eventSessionScope = (event: V2Event): "child" | undefined => {
-  if (hasOwn(event, "parentID") || (event.info && hasOwn(event.info, "parentID"))) {
-    return "child"
-  }
-  if (!event.data) return undefined
-  if (hasOwn(event.data, "parentID")) return "child"
-  const info = asRecord(event.data.info)
-  return info && hasOwn(info, "parentID") ? "child" : undefined
+  const info = asRecord(event.data?.info)
+  const parentID = normalizeString(
+    event.parentID ?? event.info?.parentID ?? event.data?.parentID ?? info?.parentID,
+  )
+  return parentID ? "child" : undefined
 }
 
 const toolContext = (event: V2ToolEvent): {
