@@ -5,6 +5,14 @@ import { join } from "path"
 import { createV2Plugin, type V2Context } from "../src/v2/plugin.js"
 
 type ToolCallback = (event: Record<string, unknown>) => Promise<void> | void
+type LifecycleEvent = {
+  id?: string
+  type: string
+  parentID?: string
+  info?: { parentID?: string }
+  data?: Record<string, unknown>
+  location?: { directory?: string; workspaceID?: string }
+}
 
 const temporaryDirectories: string[] = []
 
@@ -21,11 +29,15 @@ const createProject = async (config: Record<string, unknown>): Promise<string> =
 
 const createContext = (
   directory: string,
-  events: Record<string, unknown>[] = [],
+  events: LifecycleEvent[] = [],
 ) => {
   const callbacks = new Map<string, ToolCallback>()
   const disposed: string[] = []
   const syntheticCalls: Array<Record<string, unknown>> = []
+  let eventsDrained: () => void
+  const eventsComplete = new Promise<void>(resolve => {
+    eventsDrained = resolve
+  })
   const context: V2Context = {
     tool: {
       hook: async (name, callback) => {
@@ -36,6 +48,7 @@ const createContext = (
     event: {
       subscribe: () => (async function* () {
         for (const event of events) yield event
+        eventsDrained()
       })(),
     },
     session: {
@@ -50,7 +63,7 @@ const createContext = (
     },
   }
 
-  return { context, callbacks, disposed, syntheticCalls }
+  return { context, callbacks, disposed, syntheticCalls, eventsComplete }
 }
 
 afterEach(async () => {
@@ -186,6 +199,57 @@ describe("OpenCode V2 plugin", () => {
     await new Promise(resolve => setTimeout(resolve, 20))
 
     expect(syntheticCalls.map(call => call.text)).toEqual(["durable started", "durable idle"])
+    await cleanup?.()
+  })
+
+  it("filters lifecycle hooks by resolved and fallback session scope without guessing unknown sessions", async () => {
+    const directory = await createProject({
+      session: [
+        { id: "parent", when: { event: "session.idle" }, inject: "parent" },
+        { id: "child", when: { event: "session.idle", sessionScope: "child" }, inject: "child" },
+        { id: "any", when: { event: "session.idle", sessionScope: "any" }, inject: "any" },
+      ],
+    })
+    const events = [
+      { id: "parent", type: "session.idle", location: { directory }, data: { sessionID: "parent" } },
+      { id: "child", type: "session.idle", location: { directory }, data: { sessionID: "child" } },
+      {
+        id: "fallback-parent-id",
+        type: "session.idle",
+        location: { directory },
+        data: { sessionID: "fallback-parent-id", parentID: "parent" },
+      },
+      {
+        id: "fallback-info-parent-id",
+        type: "session.execution.succeeded",
+        location: { directory },
+        data: { sessionID: "fallback-info-parent-id", info: { parentID: "parent" } },
+      },
+      { id: "unknown", type: "session.idle", location: { directory }, data: { sessionID: "unknown" } },
+    ]
+    const { context, eventsComplete, syntheticCalls } = createContext(directory, events)
+    context.session.get = async ({ sessionID }) => {
+      if (sessionID.startsWith("fallback") || sessionID === "unknown") {
+        throw new Error("session lookup failed")
+      }
+      return {
+        id: sessionID,
+        agent: "build",
+        location: { directory },
+        ...(sessionID === "child" ? { parentID: "parent" } : {}),
+      }
+    }
+
+    const cleanup = await createV2Plugin().setup(context)
+    await eventsComplete
+
+    expect(syntheticCalls.map(call => call.text)).toEqual([
+      "parent", "any",
+      "child", "any",
+      "child", "any",
+      "child", "any",
+      "any",
+    ])
     await cleanup?.()
   })
 
