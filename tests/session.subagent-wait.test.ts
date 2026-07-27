@@ -84,4 +84,32 @@ describe("session idle subagent waits", () => {
 
     expect(injected).toEqual(["always", "always", "always", "after-subagents"])
   })
+
+  it("clears active subagent state when the session is deleted", async () => {
+    const injected: string[] = []
+    const client = {
+      session: {
+        promptAsync: async ({ body }: { body: { parts: Array<{ text: string }> } }) => {
+          injected.push(body.parts[0].text)
+          return {}
+        },
+      },
+      tui: { showToast: async () => ({}) },
+    }
+    const { CommandHooksPlugin } = await import("../src/index.js")
+    const plugin = await CommandHooksPlugin({ client } as never)
+
+    await plugin["tool.execute.before"]?.(
+      { tool: "task", sessionID: "deleted", callID: "task-deleted" },
+      { args: { subagent_type: "worker" } },
+    )
+    await plugin.event?.({
+      event: { type: "session.deleted", properties: { info: { id: "deleted" } } },
+    } as never)
+    await plugin.event?.({
+      event: { type: "session.idle", properties: { sessionID: "deleted" } },
+    } as never)
+
+    expect(injected).toEqual(["always", "after-subagents"])
+  })
 })
