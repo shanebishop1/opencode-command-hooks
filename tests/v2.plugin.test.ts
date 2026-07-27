@@ -232,7 +232,6 @@ describe("OpenCode V2 plugin", () => {
     const subagent = {
       tool: "subagent",
       sessionID: "parent",
-      callID: "subagent-1",
       agent: "build",
       input: { agent: "worker" },
     }
@@ -251,6 +250,47 @@ describe("OpenCode V2 plugin", () => {
       "always",
       "after-subagents",
     ])
+    await cleanup?.()
+  })
+
+  it("clears active V2 subagent state when the session is deleted", async () => {
+    const directory = await createProject({
+      session: [
+        {
+          id: "after-subagents",
+          when: { event: "session.idle", excludeSubagentWait: true },
+          inject: "after-subagents",
+        },
+      ],
+    })
+    const { context, callbacks, syntheticCalls } = createContext(directory)
+    let releaseEvents!: () => void
+    let eventsFinished!: () => void
+    const release = new Promise<void>(resolve => { releaseEvents = resolve })
+    const complete = new Promise<void>(resolve => { eventsFinished = resolve })
+    context.event.subscribe = () => (async function* () {
+      await release
+      yield { id: "deleted", type: "session.deleted", data: { sessionID: "parent" } }
+      yield {
+        id: "idle-after-delete",
+        type: "session.idle",
+        location: { directory },
+        data: { sessionID: "parent" },
+      }
+      eventsFinished()
+    })()
+
+    const cleanup = await createV2Plugin().setup(context)
+    await callbacks.get("execute.before")?.({
+      tool: "subagent",
+      sessionID: "parent",
+      agent: "build",
+      input: { agent: "worker" },
+    })
+    releaseEvents()
+    await complete
+
+    expect(syntheticCalls.map(call => call.text)).toEqual(["after-subagents"])
     await cleanup?.()
   })
 

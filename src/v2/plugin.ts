@@ -190,6 +190,12 @@ export const createV2Plugin = (): V2Plugin => ({
     }
 
     const handleSession = async (event: V2Event): Promise<void> => {
+      if (event.type === "session.deleted") {
+        const sessionID = normalizeString(event.data?.sessionID)
+        if (sessionID) activeSubagents.clear(sessionID)
+        return
+      }
+
       const eventType = event.type === "session.created" || event.type === "session.execution.started"
         ? "session.created"
         : event.type === "session.idle" ||
