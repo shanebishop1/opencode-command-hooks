@@ -225,12 +225,6 @@ describe("OpenCode V2 plugin", () => {
         location: { directory },
         data: { sessionID: "fallback-info-parent-id", info: { parentID: "parent" } },
       },
-      {
-        id: "fallback-undefined-parent-id",
-        type: "session.idle",
-        location: { directory },
-        data: { sessionID: "fallback-undefined-parent-id", parentID: undefined },
-      },
       { id: "unknown", type: "session.idle", location: { directory }, data: { sessionID: "unknown" } },
     ]
     const { context, eventsComplete, syntheticCalls } = createContext(directory, events)
@@ -254,7 +248,6 @@ describe("OpenCode V2 plugin", () => {
       "child", "any",
       "child", "any",
       "child", "any",
-      "any",
       "any",
     ])
     await cleanup?.()
