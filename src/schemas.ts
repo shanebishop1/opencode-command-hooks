@@ -27,6 +27,7 @@ const PhaseSchema = z.enum(["before", "after"]);
  * Note: "session.start" maps to "session.created" internally
  */
 const SessionEventSchema = z.enum(["session.created", "session.idle", "session.end", "session.start"]);
+const SessionScopeSchema = z.enum(["parent", "child", "any"]);
 
 // ============================================================================
 // TOOL HOOK SCHEMAS
@@ -97,6 +98,7 @@ export const ToolHookSchema = z.object({
 const SessionHookWhenSchema = z.object({
   event: SessionEventSchema,
   agent: StringOrArray.optional(),
+  sessionScope: SessionScopeSchema.default("parent"),
 });
 
 /**
