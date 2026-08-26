@@ -47,6 +47,7 @@ describe("session idle subagent waits", () => {
     const injected: string[] = []
     const client = {
       session: {
+        get: async () => ({ data: { id: "parent" } }),
         promptAsync: async ({ body }: { body: { parts: Array<{ text: string }> } }) => {
           injected.push(body.parts[0].text)
           return {}
@@ -89,6 +90,7 @@ describe("session idle subagent waits", () => {
     const injected: string[] = []
     const client = {
       session: {
+        get: async () => ({ data: { id: "parent" } }),
         promptAsync: async ({ body }: { body: { parts: Array<{ text: string }> } }) => {
           injected.push(body.parts[0].text)
           return {}
