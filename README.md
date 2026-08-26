@@ -379,9 +379,35 @@ Tool-arg matching is exact. This example runs only when the tool arg `path` equa
 }
 ```
 
-`excludeSubagentWait` is opt-in. When true, that `session.idle` hook waits until all
-active `task` subagent calls for the session have completed. Other idle hooks keep
-their existing behavior and still run while the parent is waiting on a subagent.
+`session.idle` hooks run only for root sessions by default, preventing a completed
+subagent's child session from producing a premature idle notification. Set
+`rootSessionOnly` to `false` to run the hook for root and child sessions:
+
+```jsonc
+{
+  "session": [
+    {
+      "id": "every-session-idle",
+      "when": {
+        "event": "session.idle",
+        "rootSessionOnly": false,
+      },
+      "run": ["echo 'Any session idle'"],
+    },
+  ],
+}
+```
+
+For other session events, `rootSessionOnly` defaults to `false` and can be set to
+`true` explicitly. Root-only idle filtering identifies child sessions through
+OpenCode's `parentID`; it does not guarantee that no background work remains or
+that OpenCode is specifically waiting for user input. If session lookup fails,
+hooks run without root filtering rather than being silently dropped.
+
+`excludeSubagentWait` is an additional opt-in safeguard. When true, that root idle
+hook is also suppressed while the parent session has active `task` calls. This
+handles a separate case where the parent itself emits idle while waiting for a
+subagent to finish.
 
 ---
 
