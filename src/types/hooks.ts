@@ -182,6 +182,12 @@ export interface SessionHookWhen {
    * Omitted: defaults to "*" in global config, "this agent" in markdown.
    */
   agent?: string | string[]
+
+  /**
+   * Restrict the hook to root sessions. Defaults to true for session.idle and
+   * false for other session events.
+   */
+  rootSessionOnly?: boolean
 }
 
 /**
