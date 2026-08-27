@@ -183,9 +183,6 @@ export interface SessionHookWhen {
    */
   agent?: string | string[]
 
-  /** Skip this idle hook while the session has active subagent tool calls. */
-  excludeSubagentWait?: boolean
-
   /**
    * Restrict the hook to root sessions. Defaults to true for session.idle and
    * false for other session events.

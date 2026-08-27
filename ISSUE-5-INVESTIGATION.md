@@ -32,7 +32,7 @@ The issue proposes several possible solutions:
 
 - A new `session.awaiting_user` event.
 - Event metadata such as `active_subagents`.
-- A plugin configuration option such as `excludeSubagentWait`.
+- A plugin configuration option such as `rootSessionOnly`.
 
 ## Previous Plugin Behavior
 
@@ -121,16 +121,16 @@ The most likely source of the reported false notification is that each subagent 
 
 This distinction matters because filtering child idle events is feasible in this plugin. Determining whether the primary session is genuinely waiting for user input is not currently feasible from `session.idle` alone.
 
-The report could also describe a parent idle event while a foreground subagent remains active. The implementation addresses that separate case by optionally tracking active `task` calls in addition to filtering child sessions.
+OpenCode 1.18.18 source shows that a foreground parent task remains active until the child finishes, so the parent does not publish idle merely because it is waiting for that foreground child. Experimental background tasks are different: the parent can become idle while a child remains active, and root-session filtering cannot detect that state.
 
 ## Ownership Assessment
 
 The issue has two layers:
 
 1. **Upstream semantic limitation:** OpenCode's idle event does not mean "user attention required" and lacks enough metadata to express that meaning reliably.
-2. **Plugin-side opportunity:** This plugin can identify child sessions through a session lookup and can track active foreground `task` calls in the parent session.
+2. **Plugin-side opportunity:** This plugin can identify child sessions through a session lookup and avoid treating their idle events as primary-session completion.
 
-Therefore, the issue should not be dismissed as entirely upstream. The plugin can mitigate both observed subagent cases, while a complete user-attention signal still requires upstream support.
+Therefore, the issue should not be dismissed as entirely upstream. The plugin can mitigate the source-supported foreground false-positive case, while a complete user-attention signal still requires upstream support.
 
 ## Implemented Plugin Change
 
@@ -148,8 +148,7 @@ Example:
     {
       "id": "cmux-session-idle",
       "when": {
-        "event": "session.idle",
-        "excludeSubagentWait": true
+        "event": "session.idle"
       },
       "run": ["notify-user.sh 'Waiting for input'"]
     }
@@ -171,9 +170,7 @@ Other session events retain all-session behavior by default and can opt into roo
 4. `session.idle` fetches the session with `client.session.get({ path: { id: sessionId } })` only when at least one matched hook requires root filtering.
 5. Hooks requiring root scope are excluded when `parentID` is present, while hooks with `rootSessionOnly: false` still run.
 6. Session lookup failures are logged and fail open rather than silently dropping hooks.
-7. `excludeSubagentWait: true` suppresses the hook while tracked foreground `task` calls remain active in the parent session.
-8. Task state is cleared after tool completion and session deletion.
-9. Documentation clarifies that these safeguards do not create a general user-attention signal.
+7. Documentation clarifies that root filtering does not create a general user-attention signal.
 
 ### Caching Consideration
 
@@ -184,7 +181,6 @@ Session parentage does not change after creation, so a small in-memory cache key
 - A foreground subagent completes and its child session emits `session.idle`.
 - Several subagents run and each completed child session emits an idle event.
 - A notification hook should apply only to the primary OpenCode session.
-- The primary session emits idle while a tracked foreground `task` call remains active and the hook enables `excludeSubagentWait`.
 
 ## Cases This Would Not Fully Fix
 
@@ -200,7 +196,7 @@ Those cases require richer upstream semantics, such as:
 - `parentID` and active-child metadata on status events.
 - Explicit session states for waiting on tools, subagents, permissions, or user answers.
 
-## Verification Plan
+## Verification
 
 ### Unit Tests
 
@@ -212,20 +208,16 @@ Tests cover:
 - A child session still runs an idle hook with `rootSessionOnly: false`.
 - A failed session lookup does not crash event processing.
 - Existing `session.created` behavior remains unchanged.
-- `excludeSubagentWait` suppresses only opted-in hooks until every tracked task finishes.
-- Session deletion clears tracked task state.
 
-### Integration/Reproduction Test
+### Real-Host E2E
 
-Run OpenCode with an idle hook that records the event session ID, then invoke a foreground subagent. Capture:
+The pinned OpenCode V1 E2E creates an actual foreground subagent and verifies:
 
-- The primary session ID.
-- The child session ID and `parentID`.
-- The order of `session.status` and `session.idle` events.
-- Whether the primary session emits idle before or after the task tool completes.
-- Whether only the child emits the premature event described by the reporter.
+- OpenCode records the subagent as a child session with a non-empty `parentID`.
+- A default `session.idle` hook executes once for the root session and ignores the child idle event.
+- Setting `rootSessionOnly: false` executes the hook for both child and root idle events.
 
-Repeat with parallel or background subagents if the installed OpenCode version supports them. This determines whether root-session filtering completely addresses the report or only the most common case.
+OpenCode 1.18.18 source was also traced to confirm that foreground task execution remains active until the child finishes. Experimental background subagents have different lifecycle semantics and remain outside this mitigation.
 
 ### Regression Commands
 
@@ -246,11 +238,9 @@ OpenCode emits `session.idle` separately for primary and child/subagent sessions
 
 OpenCode does expose `parentID` when the session is fetched, so the plugin now filters idle events to root/primary sessions by default. This addresses the common case where a child session's idle event causes a premature notification. If you intentionally need idle hooks for every child session, set `rootSessionOnly: false`.
 
-For the separate case where the primary session emits idle during a foreground task, hooks can set `excludeSubagentWait: true`. The plugin tracks active `task` calls and suppresses that hook until they finish.
+This still does not create a general "awaiting user" signal. OpenCode does not expose enough information to guarantee that no experimental background work remains, so a dedicated attention-required event or richer status metadata would still be an upstream improvement.
 
-These safeguards still do not create a general "awaiting user" signal. OpenCode does not expose enough information to guarantee that no untracked background work remains, so a dedicated attention-required event or richer status metadata would still be an upstream improvement.
-
-The implementation includes unit coverage for root sessions, child sessions, the all-session override, mixed hook scopes, creation-event parent metadata, lookup failures, concurrent task calls, and session cleanup.
+The implementation includes unit coverage for root sessions, child sessions, the all-session override, mixed hook scopes, creation-event parent metadata, and lookup failures. A real-host E2E also creates a foreground subagent and verifies both the default and `rootSessionOnly: false` behavior.
 ```
 
 ## Recommendation

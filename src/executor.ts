@@ -41,7 +41,7 @@ export const matches = (pattern: string | string[] | undefined, value: string | 
  */
 export const filterSessionHooks = (
   hooks: SessionHook[],
-  criteria: { event: string; agent: string | undefined; hasActiveSubagents?: boolean }
+  criteria: { event: string; agent: string | undefined }
 ): SessionHook[] => {
   return hooks.filter((hook) => {
     // Normalize session.start to session.created
@@ -51,11 +51,6 @@ export const filterSessionHooks = (
     }
     
     if (normalizedEvent !== criteria.event) return false
-    if (
-      normalizedEvent === "session.idle" &&
-      hook.when.excludeSubagentWait &&
-      criteria.hasActiveSubagents
-    ) return false
 
     if (hook.when.agent && !criteria.agent) {
       logger.debug(
