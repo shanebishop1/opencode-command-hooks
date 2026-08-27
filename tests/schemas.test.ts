@@ -147,6 +147,17 @@ describe("Zod Schemas", () => {
       expect(result?.when.agent).toEqual(["build", "validator"]);
     });
 
+    it("should support root session filtering", () => {
+      const hook = {
+        id: "root-idle",
+        when: { event: "session.idle", rootSessionOnly: false },
+        run: "echo idle",
+      };
+
+      const result = parseSessionHook(hook);
+      expect(result?.when.rootSessionOnly).toBe(false);
+    });
+
   });
 
   describe("getConfigValidationErrors", () => {

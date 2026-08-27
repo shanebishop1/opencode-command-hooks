@@ -9,6 +9,7 @@ let TEST_CONFIG_DIR = ""
 let TEST_OPENCODE_SUBDIR = ""
 let TEST_OPENCODE_CONFIG = ""
 let TEST_HOOKS_CONFIG = ""
+let TEST_AGENT_DIR = ""
 let TEST_HOME_DIR = ""
 let TEST_XDG_CONFIG_HOME = ""
 let TEST_XDG_DATA_HOME = ""
@@ -26,6 +27,7 @@ function createTestSandbox(): void {
   TEST_OPENCODE_SUBDIR = join(TEST_CONFIG_DIR, ".opencode")
   TEST_OPENCODE_CONFIG = join(TEST_CONFIG_DIR, "opencode.jsonc")
   TEST_HOOKS_CONFIG = join(TEST_OPENCODE_SUBDIR, "command-hooks.jsonc")
+  TEST_AGENT_DIR = join(TEST_OPENCODE_SUBDIR, "agent")
   TEST_HOME_DIR = join(TEST_SANDBOX_DIR, "home")
   TEST_XDG_CONFIG_HOME = join(TEST_SANDBOX_DIR, "xdg-config")
   TEST_XDG_DATA_HOME = join(TEST_SANDBOX_DIR, "xdg-data")
@@ -206,6 +208,11 @@ function writeTestConfig(config: object): void {
   writeFileSync(TEST_HOOKS_CONFIG, JSON.stringify(config, null, 2))
 }
 
+function writeTestAgent(name: string, content: string): void {
+  mkdirSync(TEST_AGENT_DIR, { recursive: true })
+  writeFileSync(join(TEST_AGENT_DIR, `${name}.md`), content)
+}
+
 /**
  * Write OpenCode plugin configuration to enable the plugin in the test config directory
  */
@@ -261,6 +268,26 @@ async function waitForFileContent(
     await new Promise(resolve => setTimeout(resolve, intervalMs))
   }
   return content
+}
+
+async function waitForMinimumLineCount(
+  filePath: string,
+  minimum: number,
+  timeoutMs = 10000,
+  intervalMs = 500
+): Promise<number> {
+  const start = Date.now()
+  let count = 0
+  while (Date.now() - start < timeoutMs) {
+    try {
+      count = readFileSync(filePath, "utf-8").split(/\r?\n/).filter(Boolean).length
+      if (count >= minimum) return count
+    } catch {
+      count = 0
+    }
+    await new Promise(resolve => setTimeout(resolve, intervalMs))
+  }
+  return count
 }
 
 /**
@@ -339,4 +366,63 @@ describe.skipIf(!E2E_ENABLED)("V1 headless real-host E2E", () => {
       }
     }
   }, 150000)
+
+  it("filters real child-session idle events by default and supports opting out", async () => {
+    const uniqueId = generateUniqueId()
+    const rootOnlyFileName = `root-idle-${uniqueId}.txt`
+    const allSessionsFileName = `all-idle-${uniqueId}.txt`
+    const rootOnlyFilePath = join(TEST_CONFIG_DIR, rootOnlyFileName)
+    const allSessionsFilePath = join(TEST_CONFIG_DIR, allSessionsFileName)
+    const runSubagent = () => runOpenCode(
+      "Use the task tool to invoke the e2e-worker subagent. Ask it to reply exactly WORKER_DONE, then reply exactly PARENT_DONE."
+    )
+
+    writeTestAgent("e2e-worker", `---
+description: E2E worker that returns a fixed response
+mode: subagent
+model: ${E2E_MODEL}
+---
+
+Reply exactly WORKER_DONE.
+`)
+
+    try {
+      writeTestConfig({
+        session: [
+          {
+            id: `root-idle-${uniqueId}`,
+            when: { event: "session.idle" },
+            run: `printf 'idle\\n' >> '${rootOnlyFileName}'`,
+          },
+        ],
+      })
+
+      await runSubagent()
+      expect(await waitForMinimumLineCount(rootOnlyFilePath, 1)).toBe(1)
+
+      const logContent = getRecentLogContent()
+      const childCreation = logContent
+        .split("\n")
+        .find(line => line.includes("message=created") && line.includes("agent=e2e-worker"))
+      expect(childCreation).toBeDefined()
+      expect(childCreation).not.toContain("parentID=undefined")
+
+      writeTestConfig({
+        session: [
+          {
+            id: `all-idle-${uniqueId}`,
+            when: { event: "session.idle", rootSessionOnly: false },
+            run: `printf 'idle\\n' >> '${allSessionsFileName}'`,
+          },
+        ],
+      })
+
+      await runSubagent()
+      expect(await waitForMinimumLineCount(allSessionsFilePath, 2)).toBeGreaterThanOrEqual(2)
+    } finally {
+      for (const filePath of [rootOnlyFilePath, allSessionsFilePath]) {
+        if (existsSync(filePath)) unlinkSync(filePath)
+      }
+    }
+  }, 300000)
 })

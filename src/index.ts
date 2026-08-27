@@ -1,6 +1,6 @@
 import type { Plugin } from "@opencode-ai/plugin"
 import type { Config, OpencodeClient } from "@opencode-ai/sdk"
-import type { CommandHooksConfig, HookExecutionContext } from "./types/hooks.js"
+import type { CommandHooksConfig, HookExecutionContext, SessionHook } from "./types/hooks.js"
 import { createLogger, setGlobalLogger, logger } from "./logging.js"
 import { executeHooks, filterSessionHooks, filterToolHooks } from "./executor.js"
 import { normalizeString } from "./utils.js"
@@ -46,6 +46,8 @@ const AFTER_HOOK_DEDUPE_TTL_MS = 60 * 1000
 const toolCallArgsCache = new Map<string, ToolArgsCacheEntry>()
 const afterHookCallCache = new Map<string, number>()
 const notifiedConfigErrors = new Set<string>()
+
+type SessionParentId = string | null | undefined
 
 type ChatParamsOutput = {
   options?: Record<string, unknown>
@@ -127,11 +129,40 @@ const deleteToolArgs = (callId: string | undefined): void => {
 /**
  * Handle a session lifecycle event (session.created or session.idle)
  */
+const isRootSessionOnlyHook = (
+  hook: SessionHook,
+  eventType: "session.created" | "session.idle",
+): boolean => hook.when.rootSessionOnly ?? eventType === "session.idle"
+
+const resolveRootSession = async (
+  sessionId: string,
+  parentId: SessionParentId,
+  client: OpencodeClient,
+): Promise<boolean | undefined> => {
+  if (parentId !== undefined) {
+    return parentId === null
+  }
+
+  try {
+    const result = await client.session.get({ path: { id: sessionId } })
+    if (!result.data) {
+      logger.error(`Could not determine parent session for ${sessionId}; running hooks without root filtering`)
+      return undefined
+    }
+    return !result.data.parentID
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    logger.error(`Failed to fetch session ${sessionId}: ${errorMessage}; running hooks without root filtering`)
+    return undefined
+  }
+}
+
 const handleSessionEvent = async (
   eventType: "session.created" | "session.idle",
   sessionId: string | undefined,
   agent: string | undefined,
-  client: OpencodeClient
+  client: OpencodeClient,
+  parentId: SessionParentId = undefined,
 ): Promise<void> => {
   if (!sessionId) {
     logger.debug(`${eventType} event missing session ID`)
@@ -149,10 +180,17 @@ const handleSessionEvent = async (
     const markdownConfig = { tool: [], session: [] }
     const { config: mergedConfig } = mergeConfigs(globalConfig, markdownConfig)
 
-    const matchedHooks = filterSessionHooks(mergedConfig.session || [], {
+    let matchedHooks = filterSessionHooks(mergedConfig.session || [], {
       event: eventType,
       agent,
     })
+
+    if (matchedHooks.some((hook) => isRootSessionOnlyHook(hook, eventType))) {
+      const isRootSession = await resolveRootSession(sessionId, parentId, client)
+      if (isRootSession === false) {
+        matchedHooks = matchedHooks.filter((hook) => !isRootSessionOnlyHook(hook, eventType))
+      }
+    }
 
     logger.debug(
       `Matched ${matchedHooks.length} hook(s) for ${eventType}, agent=${agent}`
@@ -291,21 +329,33 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
             logger.debug("Received session.created event")
 
             // session.created has info.id, not sessionID directly
-            const info = event.properties?.info as { id?: string } | undefined
-            const sessionId = info?.id ? normalizeString(info.id) : undefined
-            const agent = normalizeString(event.properties?.agent)
+             const info = event.properties?.info as { id?: string; parentID?: string } | undefined
+             const sessionId = info?.id ? normalizeString(info.id) : undefined
+             const agent = normalizeString(event.properties?.agent)
+             const parentId = info?.parentID ? normalizeString(info.parentID) : null
 
-            await handleSessionEvent("session.created", sessionId, agent, client as OpencodeClient)
-          }
+             await handleSessionEvent(
+               "session.created",
+               sessionId,
+               agent,
+               client as OpencodeClient,
+               parentId,
+             )
+           }
 
-          // Handle session.idle event
+           // Handle session.idle event
           if (event.type === "session.idle") {
             logger.debug("Received session.idle event")
 
             const sessionId = normalizeString(event.properties?.sessionID)
             const agent = normalizeString(event.properties?.agent)
 
-            await handleSessionEvent("session.idle", sessionId, agent, client as OpencodeClient)
+             await handleSessionEvent(
+               "session.idle",
+                sessionId,
+                agent,
+                client as OpencodeClient,
+              )
           }
 
           // Backward-compat fallback for older OpenCode event streams.
@@ -323,14 +373,14 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
               event.properties?.callID ?? event.properties?.callId
             )
 
-            if (!sessionId || !toolName) {
+             if (!sessionId || !toolName) {
               logger.debug(
                 "tool.result event missing sessionID or tool name"
               )
-              return
-            }
+               return
+             }
 
-            if (wasAfterHookProcessed(callId)) {
+             if (wasAfterHookProcessed(callId)) {
               logger.debug(`Skipping duplicate after-hook execution for callID: ${callId}`)
               deleteToolArgs(callId)
               return
@@ -376,13 +426,13 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
             `Received tool.execute.after for tool: ${input.tool}`
           )
 
-          if (!toolOutput) {
+           if (!toolOutput) {
             logger.debug(
               `tool.execute.after for ${input.tool} has no output payload; running hooks with cached args only`
-            )
-          }
+             )
+           }
 
-          const storedToolArgs = getToolArgs(input.callID)
+           const storedToolArgs = getToolArgs(input.callID)
           await handleToolExecutionHook("after", input, storedToolArgs, client as OpencodeClient)
         },
     }

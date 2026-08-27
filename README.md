@@ -373,11 +373,37 @@ Tool-arg matching is exact. This example runs only when the tool arg `path` equa
     {
       "id": "session-idle",
       "when": { "event": "session.idle" },
-      "run": ["echo 'Session idle'"],
+      "run": ["notify-user.sh 'Waiting for input'"],
     },
   ],
 }
 ```
+
+`session.idle` hooks run only for root sessions by default, preventing a completed
+subagent's child session from producing a premature idle notification. Set
+`rootSessionOnly` to `false` to run the hook for root and child sessions:
+
+```jsonc
+{
+  "session": [
+    {
+      "id": "every-session-idle",
+      "when": {
+        "event": "session.idle",
+        "rootSessionOnly": false,
+      },
+      "run": ["echo 'Any session idle'"],
+    },
+  ],
+}
+```
+
+For `session.created` and its `session.start` alias, `rootSessionOnly` defaults to
+`false` and can be set to `true` explicitly. Root-only idle filtering identifies
+child sessions through OpenCode's `parentID`; it does not guarantee that no
+background work remains or that OpenCode is specifically waiting for user input.
+If session lookup fails, hooks run without root filtering rather than being
+silently dropped.
 
 ---
 
