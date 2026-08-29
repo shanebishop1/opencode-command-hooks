@@ -263,14 +263,15 @@ const loadConfigFromPath = async (
  * - If project has parse error: returns error
  * - Never throws errors - always returns a valid config
  *
+ * @param startDir - Project directory to search upward from
  * @returns Promise resolving to GlobalConfigResult
  */
-export const loadGlobalConfig = async (): Promise<GlobalConfigResult> => {
+export const loadGlobalConfig = async (startDir = process.cwd()): Promise<GlobalConfigResult> => {
   try {
-    logger.debug(`loadGlobalConfig: starting search from: ${process.cwd()}`);
+    logger.debug(`loadGlobalConfig: starting search from: ${startDir}`);
 
     // Step 1: Load project config first (to check ignoreGlobalConfig flag)
-    const projectConfigPath = await findProjectConfigFile(process.cwd());
+    const projectConfigPath = await findProjectConfigFile(startDir);
     const projectResult = projectConfigPath
       ? await loadConfigFromPath(projectConfigPath, "project")
       : { config: emptyConfig(), error: null };

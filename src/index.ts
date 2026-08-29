@@ -162,6 +162,7 @@ const handleSessionEvent = async (
   sessionId: string | undefined,
   agent: string | undefined,
   client: OpencodeClient,
+  projectDirectory: string,
   parentId: SessionParentId = undefined,
 ): Promise<void> => {
   if (!sessionId) {
@@ -174,7 +175,7 @@ const handleSessionEvent = async (
   }
 
   try {
-    const { config: globalConfig, error: globalConfigError } = await loadGlobalConfig()
+    const { config: globalConfig, error: globalConfigError } = await loadGlobalConfig(projectDirectory)
     await notifyConfigError(globalConfigError, sessionId, client)
 
     const markdownConfig = { tool: [], session: [] }
@@ -199,6 +200,7 @@ const handleSessionEvent = async (
     const context: HookExecutionContext = {
       sessionId,
       agent: agent || "unknown",
+      directory: projectDirectory,
     }
 
     await executeHooks(matchedHooks, context, client, mergedConfig.truncationLimit)
@@ -215,7 +217,8 @@ const handleToolExecutionHook = async (
   phase: "before" | "after",
   input: { tool: string; sessionID: string; callID?: string },
   toolArgs: Record<string, unknown> | undefined,
-  client: OpencodeClient
+  client: OpencodeClient,
+  projectDirectory: string,
 ): Promise<void> => {
   if (phase === "before") {
     storeToolArgs(input.callID, toolArgs)
@@ -226,7 +229,7 @@ const handleToolExecutionHook = async (
   }
 
   try {
-    const { config: globalConfig, error: globalConfigError } = await loadGlobalConfig()
+    const { config: globalConfig, error: globalConfigError } = await loadGlobalConfig(projectDirectory)
     await notifyConfigError(globalConfigError, input.sessionID, client)
 
     let agentConfig: CommandHooksConfig = { tool: [], session: [] }
@@ -236,7 +239,7 @@ const handleToolExecutionHook = async (
       subagentType = normalizeString(toolArgs.subagent_type) || undefined
       if (subagentType) {
         logger.debug(`Detected task tool call with subagent_type: ${subagentType}`)
-        agentConfig = await loadAgentConfig(subagentType)
+        agentConfig = await loadAgentConfig(subagentType, projectDirectory)
       }
     }
 
@@ -258,6 +261,7 @@ const handleToolExecutionHook = async (
       tool: input.tool,
       callId: input.callID,
       toolArgs,
+      directory: projectDirectory,
     }
 
     await executeHooks(matchedHooks, context, client, mergedConfig.truncationLimit)
@@ -288,9 +292,10 @@ const handleToolExecutionHook = async (
  * - Lightweight in-memory caching for tool args + dedupe
  * - Unified executor handles all hook matching and execution
  */
-export const CommandHooksPlugin: Plugin = async ({ client }) => {
+export const CommandHooksPlugin: Plugin = async ({ client, directory }) => {
   const clientLogger = createLogger(client)
   setGlobalLogger(clientLogger)
+  const projectDirectory = directory || process.cwd()
   
   try {
     logger.info("Initializing OpenCode Command Hooks plugin...")
@@ -339,6 +344,7 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
                sessionId,
                agent,
                client as OpencodeClient,
+               projectDirectory,
                parentId,
              )
            }
@@ -355,6 +361,7 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
                 sessionId,
                 agent,
                 client as OpencodeClient,
+                projectDirectory,
               )
           }
 
@@ -392,6 +399,7 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
               { tool: toolName, sessionID: sessionId, callID: callId },
               storedToolArgs,
               client as OpencodeClient,
+              projectDirectory,
             )
           }
        },
@@ -411,7 +419,13 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
              `Tool args: ${JSON.stringify(output.args)}`
            )
 
-           await handleToolExecutionHook("before", input, output.args, client as OpencodeClient)
+           await handleToolExecutionHook(
+             "before",
+             input,
+             output.args,
+             client as OpencodeClient,
+             projectDirectory,
+           )
         },
 
         /**
@@ -433,7 +447,13 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
            }
 
            const storedToolArgs = getToolArgs(input.callID)
-          await handleToolExecutionHook("after", input, storedToolArgs, client as OpencodeClient)
+          await handleToolExecutionHook(
+            "after",
+            input,
+            storedToolArgs,
+            client as OpencodeClient,
+            projectDirectory,
+          )
         },
     }
 

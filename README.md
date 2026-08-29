@@ -177,9 +177,10 @@ Add to your `opencode.json`:
 The plugin loads hooks from two locations:
 
 1. **User global**: `~/.config/opencode/command-hooks.jsonc` — hooks that apply to all projects
-2. **Project**: `.opencode/command-hooks.jsonc` — project-specific hooks (searches upward from cwd)
+2. **Project**: `.opencode/command-hooks.jsonc` — project-specific hooks (searches upward from the project directory supplied by OpenCode)
 
 Both are merged by default. See [Configuration Precedence](#configuration-precedence) for details.
+Relative hook commands execute from that same OpenCode project directory.
 
 ### JSON Config
 
@@ -227,7 +228,7 @@ hooks:
 Hooks are loaded from two locations and merged:
 
 1. **User global config**: `~/.config/opencode/command-hooks.jsonc`
-2. **Project config**: `.opencode/command-hooks.jsonc` (searches upward from cwd)
+2. **Project config**: `.opencode/command-hooks.jsonc` (searches upward from the project directory supplied by OpenCode)
 
 **Merge behavior:**
 

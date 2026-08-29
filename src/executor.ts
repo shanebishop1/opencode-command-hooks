@@ -233,12 +233,15 @@ const executeHook = async (
        logger.debug(`Executing with default truncation (30000)`)
      }
 
-     const results = hook.run
-       ? await executeCommands(
-           hook.run,
-           hook.id,
-           truncationLimit !== undefined ? { truncateOutput: truncationLimit } : undefined
-         )
+      const results = hook.run
+        ? await executeCommands(
+            hook.run,
+            hook.id,
+            {
+              truncateOutput: truncationLimit,
+              cwd: context.directory,
+            },
+          )
        : []
 
       logger.debug(
