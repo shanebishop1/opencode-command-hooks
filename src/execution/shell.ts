@@ -48,7 +48,7 @@ const truncateText = (text: string | undefined, limit: number): string => {
  */
 export async function executeCommand(
    command: string,
-   options?: { truncateOutput?: number }
+   options?: { truncateOutput?: number; cwd?: string }
 ): Promise<HookExecutionResult> {
    const truncateLimit = options?.truncateOutput ?? DEFAULT_TRUNCATE_LIMIT
   const hookId = "command" // Will be set by caller
@@ -60,7 +60,7 @@ export async function executeCommand(
   try {
     // Execute command using Bun's $ template literal with nothrow to prevent throwing on non-zero exit
     // We need to use dynamic template literal evaluation
-    const result = await executeShellCommand(command)
+    const result = await executeShellCommand(command, options?.cwd)
 
     const stdout = truncateText(result.stdout, truncateLimit)
     const stderr = truncateText(result.stderr, truncateLimit)
@@ -114,7 +114,7 @@ export async function executeCommand(
 export async function executeCommands(
   commands: string | string[],
   hookId: string,
-  options?: { truncateOutput?: number }
+  options?: { truncateOutput?: number; cwd?: string }
 ): Promise<HookExecutionResult[]> {
   const truncateLimit = options?.truncateOutput ?? DEFAULT_TRUNCATE_LIMIT
   const commandArray = Array.isArray(commands) ? commands : [commands]
@@ -131,7 +131,7 @@ export async function executeCommands(
           logger.debug(`[${hookId}] Executing: ${command}`)
         }
 
-      const result = await executeShellCommand(command)
+      const result = await executeShellCommand(command, options?.cwd)
 
       const stdout = truncateText(result.stdout, truncateLimit)
       const stderr = truncateText(result.stderr, truncateLimit)
@@ -172,16 +172,20 @@ export async function executeCommands(
  * exit codes and .quiet() to capture output without printing to console.
  *
  * @param command - Shell command to execute
+ * @param cwd - Optional working directory for the command
  * @returns Object with stdout, stderr, and exitCode
  */
 const executeShellCommand = async (
-  command: string
+  command: string,
+  cwd?: string,
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
    try {
      // Use Bun's $ template literal to execute the command
      // The nothrow() method prevents throwing on non-zero exit codes
      // The quiet() method suppresses output and returns Buffers
-     const result = await Bun.$`${{ raw: command }}`.nothrow().quiet()
+     const shell = Bun.$`${{ raw: command }}`
+     if (cwd) shell.cwd(cwd)
+     const result = await shell.nothrow().quiet()
 
      // Extract stdout and stderr as text
      // result.stdout and result.stderr are Buffers, convert to string

@@ -310,6 +310,9 @@ export interface HookExecutionContext {
   /** Current agent name */
   agent: string
 
+  /** Project directory supplied by OpenCode. */
+  directory?: string
+
   /** Tool name (for tool hooks) */
   tool?: string
 
