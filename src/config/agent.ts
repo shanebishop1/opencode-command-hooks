@@ -50,6 +50,7 @@ const projectDirs = (startDir: string): string[] => {
  * Returns the first existing path found, or null if no file exists.
  *
  * @param agentName - Name of the agent to resolve (without .md extension)
+ * @param startDir - Project directory to search upward from
  * @returns Promise resolving to absolute path of the agent markdown file, or null if not found
  *
  * @example
@@ -118,6 +119,7 @@ export async function resolveAgentPath(
  * - Never throws errors - always returns a valid config
  *
  * @param agentName - Name of the agent to load configuration for
+ * @param startDir - Project directory to search upward from
  * @returns Promise resolving to CommandHooksConfig (may be empty)
  *
  * @example

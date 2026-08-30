@@ -22,11 +22,13 @@ const createProject = async (config: Record<string, unknown>): Promise<string> =
 const createContext = (
   directory: string,
   events: Record<string, unknown>[] = [],
+  parentID?: string,
 ) => {
   const callbacks = new Map<string, ToolCallback>()
   const disposed: string[] = []
   const syntheticCalls: Array<Record<string, unknown>> = []
   const context: V2Context = {
+    location: { directory },
     tool: {
       hook: async (name, callback) => {
         callbacks.set(name, callback as ToolCallback)
@@ -42,6 +44,7 @@ const createContext = (
       get: async ({ sessionID }) => ({
         id: sessionID,
         agent: "build",
+        parentID,
         location: { directory },
       }),
       synthetic: async (input) => {
@@ -82,7 +85,7 @@ describe("OpenCode V2 plugin", () => {
     await callbacks.get("execute.after")?.({
       tool: "bash",
       sessionID: "session-1",
-      callID: "call-1",
+      id: "call-1",
       agent: "build",
       input: { command: "pwd" },
       result: {},
@@ -138,6 +141,7 @@ describe("OpenCode V2 plugin", () => {
     await cleanup?.()
 
     const failing = createContext(directory)
+    failing.context.location.directory = ""
     failing.context.session.get = async () => {
       throw new Error("session lookup failed")
     }
@@ -148,7 +152,7 @@ describe("OpenCode V2 plugin", () => {
       failing.callbacks.get("execute.before")?.({
         tool: "bash",
         sessionID: "missing",
-        callID: "call-2",
+        id: "call-2",
         agent: "build",
         input: {},
       }),
@@ -186,6 +190,32 @@ describe("OpenCode V2 plugin", () => {
     await new Promise(resolve => setTimeout(resolve, 20))
 
     expect(syntheticCalls.map(call => call.text)).toEqual(["durable started", "durable idle"])
+    await cleanup?.()
+  })
+
+  it("keeps default idle hooks on root sessions unless child sessions are enabled", async () => {
+    const directory = await createProject({
+      session: [
+        { id: "root-only", when: { event: "session.idle" }, inject: "root only" },
+        {
+          id: "all-sessions",
+          when: { event: "session.idle", rootSessionOnly: false },
+          inject: "all sessions",
+        },
+      ],
+    })
+    const events = [{
+      id: "child-idle",
+      type: "session.idle",
+      location: { directory },
+      data: { sessionID: "child" },
+    }]
+    const { context, syntheticCalls } = createContext(directory, events, "parent")
+    const cleanup = await createV2Plugin().setup(context)
+
+    await new Promise(resolve => setTimeout(resolve, 20))
+
+    expect(syntheticCalls.map(call => call.text)).toEqual(["all sessions"])
     await cleanup?.()
   })
 
@@ -232,6 +262,7 @@ describe("OpenCode V2 plugin", () => {
     const subagent = {
       tool: "subagent",
       sessionID: "parent",
+      id: "subagent-call",
       agent: "build",
       input: { agent: "worker" },
     }
@@ -284,6 +315,7 @@ describe("OpenCode V2 plugin", () => {
     await callbacks.get("execute.before")?.({
       tool: "subagent",
       sessionID: "parent",
+      id: "subagent-call",
       agent: "build",
       input: { agent: "worker" },
     })
@@ -311,7 +343,7 @@ describe("OpenCode V2 plugin", () => {
     const event = {
       tool: "bash",
       sessionID: "session-3",
-      callID: "call-3",
+      id: "call-3",
       agent: "build",
       input: {},
     }

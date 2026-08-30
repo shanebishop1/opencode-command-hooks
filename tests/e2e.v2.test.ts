@@ -5,7 +5,7 @@ import { join, resolve } from "path"
 import { $ } from "bun"
 
 const enabled = process.env.OPENCODE2_E2E === "1"
-const cliVersion = "0.0.0-next-15853"
+const cliVersion = "0.0.0-beta-18684"
 let projectDirectory = ""
 
 describe("OpenCode V2 package E2E", () => {

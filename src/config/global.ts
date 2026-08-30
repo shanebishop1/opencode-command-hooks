@@ -264,6 +264,7 @@ const loadConfigFromPath = async (
  * - If project has parse error: returns error
  * - Never throws errors - always returns a valid config
  *
+ * @param startDir - Project directory to search upward from
  * @returns Promise resolving to GlobalConfigResult
  */
 export const loadGlobalConfig = async (startDir = process.cwd()): Promise<GlobalConfigResult> => {

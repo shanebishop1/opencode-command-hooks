@@ -1,6 +1,6 @@
-import type { Plugin } from "@opencode-ai/plugin"
-import type { Config, OpencodeClient } from "@opencode-ai/sdk"
-import type { CommandHooksConfig, HookExecutionContext } from "./types/hooks.js"
+import type { Config, Plugin } from "@opencode-ai/plugin"
+import type { OpencodeClient } from "@opencode-ai/sdk"
+import type { CommandHooksConfig, HookExecutionContext, SessionHook } from "./types/hooks.js"
 import { createLogger, setGlobalLogger, logger } from "./logging.js"
 import { executeHooks, filterSessionHooks, filterToolHooks, type HookHost } from "./executor.js"
 import { normalizeString } from "./utils.js"
@@ -47,6 +47,8 @@ const AFTER_HOOK_DEDUPE_TTL_MS = 60 * 1000
 const toolCallArgsCache = new Map<string, ToolArgsCacheEntry>()
 const afterHookCallCache = new Map<string, number>()
 const notifiedConfigErrors = new Set<string>()
+
+type SessionParentId = string | null | undefined
 
 type ChatParamsOutput = {
   options?: Record<string, unknown>
@@ -128,6 +130,34 @@ const deleteToolArgs = (callId: string | undefined): void => {
 /**
  * Handle a session lifecycle event (session.created or session.idle)
  */
+const isRootSessionOnlyHook = (
+  hook: SessionHook,
+  eventType: "session.created" | "session.idle",
+): boolean => hook.when.rootSessionOnly ?? eventType === "session.idle"
+
+const resolveRootSession = async (
+  sessionId: string,
+  parentId: SessionParentId,
+  client: OpencodeClient,
+): Promise<boolean | undefined> => {
+  if (parentId !== undefined) {
+    return parentId === null
+  }
+
+  try {
+    const result = await client.session.get({ path: { id: sessionId } })
+    if (!result.data) {
+      logger.error(`Could not determine parent session for ${sessionId}; running hooks without root filtering`)
+      return undefined
+    }
+    return !result.data.parentID
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    logger.error(`Failed to fetch session ${sessionId}: ${errorMessage}; running hooks without root filtering`)
+    return undefined
+  }
+}
+
 const handleSessionEvent = async (
   eventType: "session.created" | "session.idle",
   sessionId: string | undefined,
@@ -135,6 +165,7 @@ const handleSessionEvent = async (
   client: OpencodeClient,
   host: HookHost,
   hasActiveSubagents: boolean,
+  parentId: SessionParentId = undefined,
 ): Promise<void> => {
   if (!sessionId) {
     logger.debug(`${eventType} event missing session ID`)
@@ -152,11 +183,18 @@ const handleSessionEvent = async (
     const markdownConfig = { tool: [], session: [] }
     const { config: mergedConfig } = mergeConfigs(globalConfig, markdownConfig)
 
-    const matchedHooks = filterSessionHooks(mergedConfig.session || [], {
+    let matchedHooks = filterSessionHooks(mergedConfig.session || [], {
       event: eventType,
       agent,
       hasActiveSubagents,
     })
+
+    if (matchedHooks.some((hook) => isRootSessionOnlyHook(hook, eventType))) {
+      const isRootSession = await resolveRootSession(sessionId, parentId, client)
+      if (isRootSession === false) {
+        matchedHooks = matchedHooks.filter((hook) => !isRootSessionOnlyHook(hook, eventType))
+      }
+    }
 
     logger.debug(
       `Matched ${matchedHooks.length} hook(s) for ${eventType}, agent=${agent}`
@@ -179,7 +217,7 @@ const handleSessionEvent = async (
  */
 const handleToolExecutionHook = async (
   phase: "before" | "after",
-  input: { tool: string; sessionID: string; callID?: string },
+  input: { tool: string; sessionID: string; callID?: string; args?: Record<string, unknown> },
   toolArgs: Record<string, unknown> | undefined,
   client: OpencodeClient,
   host: HookHost,
@@ -255,12 +293,12 @@ const handleToolExecutionHook = async (
  * - Lightweight in-memory caching for tool args + dedupe
  * - Unified executor handles all hook matching and execution
  */
-export const CommandHooksPlugin: Plugin = async ({ client }) => {
+export const CommandHooksPlugin: Plugin = async ({ client, directory }) => {
   const clientLogger = createLogger(client)
   setGlobalLogger(clientLogger)
   const typedClient = client as OpencodeClient
   const host: HookHost = {
-    cwd: process.cwd(),
+    cwd: directory || process.cwd(),
     inject: async (sessionId, message) => {
       await typedClient.session.promptAsync({
         path: { id: sessionId },
@@ -278,7 +316,7 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
   try {
     logger.info("Initializing OpenCode Command Hooks plugin...")
 
-     const hooks = {
+    const hooks = {
       /**
        * Config hook for plugin initialization
        * Called by OpenCode during plugin initialization to provide configuration.
@@ -298,56 +336,57 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
         stripHookProviderOptions(output)
       },
 
-       /**
-        * Event hook for session lifecycle events
-        * Supports: session.start, session.idle, tool.result
-        *
-        * Note: The Plugin type from @opencode-ai/plugin may not include session.start
-        * in its event type union, but it is documented as a supported event in the
-        * OpenCode SDK. We use a type assertion to allow this event type.
-        */
-         event: async ({ event }: { event: { type: string; properties?: Record<string, unknown> } }) => {
-           // Handle session.created event
-           if (event.type === "session.created") {
-            logger.debug("Received session.created event")
+      /**
+       * Event hook for session lifecycle events
+       * Supports: session.start, session.idle, tool.result
+       *
+       * Note: The Plugin type from @opencode-ai/plugin may not include session.start
+       * in its event type union, but it is documented as a supported event in the
+       * OpenCode SDK. We use a type assertion to allow this event type.
+       */
+      event: async ({ event }: { event: { type: string; properties?: Record<string, unknown> } }) => {
+        // Handle session.created event
+        if (event.type === "session.created") {
+          logger.debug("Received session.created event")
 
-            // session.created has info.id, not sessionID directly
-            const info = event.properties?.info as { id?: string } | undefined
-            const sessionId = info?.id ? normalizeString(info.id) : undefined
-            const agent = normalizeString(event.properties?.agent)
+          // session.created has info.id, not sessionID directly
+          const info = event.properties?.info as { id?: string; parentID?: string; agent?: string } | undefined
+          const sessionId = info?.id ? normalizeString(info.id) : undefined
+          const agent = normalizeString(info?.agent ?? event.properties?.agent)
+          const parentId = info?.parentID ? normalizeString(info.parentID) : null
 
-             await handleSessionEvent(
-               "session.created",
-               sessionId,
-               agent,
-               typedClient,
-               host,
-               sessionId ? activeSubagents.hasActive(sessionId) : false,
-             )
-           }
+          await handleSessionEvent(
+            "session.created",
+            sessionId,
+            agent,
+            typedClient,
+            host,
+            sessionId ? activeSubagents.hasActive(sessionId) : false,
+            parentId,
+          )
+        }
 
-           if (event.type === "session.deleted") {
-             const info = event.properties?.info as { id?: string } | undefined
-             const sessionId = info?.id ? normalizeString(info.id) : undefined
-             if (sessionId) activeSubagents.clear(sessionId)
-           }
+        if (event.type === "session.deleted") {
+          const info = event.properties?.info as { id?: string } | undefined
+          const sessionId = info?.id ? normalizeString(info.id) : undefined
+          if (sessionId) activeSubagents.clear(sessionId)
+        }
+        // Handle session.idle event
+        if (event.type === "session.idle") {
+          logger.debug("Received session.idle event")
 
-           // Handle session.idle event
-          if (event.type === "session.idle") {
-            logger.debug("Received session.idle event")
+          const sessionId = normalizeString(event.properties?.sessionID)
+          const agent = normalizeString(event.properties?.agent)
 
-            const sessionId = normalizeString(event.properties?.sessionID)
-            const agent = normalizeString(event.properties?.agent)
-
-             await handleSessionEvent(
-               "session.idle",
-               sessionId,
-               agent,
-               typedClient,
-               host,
-               sessionId ? activeSubagents.hasActive(sessionId) : false,
-             )
-          }
+          await handleSessionEvent(
+            "session.idle",
+            sessionId,
+            agent,
+            typedClient,
+            host,
+            sessionId ? activeSubagents.hasActive(sessionId) : false,
+          )
+        }
 
           // Backward-compat fallback for older OpenCode event streams.
           // Newer builds should already trigger tool.execute.after.
@@ -364,16 +403,16 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
               event.properties?.callID ?? event.properties?.callId
             )
 
-             if (!sessionId || !toolName) {
+            if (!sessionId || !toolName) {
               logger.debug(
                 "tool.result event missing sessionID or tool name"
               )
-               return
-             }
+              return
+            }
 
-             if (toolName === "task") activeSubagents.end(sessionId, callId)
+            if (toolName === "task") activeSubagents.end(sessionId, callId)
 
-             if (wasAfterHookProcessed(callId)) {
+            if (wasAfterHookProcessed(callId)) {
               logger.debug(`Skipping duplicate after-hook execution for callID: ${callId}`)
               deleteToolArgs(callId)
               return
@@ -384,55 +423,55 @@ export const CommandHooksPlugin: Plugin = async ({ client }) => {
               "after",
               { tool: toolName, sessionID: sessionId, callID: callId },
               storedToolArgs,
-               typedClient,
-               host,
+              typedClient,
+              host,
             )
           }
-       },
+      },
 
-        /**
-         * Tool execution before hook
-         * Runs before a tool is executed
-         */
-         "tool.execute.before": async (
-           input: { tool: string; sessionID: string; callID: string },
-           output: { args: Record<string, unknown> }
-         ) => {
-           logger.debug(
-             `Received tool.execute.before for tool: ${input.tool}`
-           )
-           logger.debug(
-             `Tool args: ${JSON.stringify(output.args)}`
-           )
+      /**
+       * Tool execution before hook
+       * Runs before a tool is executed
+       */
+      "tool.execute.before": async (
+        input: { tool: string; sessionID: string; callID: string },
+        output: { args: Record<string, unknown> }
+      ) => {
+        logger.debug(
+          `Received tool.execute.before for tool: ${input.tool}`
+        )
+        logger.debug(
+          `Tool args: ${JSON.stringify(output.args)}`
+        )
 
-           if (input.tool === "task") activeSubagents.begin(input.sessionID, input.callID)
+        if (input.tool === "task") activeSubagents.begin(input.sessionID, input.callID)
 
-           await handleToolExecutionHook("before", input, output.args, typedClient, host)
-        },
+        await handleToolExecutionHook("before", input, output.args, typedClient, host)
+      },
 
-        /**
-         * Tool execution after hook
-         * Runs after a tool completes.
-         */
-        "tool.execute.after": async (
-          input: { tool: string; sessionID: string; callID: string },
-          toolOutput?: { title: string; output: string; metadata: Record<string, unknown> }
-        ) => {
+      /**
+       * Tool execution after hook
+       * Runs after a tool completes.
+       */
+      "tool.execute.after": async (
+        input: { tool: string; sessionID: string; callID: string; args?: Record<string, unknown> },
+        toolOutput?: { title: string; output: string; metadata: Record<string, unknown> }
+      ) => {
+        logger.debug(
+          `Received tool.execute.after for tool: ${input.tool}`
+        )
+
+        if (!toolOutput) {
           logger.debug(
-            `Received tool.execute.after for tool: ${input.tool}`
+            `tool.execute.after for ${input.tool} has no output payload; running hooks with cached args only`
           )
+        }
 
-           if (!toolOutput) {
-            logger.debug(
-              `tool.execute.after for ${input.tool} has no output payload; running hooks with cached args only`
-             )
-           }
+        if (input.tool === "task") activeSubagents.end(input.sessionID, input.callID)
 
-           if (input.tool === "task") activeSubagents.end(input.sessionID, input.callID)
-
-           const storedToolArgs = getToolArgs(input.callID)
-          await handleToolExecutionHook("after", input, storedToolArgs, typedClient, host)
-        },
+        const toolArgs = input.args ?? getToolArgs(input.callID)
+        await handleToolExecutionHook("after", input, toolArgs, typedClient, host)
+      },
     }
 
     logger.info(`Plugin returning hooks: ${Object.keys(hooks).join(", ")}`)

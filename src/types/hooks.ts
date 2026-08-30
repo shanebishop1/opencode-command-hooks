@@ -185,6 +185,12 @@ export interface SessionHookWhen {
 
   /** Skip this idle hook while the session has active subagent tool calls. */
   excludeSubagentWait?: boolean
+
+  /**
+   * Restrict the hook to root sessions. Defaults to true for session.idle and
+   * false for other session events.
+   */
+  rootSessionOnly?: boolean
 }
 
 /**
@@ -306,6 +312,9 @@ export interface HookExecutionContext {
 
   /** Current agent name */
   agent: string
+
+  /** Project directory supplied by OpenCode. */
+  directory?: string
 
   /** Tool name (for tool hooks) */
   tool?: string

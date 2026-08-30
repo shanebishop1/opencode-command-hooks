@@ -1,4 +1,4 @@
-import type { CommandHooksConfig, HookExecutionContext } from "../types/hooks.js"
+import type { CommandHooksConfig, HookExecutionContext, SessionHook } from "../types/hooks.js"
 import { loadGlobalConfig } from "../config/global.js"
 import { loadAgentConfig } from "../config/agent.js"
 import { mergeConfigs } from "../config/merge.js"
@@ -9,7 +9,7 @@ import { createActiveSubagentTracker } from "../subagent-tracker.js"
 type V2ToolEvent = {
   tool: string
   sessionID: string
-  callID?: string
+  id: string
   agent?: string
   input: unknown
 }
@@ -24,10 +24,12 @@ type V2Event = {
 type V2SessionInfo = {
   id: string
   agent?: string
+  parentID?: string
   location: { directory: string; workspaceID?: string }
 }
 
 export interface V2Context {
+  location: { directory: string; workspaceID?: string }
   tool: {
     hook: (
       name: "execute.before" | "execute.after",
@@ -55,6 +57,11 @@ export interface V2Plugin {
 }
 
 const emptyConfig = (): CommandHooksConfig => ({ tool: [], session: [] })
+
+const isRootSessionOnlyHook = (
+  hook: SessionHook,
+  eventType: "session.created" | "session.idle",
+): boolean => hook.when.rootSessionOnly ?? eventType === "session.idle"
 
 const asRecord = (value: unknown): Record<string, unknown> | undefined =>
   typeof value === "object" && value !== null && !Array.isArray(value)
@@ -133,18 +140,20 @@ export const createV2Plugin = (): V2Plugin => ({
     const sessionInfo = async (
       sessionID: string,
       fallback?: { directory?: string; agent?: string },
-    ): Promise<{ directory: string; agent: string | undefined }> => {
+    ): Promise<{ directory: string; agent: string | undefined; isRoot: boolean | undefined }> => {
       try {
         const session = await ctx.session.get({ sessionID })
         return {
           directory: session.location.directory,
           agent: normalizeString(session.agent) || normalizeString(fallback?.agent) || undefined,
+          isRoot: !session.parentID,
         }
       } catch (error) {
         if (fallback?.directory) {
           return {
             directory: fallback.directory,
             agent: normalizeString(fallback.agent) || undefined,
+            isRoot: undefined,
           }
         }
         throw error
@@ -154,12 +163,15 @@ export const createV2Plugin = (): V2Plugin => ({
     const handleTool = async (phase: "before" | "after", event: V2ToolEvent): Promise<void> => {
       const normalized = toolContext(event)
       if (normalized.toolName === "task") {
-        if (phase === "before") activeSubagents.begin(event.sessionID, event.callID)
-        else activeSubagents.end(event.sessionID, event.callID)
+        if (phase === "before") activeSubagents.begin(event.sessionID, event.id)
+        else activeSubagents.end(event.sessionID, event.id)
       }
 
       try {
-        const resolved = await sessionInfo(event.sessionID, { agent: event.agent })
+        const resolved = await sessionInfo(event.sessionID, {
+          directory: ctx.location.directory,
+          agent: event.agent,
+        })
         const { config: globalConfig, error } = await loadGlobalConfig(resolved.directory)
         notifyConfigError(error, resolved.directory)
 
@@ -180,7 +192,7 @@ export const createV2Plugin = (): V2Plugin => ({
           sessionId: event.sessionID,
           agent: normalized.callingAgent ?? resolved.agent ?? "unknown",
           tool: normalized.toolName,
-          callId: event.callID,
+          callId: event.id,
           toolArgs: normalized.toolArgs,
         }
         await executeHooks(hooks, context, createHost(resolved.directory), config.truncationLimit)
@@ -192,7 +204,10 @@ export const createV2Plugin = (): V2Plugin => ({
     const handleSession = async (event: V2Event): Promise<void> => {
       if (event.type === "session.deleted") {
         const sessionID = normalizeString(event.data?.sessionID)
-        if (sessionID) activeSubagents.clear(sessionID)
+        if (sessionID) {
+          activeSubagents.clear(sessionID)
+          startedSessions.delete(sessionID)
+        }
         return
       }
 
@@ -228,11 +243,14 @@ export const createV2Plugin = (): V2Plugin => ({
         })
         const { config, error } = await loadGlobalConfig(resolved.directory)
         notifyConfigError(error, resolved.directory)
-        const hooks = filterSessionHooks(config.session ?? [], {
+        let hooks = filterSessionHooks(config.session ?? [], {
           event: eventType,
           agent: resolved.agent,
           hasActiveSubagents: activeSubagents.hasActive(sessionID),
         })
+        if (resolved.isRoot === false) {
+          hooks = hooks.filter(hook => !isRootSessionOnlyHook(hook, eventType))
+        }
         await executeHooks(
           hooks,
           { sessionId: sessionID, agent: resolved.agent ?? "unknown" },

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -184,7 +184,7 @@ describe("tool after hooks", () => {
     expect(toastCalls).toHaveLength(0);
   });
 
-  it("matches after hooks that require toolArgs when args are available", async () => {
+  it("matches after hooks using args from the current OpenCode after event", async () => {
     writeConfig({
       tool: [
         {
@@ -216,13 +216,8 @@ describe("tool after hooks", () => {
 
     const plugin = await CommandHooksPlugin({ client } as never);
 
-    await plugin["tool.execute.before"]?.(
-      { tool: "bash", sessionID: "s2", callID: "c2" },
-      { args: { target: "prod" } },
-    );
-
     await plugin["tool.execute.after"]?.(
-      { tool: "bash", sessionID: "s2", callID: "c2" },
+      { tool: "bash", sessionID: "s2", callID: "c2", args: { target: "prod" } },
       { title: "ok", output: "done", metadata: {} },
     );
 
@@ -328,5 +323,37 @@ describe("tool after hooks", () => {
     await plugin["chat.params"]?.({} as never, output as never);
 
     expect(output.options).toEqual({ safe: true });
+  });
+
+  it("uses OpenCode's project directory instead of process cwd", async () => {
+    const processDir = mkdtempSync(join(tmpdir(), "opencode-hooks-process-cwd-"));
+    writeConfig({
+      tool: [
+        {
+          id: "project-directory",
+          when: { phase: "after", tool: "write" },
+          run: "touch project-directory-marker.txt",
+        },
+      ],
+      session: [],
+    });
+
+    try {
+      process.chdir(processDir);
+      const { CommandHooksPlugin } = await import("../src/index.js");
+      const { client } = createMockClient();
+      const plugin = await CommandHooksPlugin({ client, directory: testDir } as never);
+
+      await plugin["tool.execute.after"]?.(
+        { tool: "write", sessionID: "s-directory", callID: "c-directory" },
+        { title: "ok", output: "done", metadata: {} },
+      );
+
+      expect(existsSync(join(testDir, "project-directory-marker.txt"))).toBe(true);
+      expect(existsSync(join(processDir, "project-directory-marker.txt"))).toBe(false);
+    } finally {
+      process.chdir(testDir);
+      rmSync(processDir, { recursive: true, force: true });
+    }
   });
 });

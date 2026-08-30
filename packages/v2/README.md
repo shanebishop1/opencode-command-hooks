@@ -1,6 +1,6 @@
 # opencode-command-hooks-v2
 
-Beta package for OpenCode 2. It targets `@opencode-ai/cli@0.0.0-next-15853` and uses the same `.opencode/command-hooks.jsonc` and agent frontmatter configuration as the V1 package.
+Beta package for OpenCode 2. It targets `@opencode-ai/cli@0.0.0-beta-18684` and uses the same `.opencode/command-hooks.jsonc` and agent frontmatter configuration as the V1 package.
 
 ```jsonc
 {

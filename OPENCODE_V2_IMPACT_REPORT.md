@@ -39,7 +39,7 @@ The opt-in beta adapter is now implemented in this repository:
 
 - `src/v2/plugin.ts` owns the V2 Promise adapter and keeps callback failures non-blocking.
 - `packages/v2` produces the separate `opencode-command-hooks-v2` package without changing the V1 package identity or release tag.
-- The package pins `@opencode-ai/plugin@0.0.0-next-15853` exactly.
+- The package pins `@opencode-ai/plugin@0.0.0-beta-18684` exactly.
 - Tool hooks use direct V2 event input, and `subagent`/`agent` are normalized to the existing `task`/`subagent_type` config vocabulary.
 - Session lookup supplies the authoritative project directory and agent for config discovery and command execution.
 - Injection uses `ctx.session.synthetic()` with `resume: false`; toast requests produce one explicit unsupported diagnostic.
@@ -47,7 +47,7 @@ The opt-in beta adapter is now implemented in this repository:
 - Unit, V1 regression, packed-artifact, and gated pinned-host E2E tests cover the adapter.
 - A dedicated V2 release workflow requires the pinned host E2E to pass before npm publication.
 
-The first one-shot standalone E2E queried the plugin list before asynchronous plugin activation completed. The corrected test starts an isolated persistent server, polls the location-scoped plugin endpoint until setup finishes, and passes against `0.0.0-next-15853`. It uses temporary HOME/XDG directories and a test-only server password, so it does not connect to or modify the normal OpenCode service.
+The first one-shot standalone E2E queried the plugin list before asynchronous plugin activation completed. The corrected test starts an isolated persistent server, polls the location-scoped plugin endpoint until setup finishes, and passes against `0.0.0-beta-18684`. It uses temporary HOME/XDG directories and a test-only server password, so it does not connect to or modify the normal OpenCode service.
 
 ## Research Question
 

@@ -243,7 +243,7 @@ const executeHook = async (
        ? await executeCommands(
            hook.run,
            hook.id,
-            { truncateOutput: truncationLimit, cwd: host.cwd }
+            { truncateOutput: truncationLimit, cwd: host.cwd },
          )
        : []
 

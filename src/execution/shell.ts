@@ -172,6 +172,7 @@ export async function executeCommands(
  * exit codes and .quiet() to capture output without printing to console.
  *
  * @param command - Shell command to execute
+ * @param cwd - Optional working directory for the command
  * @returns Object with stdout, stderr, and exitCode
  */
 const executeShellCommand = async (

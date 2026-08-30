@@ -1,6 +1,6 @@
 {
   "name": "opencode-command-hooks",
-  "version": "0.5.3",
+  "version": "0.6.1",
   "description": "OpenCode plugin for declaratively attaching shell commands to agent/tool/slash-command lifecycle events",
   "type": "module",
   "main": "dist/index.js",
@@ -17,7 +17,7 @@
   ],
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
-    "build:v2": "bun build src/v2.ts --outfile packages/v2/dist/index.js --target=bun --external @opencode-ai/plugin/v2",
+    "build:v2": "bun build src/v2.ts --outfile packages/v2/dist/index.js --target=bun",
     "build:all": "npm run build && npm run build:v2",
     "test": "bun test",
     "test:v2": "bun test tests/v2.plugin.test.ts tests/v2.package.test.ts",
@@ -51,15 +51,15 @@
   },
   "homepage": "https://github.com/shanebishop1/opencode-command-hooks#readme",
   "dependencies": {
-    "@opencode-ai/plugin": "^1.0.0",
-    "@opencode-ai/sdk": "^1.0.65",
+    "@opencode-ai/plugin": "^1.18.25",
+    "@opencode-ai/sdk": "^1.18.25",
     "js-yaml": "^4.1.0",
     "jsonc-parser": "^3.3.1",
     "zod": "^3.22.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
-    "@opencode-ai/plugin-v2": "npm:@opencode-ai/plugin@0.0.0-next-15853",
+    "@opencode-ai/plugin-v2": "npm:@opencode-ai/plugin@0.0.0-beta-18684",
     "@types/bun": "latest",
     "@types/js-yaml": "^4.0.5",
     "eslint": "^9.39.1",

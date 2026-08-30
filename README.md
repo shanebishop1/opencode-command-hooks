@@ -181,7 +181,7 @@ OpenCode 2 uses a different plugin API, so the V1 package above does not load th
 }
 ```
 
-Version `0.1.0-beta.0` targets `@opencode-ai/cli@0.0.0-next-15853`. Keep versions exact while the upstream API is beta, and verify the plugin ID with `opencode2 api get /api/plugin` after the host finishes activating plugins.
+Version `0.1.0-beta.0` targets `@opencode-ai/cli@0.0.0-beta-18684`. Keep versions exact while the upstream API is beta, and verify the plugin ID with `opencode2 api get /api/plugin` after the host finishes activating plugins.
 
 The V2 adapter supports tool before/after hooks, `toolArgs` filters, agent frontmatter hooks, session start/idle hooks, explicit project-directory execution, and injection through synthetic context. Existing V1 config vocabulary remains valid: the V2 `subagent` tool and its `agent` argument are normalized to `task` and `subagent_type` for matching.
 
@@ -196,9 +196,10 @@ Run the pinned host smoke test with `npm run test:v2:e2e`. Keep the V1 package a
 The plugin loads hooks from two locations:
 
 1. **User global**: `~/.config/opencode/command-hooks.jsonc` — hooks that apply to all projects
-2. **Project**: `.opencode/command-hooks.jsonc` — project-specific hooks (searches upward from cwd)
+2. **Project**: `.opencode/command-hooks.jsonc` — project-specific hooks (searches upward from the project directory supplied by OpenCode)
 
 Both are merged by default. See [Configuration Precedence](#configuration-precedence) for details.
+Relative hook commands execute from that same OpenCode project directory.
 
 ### JSON Config
 
@@ -246,7 +247,7 @@ hooks:
 Hooks are loaded from two locations and merged:
 
 1. **User global config**: `~/.config/opencode/command-hooks.jsonc`
-2. **Project config**: `.opencode/command-hooks.jsonc` (searches upward from cwd)
+2. **Project config**: `.opencode/command-hooks.jsonc` (searches upward from the project directory supplied by OpenCode)
 
 **Merge behavior:**
 
@@ -398,9 +399,37 @@ Tool-arg matching is exact. This example runs only when the tool arg `path` equa
 }
 ```
 
-`excludeSubagentWait` is opt-in. When true, that `session.idle` hook waits until all
-active `task` subagent calls for the session have completed. Other idle hooks keep
-their existing behavior and still run while the parent is waiting on a subagent.
+`session.idle` hooks run only for root sessions by default, preventing a completed
+subagent's child session from producing a premature idle notification. Set
+`rootSessionOnly` to `false` to run the hook for root and child sessions:
+
+```jsonc
+{
+  "session": [
+    {
+      "id": "every-session-idle",
+      "when": {
+        "event": "session.idle",
+        "rootSessionOnly": false,
+      },
+      "run": ["echo 'Any session idle'"],
+    },
+  ],
+}
+```
+
+For `session.created` and its `session.start` alias, `rootSessionOnly` defaults to
+`false` and can be set to `true` explicitly. Root-only idle filtering identifies
+child sessions through OpenCode's `parentID`; it does not guarantee that no
+background work remains or that OpenCode is specifically waiting for user input.
+If session lookup fails, hooks run without root filtering rather than being
+silently dropped.
+
+`excludeSubagentWait` is opt-in. When true, that `session.idle` hook also waits
+until all active `task` subagent calls for the root session have completed. Other
+idle hooks still run while the parent is waiting on a subagent. This is separate
+from `rootSessionOnly`: one filters child-session events, while the other filters
+parent idle events during active subagent calls.
 
 ---
 
