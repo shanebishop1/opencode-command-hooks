@@ -23,7 +23,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Install OpenCode V1
-        run: bun install --global opencode-ai@1.18.3
+        run: bun install --global opencode-ai@latest
 
       - name: Run V1 headless E2E tests
         run: npm run test:v1:e2e
