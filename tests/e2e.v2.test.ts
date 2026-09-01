@@ -68,20 +68,25 @@ describe("OpenCode V2 package E2E", () => {
 
     projectDirectory = await mkdtemp(join(tmpdir(), "opencode-hooks-v2-e2e-"))
     await $`git init -q`.cwd(projectDirectory)
-    await $`npm run build:v2`.quiet()
-    await $`npm pack --ignore-scripts --pack-destination ${projectDirectory}`.cwd("packages/v2").quiet()
+    await $`npm run build`.quiet()
+    const archive = (await $`npm pack --ignore-scripts --pack-destination ${projectDirectory}`.text())
+      .trim()
+      .split("\n")
+      .at(-1)
+    if (!archive) throw new Error("npm pack did not return an archive name")
     await writeFile(
       join(projectDirectory, "package.json"),
       JSON.stringify({ private: true, type: "module" }),
     )
-    await $`npm install ${join(projectDirectory, "opencode-command-hooks-v2-0.1.0-beta.0.tgz")} ${`@opencode-ai/cli@${cliVersion}`}`
+    await $`npm install ${join(projectDirectory, archive)} ${`@opencode-ai/cli@${cliVersion}`}`
       .cwd(projectDirectory)
       .quiet()
     await mkdir(join(projectDirectory, ".opencode"), { recursive: true })
     await writeFile(
       join(projectDirectory, "opencode.jsonc"),
       JSON.stringify({
-        plugins: [join(projectDirectory, "node_modules", "opencode-command-hooks-v2", "dist", "index.js")],
+        // Keep the V1 config shape to verify OpenCode 2 migrates it while loading the package root.
+        plugin: [join(projectDirectory, "node_modules", "opencode-command-hooks")],
       }),
     )
     await writeFile(

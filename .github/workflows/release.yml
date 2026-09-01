@@ -63,6 +63,9 @@ jobs:
       - name: Pack dry-run
         run: npm pack --dry-run
 
+      - name: Test packed package in OpenCode 2
+        run: npm run test:v2:e2e
+
   publish-npm:
     needs: verify
     runs-on: ubuntu-latest

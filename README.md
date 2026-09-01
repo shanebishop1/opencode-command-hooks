@@ -171,23 +171,25 @@ Add to your `opencode.json`:
 }
 ```
 
+The dual-host package requires OpenCode V1 1.18.23 or newer. Older V1 releases do not recognize the package's `./server` entrypoint.
+
 ## OpenCode 2 Beta
 
-OpenCode 2 uses a different plugin API, so the V1 package above does not load there. The opt-in beta artifact is built separately and pins the exact OpenCode 2 plugin contract it supports. Once the beta package is published, its config is:
+The same `opencode-command-hooks` package supports OpenCode V1 and V2. OpenCode V1 1.18.23 or newer automatically loads the package's `./server` export, while OpenCode V2 loads the package root. Existing V1 configuration therefore remains valid when upgrading hosts:
 
 ```jsonc
 {
-  "plugins": ["opencode-command-hooks-v2@0.1.0-beta.0"]
+  "plugin": ["opencode-command-hooks"]
 }
 ```
 
-Version `0.1.0-beta.0` targets `@opencode-ai/cli@0.0.0-beta-18684`. Keep versions exact while the upstream API is beta, and verify the plugin ID with `opencode2 api get /api/plugin` after the host finishes activating plugins.
+The V2 adapter currently targets `@opencode-ai/cli@0.0.0-beta-18684`. OpenCode 2 migrates the singular V1 `plugin` setting to its `plugins` representation when loading the config. Verify the plugin ID with `opencode2 api get /api/plugin` after the host finishes activating plugins.
 
 The V2 adapter supports tool before/after hooks, `toolArgs` filters, agent frontmatter hooks, session start/idle hooks, explicit project-directory execution, and injection through synthetic context. Existing V1 config vocabulary remains valid: the V2 `subagent` tool and its `agent` argument are normalized to `task` and `subagent_type` for matching.
 
 V2 server plugins cannot currently show TUI toasts. When a matched hook requests one, the adapter emits one diagnostic and continues command execution and injection. Synthetic injections use `resume: false` so an idle hook does not create an unsolicited model turn.
 
-Run the pinned host smoke test with `npm run test:v2:e2e`. Keep the V1 package available for rollback while OpenCode 2 remains beta.
+Run the current beta host smoke test with `npm run test:v2:e2e`.
 
 ## Configuration
 

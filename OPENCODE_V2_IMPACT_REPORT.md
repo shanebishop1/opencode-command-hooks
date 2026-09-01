@@ -1,20 +1,20 @@
 # OpenCode 2 Impact and Migration Report
 
-Status: Implemented beta prototype
-Last updated: 2026-07-20
+Status: Implemented dual-host beta adapter
+Last updated: 2026-08-30
 Doc Class: report
 Doc Type: research
 Report Type: engineering migration
-Decision Status: accepted for opt-in beta
+Decision Status: accepted for one-package dual-host distribution
 Authority: advisory
 Canonical Source: `OPENCODE_V2_IMPACT_REPORT.md`
 Report topic: OpenCode 2 plugin and client migration
 
 ## Summary
 
-OpenCode 2 is currently a beta distributed separately from stable OpenCode 1. The upstream project explicitly warns that its APIs, configuration, data, and plugin APIs may still change. It also explicitly states that OpenCode 1 plugins do not work in OpenCode 2.
+OpenCode 2 is currently a beta distributed separately from stable OpenCode 1. The upstream project warns that its APIs, configuration, data, and plugin APIs may still change. V1 and V2 plugin modules use incompatible runtime contracts, but current OpenCode hosts can select different modules from one npm package.
 
-`opencode-command-hooks` will not load in OpenCode 2 in its current form. The package exports an OpenCode 1 plugin function that returns a hooks object. OpenCode 2 requires a default plugin descriptor with a unique `id` and `setup` or `effect` function, and hooks are registered imperatively through the new context.
+`opencode-command-hooks` now exports a V2 descriptor with a unique `id` and `setup` function from its package root. Its `./server` export provides the V1 `{ id, server }` descriptor. OpenCode V1 1.18.23 or newer selects `./server`, while OpenCode V2 selects the root.
 
 The current OpenCode 2 beta has enough API surface to prototype most core behavior:
 
@@ -23,7 +23,7 @@ The current OpenCode 2 beta has enough API surface to prototype most core behavi
 - `ctx.session.synthetic()` appears to be the intended replacement for injecting context without creating a normal user prompt.
 - Existing v1-shaped config and agent Markdown locations are intended to be translated in memory.
 
-However, a production migration should not begin yet. Important contracts remain unstable or incomplete:
+Important V2 contracts remain unstable or incomplete:
 
 - The beta guide and current `v2` branch disagree on at least one hook name: the guide uses `ctx.session.hook("request")`, while source currently defines `ctx.session.hook("context")`.
 - The guide and source also differ on some tool context field names.
@@ -31,21 +31,21 @@ However, a production migration should not begin yet. Important contracts remain
 - Plugin reload isolation and config-directory reload have open defects.
 - The package must determine the correct location/workspace rather than use `process.cwd()` in the long-lived v2 service.
 
-The recommended release strategy is to preserve `opencode-command-hooks` as the v1 line and publish any beta port under a separate package name, such as `opencode-command-hooks-v2`, using exact prerelease versions. Do not move the existing package's npm `latest` tag to a v2-only artifact while a large v1 population remains.
+The release strategy is one package with host-specific entrypoints. Existing users retain `"plugin": ["opencode-command-hooks"]`; V2 migrates that V1 config field internally. OpenCode V1 versions older than 1.18.23 are outside the supported range because they do not select `./server`.
 
 ## Implementation Addendum
 
 The opt-in beta adapter is now implemented in this repository:
 
 - `src/v2/plugin.ts` owns the V2 Promise adapter and keeps callback failures non-blocking.
-- `packages/v2` produces the separate `opencode-command-hooks-v2` package without changing the V1 package identity or release tag.
-- The package pins `@opencode-ai/plugin@0.0.0-beta-18684` exactly.
+- `src/v2.ts` builds to the package root and `src/server.ts` builds to the V1 `./server` export.
+- Development pins the V2 plugin contract to `@opencode-ai/plugin@0.0.0-beta-18684` through an npm alias.
 - Tool hooks use direct V2 event input, and `subagent`/`agent` are normalized to the existing `task`/`subagent_type` config vocabulary.
 - Session lookup supplies the authoritative project directory and agent for config discovery and command execution.
 - Injection uses `ctx.session.synthetic()` with `resume: false`; toast requests produce one explicit unsupported diagnostic.
 - The event consumer maps compatibility and durable execution events to `session.start`/`session.idle`, deduplicates event IDs and session starts, and is closed during plugin cleanup.
 - Unit, V1 regression, packed-artifact, and gated pinned-host E2E tests cover the adapter.
-- A dedicated V2 release workflow requires the pinned host E2E to pass before npm publication.
+- The normal release workflow requires the current V2 host E2E to pass before publishing the shared package.
 
 The first one-shot standalone E2E queried the plugin list before asynchronous plugin activation completed. The corrected test starts an isolated persistent server, polls the location-scoped plugin endpoint until setup finishes, and passes against `0.0.0-beta-18684`. It uses temporary HOME/XDG directories and a test-only server password, so it does not connect to or modify the normal OpenCode service.
 
@@ -275,12 +275,12 @@ V2 intends to translate v1 config in memory. Existing users can keep:
 }
 ```
 
-Native v2 configuration uses:
+Native v2 configuration may use:
 
 ```jsonc
 {
   "plugins": [
-    "opencode-command-hooks-v2@<exact-version>"
+    "opencode-command-hooks"
   ]
 }
 ```
@@ -325,34 +325,29 @@ Confidence: high.
 
 ### Decision
 
-Keep the existing npm package as the v1 product line. Publish the v2 beta port under a separate package name and exact versions.
-
-Suggested naming:
-
-- V1: `opencode-command-hooks`
-- V2 beta: `opencode-command-hooks-v2`
+Publish one `opencode-command-hooks` package with a V2 root export and a V1 `./server` export.
 
 Why this is safest:
 
-- Existing bare v1 specs continue resolving to a v1-compatible artifact.
-- Moving npm `latest` cannot accidentally break all unpinned v1 users.
-- V2 users opt in explicitly and can roll back by removing one package and restoring the other.
-- Each package can use independent dependencies, entrypoints, tests, and release cadence while the v2 API churns.
-- Support communication is unambiguous.
+- Existing configuration keeps the same package name through a host upgrade.
+- Current V1 hosts select `./server` without loading the incompatible V2 descriptor.
+- V2 hosts load the package root using the documented V2 descriptor contract.
+- Both adapters share config, matching, execution, and template behavior.
+- One packed artifact can be tested against both hosts before publication.
 
 ### Alternatives considered
 
 | Option | Benefit | Risk | Recommendation |
 | --- | --- | --- | --- |
-| Separate v2 package | Strongest isolation and rollback | Temporary package-name fragmentation | Recommended during beta and transition |
-| Same package, v2 on `next`/`v2` dist-tag | Preserves one package name | A future `latest` change can break v1 users; mutable tags complicate reproducibility | Acceptable only with exact versions and strict release discipline |
+| Separate v2 package | Strong isolation | Package-name fragmentation and config changes | Rejected because host-specific exports are supported |
+| Same package, v2 on `next`/`v2` dist-tag | Preserves one package name | Hosts still resolve one package version and users must pin | Not needed |
 | Same package, v2 major on `latest` | Conventional semver | OpenCode auto-installs bare specs; many users do not pin plugin versions | Do not do while v1 remains common |
-| One dual-runtime root export | One artifact | Hosts do not select a major-specific export; loader contracts differ; older v1 loaders may reject descriptors | Do not use as the primary strategy |
+| One package with `.` and `./server` | One artifact and unchanged config | Requires OpenCode V1 1.18.23 or newer | Selected |
 
 ### Version policy
 
-- Keep npm `latest` for `opencode-command-hooks` on the supported v1 line.
-- Publish v2 beta releases only as exact versions of the separate package.
+- Publish both adapters together under the existing `opencode-command-hooks` version.
+- Keep the V2 development dependency pinned to the exact supported beta build.
 - Pin `@opencode-ai/plugin` and other v2 packages to the exact matching beta build.
 - Do not depend on `next`, `beta`, or `latest` ranges inside a production plugin release.
 - Add host compatibility metadata when upstream confirms enforcement for the target host, but treat it as a guardrail rather than the compatibility mechanism.
@@ -483,13 +478,13 @@ Exit criteria:
 - All expected degradations are documented and surfaced to users.
 - Open v2 reload defects are fixed upstream or mitigated and tested.
 
-### Gate 5: Publish an opt-in v2 beta package
+### Gate 5: Publish the dual-host package
 
 Actions:
 
-- Publish `opencode-command-hooks-v2@<exact-prerelease>` without changing the v1 package's `latest` tag.
+- Publish `opencode-command-hooks` only after the packed artifact passes both host suites.
 - State the exact supported OpenCode 2 beta build.
-- Provide side-by-side install, verification, and rollback steps.
+- Document the OpenCode V1 1.18.23 minimum and unchanged package configuration.
 - Require users to verify active plugin IDs with `opencode2 api get /api/plugin`.
 - Collect issue reports with host version, plugin version, event type, and server logs.
 
@@ -611,7 +606,7 @@ Rollback triggers:
 - [x] Recheck the beta guide, exact published package types, and `v2` source before implementation.
 - [ ] Obtain upstream clarification on session hook naming, location access, toast/logging, and synthetic delivery.
 - [x] Add packed V2 artifact verification while preserving the V1 regression suite.
-- [x] Use `opencode-command-hooks-v2` as the isolated beta package name.
+- [x] Replace the isolated beta package with V2 `.` and V1 `./server` exports.
 - [ ] Confirm npm ownership before publishing any prerelease.
 - [x] Enable the isolated pinned-host E2E loading gate.
 - [ ] Expand to a dual-host runtime matrix when the blocking host defects are resolved.

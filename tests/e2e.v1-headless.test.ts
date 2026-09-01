@@ -2,9 +2,11 @@ import { describe, it, expect, beforeAll, afterAll } from "bun:test"
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, statSync, unlinkSync, rmSync } from "fs"
 import { join } from "path"
 import { tmpdir } from "os"
+import { $ } from "bun"
 
 const REPOSITORY_ROOT = process.cwd()
 let TEST_SANDBOX_DIR = ""
+let TEST_PLUGIN_DIR = ""
 let TEST_CONFIG_DIR = ""
 let TEST_OPENCODE_SUBDIR = ""
 let TEST_OPENCODE_CONFIG = ""
@@ -221,7 +223,8 @@ function writeTestOpencodeConfig(): void {
     mkdirSync(TEST_CONFIG_DIR, { recursive: true })
   }
   const pluginConfig = {
-    plugin: [join(REPOSITORY_ROOT, "dist", "index.js")],
+    // OpenCode V1 must select the package's ./server export instead of its V2 root.
+    plugin: [TEST_PLUGIN_DIR],
   }
   writeFileSync(TEST_OPENCODE_CONFIG, JSON.stringify(pluginConfig, null, 2))
 }
@@ -303,6 +306,19 @@ describe.skipIf(!E2E_ENABLED)("V1 headless real-host E2E", () => {
   beforeAll(async () => {
     createTestSandbox()
 
+    const archive = (await $`npm pack --ignore-scripts --pack-destination ${TEST_SANDBOX_DIR}`
+      .cwd(REPOSITORY_ROOT)
+      .text())
+      .trim()
+      .split("\n")
+      .at(-1)
+    if (!archive) throw new Error("npm pack did not return an archive name")
+    writeFileSync(join(TEST_SANDBOX_DIR, "package.json"), JSON.stringify({ private: true }))
+    await $`npm install --ignore-scripts ${join(TEST_SANDBOX_DIR, archive)}`
+      .cwd(TEST_SANDBOX_DIR)
+      .quiet()
+    TEST_PLUGIN_DIR = join(TEST_SANDBOX_DIR, "node_modules", "opencode-command-hooks")
+
     // Verify the executable works in the same isolated environment as the tests.
     await runOpenCodeCommand(["--version"])
     if (!E2E_MODEL) {
@@ -312,7 +328,7 @@ describe.skipIf(!E2E_ENABLED)("V1 headless real-host E2E", () => {
 
     // Enable the plugin in the test opencode config
     writeTestOpencodeConfig()
-  })
+  }, 120_000)
 
   afterAll(() => {
     if (TEST_SANDBOX_DIR) {

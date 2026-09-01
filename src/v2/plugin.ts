@@ -96,7 +96,7 @@ const toolContext = (event: V2ToolEvent): {
 
 const diagnostic = (message: string, error?: unknown): void => {
   const detail = error instanceof Error ? error.message : error === undefined ? "" : String(error)
-  console.error(`[opencode-command-hooks-v2] ${message}${detail ? `: ${detail}` : ""}`)
+  console.error(`[opencode-command-hooks] ${message}${detail ? `: ${detail}` : ""}`)
 }
 
 export const createV2Plugin = (): V2Plugin => ({
@@ -132,7 +132,7 @@ export const createV2Plugin = (): V2Plugin => ({
         if (warnedToastUnsupported) return
         warnedToastUnsupported = true
         console.warn(
-          "[opencode-command-hooks-v2] Toast notifications are not available to V2 server plugins; hook execution and injection will continue.",
+          "[opencode-command-hooks] Toast notifications are not available to V2 server plugins; hook execution and injection will continue.",
         )
       },
     })
