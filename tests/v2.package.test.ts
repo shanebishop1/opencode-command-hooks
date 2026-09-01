@@ -18,6 +18,7 @@ describe("dual-host package artifact", () => {
     expect(pack.id).toStartWith("opencode-command-hooks@")
     expect(pack.files.map(file => file.path)).toContain("dist/v2.js")
     expect(pack.files.map(file => file.path)).toContain("dist/server.js")
+    expect(pack.files.map(file => file.path)).toContain("index.js")
     expect(manifest.name).toBe("opencode-command-hooks")
     expect(manifest.exports["."]).toBeDefined()
     expect(manifest.exports["./server"]).toBeDefined()

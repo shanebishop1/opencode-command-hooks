@@ -17,6 +17,7 @@
   },
   "files": [
     "dist",
+    "index.js",
     "types"
   ],
   "scripts": {

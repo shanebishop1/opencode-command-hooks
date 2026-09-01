@@ -85,7 +85,7 @@ describe("OpenCode V2 package E2E", () => {
     await writeFile(
       join(projectDirectory, "opencode.jsonc"),
       JSON.stringify({
-        // Keep the V1 config shape to verify OpenCode 2 migrates it while loading the package root.
+        // Keep the V1 config shape while loading the installed package directory.
         plugin: [join(projectDirectory, "node_modules", "opencode-command-hooks")],
       }),
     )
