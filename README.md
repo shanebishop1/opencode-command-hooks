@@ -1,5 +1,10 @@
 # 🪝 OpenCode Command Hooks 🪝
 
+[![Build and test](https://img.shields.io/github/actions/workflow/status/shanebishop1/opencode-command-hooks/ci.yml?branch=main&label=build%20%26%20test&logo=github&style=flat-square)](https://github.com/shanebishop1/opencode-command-hooks/actions/workflows/ci.yml)
+[![V1 real-host E2E](https://img.shields.io/github/actions/workflow/status/shanebishop1/opencode-command-hooks/v1-e2e.yml?branch=main&label=V1%20real-host%20E2E&logo=github&style=flat-square)](https://github.com/shanebishop1/opencode-command-hooks/actions/workflows/v1-e2e.yml)
+[![npm](https://img.shields.io/npm/v/opencode-command-hooks?logo=npm&style=flat-square)](https://www.npmjs.com/package/opencode-command-hooks)
+[![License](https://img.shields.io/npm/l/opencode-command-hooks?style=flat-square)](./LICENSE)
+
 Use simple configs to declaratively define shell command hooks on tool/subagent invocations. With a single line of config, you can inject a hook's output directly into context for your agent to read.
 
 ## Markdown Frontmatter Hooks
