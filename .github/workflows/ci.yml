@@ -41,8 +41,11 @@ jobs:
       - name: Test
         run: npm test
 
-      - name: Build
-        run: npm run build
+      - name: Build dual-host package
+        run: npm run build:all
 
       - name: Verify package
         run: npm pack --dry-run
+
+      - name: Test packed package in OpenCode 2
+        run: npm run test:v2:e2e

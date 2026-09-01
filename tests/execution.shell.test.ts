@@ -1,4 +1,7 @@
 import { describe, it, expect } from "bun:test"
+import { mkdtemp, rm } from "fs/promises"
+import { tmpdir } from "os"
+import { join } from "path"
 import { executeCommand, executeCommands } from "../src/execution/shell.js"
 
 describe("Shell command execution", () => {
@@ -63,6 +66,19 @@ describe("Shell command execution", () => {
 
       expect(result.success).toBe(true)
       expect(result.stdout).toContain("hello")
+    })
+
+    it("executes in an explicit working directory", async () => {
+      const directory = await mkdtemp(join(tmpdir(), "opencode-hooks-cwd-"))
+
+      try {
+        const result = await executeCommand("pwd", { cwd: directory })
+
+        expect(result.success).toBe(true)
+        expect(result.stdout?.trim()).toBe(directory)
+      } finally {
+        await rm(directory, { recursive: true, force: true })
+      }
     })
   })
 

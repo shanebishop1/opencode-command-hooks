@@ -1,23 +1,31 @@
 {
   "name": "opencode-command-hooks",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "OpenCode plugin for declaratively attaching shell commands to agent/tool/slash-command lifecycle events",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/v2.js",
+  "types": "dist/v2.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/v2.d.ts",
+      "import": "./dist/v2.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
     }
   },
   "files": [
     "dist",
+    "index.js",
     "types"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "build:all": "npm run build",
     "test": "bun test",
+    "test:v2": "bun test tests/v2.plugin.test.ts tests/v2.package.test.ts",
+    "test:v2:e2e": "OPENCODE2_E2E=1 bun test tests/e2e.v2.test.ts",
     "lint": "eslint src tests --ext .ts",
     "typecheck": "tsc --noEmit",
     "ci:check": "npm run lint && npm run typecheck && (command -v bun >/dev/null 2>&1 && bun test || echo \"bun not found; skipping tests\")",
@@ -47,14 +55,15 @@
   },
   "homepage": "https://github.com/shanebishop1/opencode-command-hooks#readme",
   "dependencies": {
-    "@opencode-ai/plugin": "^1.0.0",
-    "@opencode-ai/sdk": "^1.0.65",
+    "@opencode-ai/plugin": "^1.18.25",
+    "@opencode-ai/sdk": "^1.18.25",
     "js-yaml": "^4.1.0",
     "jsonc-parser": "^3.3.1",
     "zod": "^3.22.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@opencode-ai/plugin-v2": "npm:@opencode-ai/plugin@0.0.0-beta-18684",
     "@types/bun": "latest",
     "@types/js-yaml": "^4.0.5",
     "eslint": "^9.39.1",
@@ -64,6 +73,7 @@
     "typescript-eslint": "^8.47.0"
   },
   "engines": {
-    "bun": ">=1.0.0"
+    "bun": ">=1.0.0",
+    "opencode": ">=1.18.23"
   }
 }

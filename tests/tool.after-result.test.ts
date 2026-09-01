@@ -184,7 +184,7 @@ describe("tool after hooks", () => {
     expect(toastCalls).toHaveLength(0);
   });
 
-  it("matches after hooks that require toolArgs when args are available", async () => {
+  it("matches after hooks using args from the current OpenCode after event", async () => {
     writeConfig({
       tool: [
         {
@@ -216,13 +216,8 @@ describe("tool after hooks", () => {
 
     const plugin = await CommandHooksPlugin({ client } as never);
 
-    await plugin["tool.execute.before"]?.(
-      { tool: "bash", sessionID: "s2", callID: "c2" },
-      { args: { target: "prod" } },
-    );
-
     await plugin["tool.execute.after"]?.(
-      { tool: "bash", sessionID: "s2", callID: "c2" },
+      { tool: "bash", sessionID: "s2", callID: "c2", args: { target: "prod" } },
       { title: "ok", output: "done", metadata: {} },
     );
 

@@ -27,6 +27,7 @@ hooks:
 
 - [Features](#features)
 - [Installation](#installation)
+- [OpenCode 2 Beta](#opencode-2-beta)
 - [Configuration](#configuration)
 - [Examples](#examples)
 - [Template Placeholders](#template-placeholders)
@@ -174,6 +175,26 @@ Add to your `opencode.json`:
   "plugin": ["opencode-command-hooks"],
 }
 ```
+
+The dual-host package requires OpenCode V1 1.18.23 or newer. Older V1 releases do not recognize the package's `./server` entrypoint.
+
+## OpenCode 2 Beta
+
+The same `opencode-command-hooks` package supports OpenCode V1 and V2. OpenCode V1 1.18.23 or newer automatically loads the package's `./server` export, while OpenCode V2 loads the package root. Existing V1 configuration therefore remains valid when upgrading hosts:
+
+```jsonc
+{
+  "plugin": ["opencode-command-hooks"]
+}
+```
+
+The V2 adapter currently targets `@opencode-ai/cli@0.0.0-beta-18684`. OpenCode 2 migrates the singular V1 `plugin` setting to its `plugins` representation when loading the config. Verify the plugin ID with `opencode2 api get /api/plugin` after the host finishes activating plugins.
+
+The V2 adapter supports tool before/after hooks, `toolArgs` filters, agent frontmatter hooks, session start/idle hooks, explicit project-directory execution, and injection through synthetic context. Existing V1 config vocabulary remains valid: the V2 `subagent` tool and its `agent` argument are normalized to `task` and `subagent_type` for matching.
+
+V2 server plugins cannot currently show TUI toasts. When a matched hook requests one, the adapter emits one diagnostic and continues command execution and injection. Synthetic injections use `resume: false` so an idle hook does not create an unsolicited model turn.
+
+Run the current beta host smoke test with `npm run test:v2:e2e`.
 
 ## Configuration
 
@@ -378,7 +399,7 @@ Tool-arg matching is exact. This example runs only when the tool arg `path` equa
     },
     {
       "id": "session-idle",
-      "when": { "event": "session.idle" },
+      "when": { "event": "session.idle", "excludeSubagentWait": true },
       "run": ["notify-user.sh 'Waiting for input'"],
     },
   ],
@@ -410,6 +431,12 @@ child sessions through OpenCode's `parentID`; it does not guarantee that no
 background work remains or that OpenCode is specifically waiting for user input.
 If session lookup fails, hooks run without root filtering rather than being
 silently dropped.
+
+`excludeSubagentWait` is opt-in. When true, that `session.idle` hook also waits
+until all active `task` subagent calls for the root session have completed. Other
+idle hooks still run while the parent is waiting on a subagent. This is separate
+from `rootSessionOnly`: one filters child-session events, while the other filters
+parent idle events during active subagent calls.
 
 ---
 
