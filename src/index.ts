@@ -1,5 +1,5 @@
-import type { Plugin } from "@opencode-ai/plugin"
-import type { Config, OpencodeClient } from "@opencode-ai/sdk"
+import type { Config, Plugin } from "@opencode-ai/plugin"
+import type { OpencodeClient } from "@opencode-ai/sdk"
 import type { CommandHooksConfig, HookExecutionContext, SessionHook } from "./types/hooks.js"
 import { createLogger, setGlobalLogger, logger } from "./logging.js"
 import { executeHooks, filterSessionHooks, filterToolHooks } from "./executor.js"
