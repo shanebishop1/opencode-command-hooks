@@ -7,6 +7,8 @@
 
 Use simple configs to declaratively define shell command hooks on tool/subagent invocations. With a single line of config, you can inject a hook's output directly into context for your agent to read.
 
+![OpenCode Command Hooks demo](./docs/assets/opencode-command-hooks-demo.gif)
+
 ## Markdown Frontmatter Hooks
 
 Define hooks in just a couple lines of markdown frontmatter. Putting them here is also really nice because you can see your entire agent's config in one place.
