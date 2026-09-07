@@ -3,7 +3,7 @@ import { filterToolHooks } from "../src/executor.js";
 import { interpolateTemplate } from "../src/execution/template.js";
 import { getConfigValidationErrors, parseToolHook } from "../src/schemas.js";
 
-describe("Issue #12 tool argument support", () => {
+describe("tool argument support", () => {
   it("accepts exact, glob, and regex argument filters", () => {
     const hook = parseToolHook({
       id: "argument-matchers",
