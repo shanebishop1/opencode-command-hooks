@@ -66,7 +66,7 @@ export interface ToolHook {
 
   /**
    * Optional template for injecting hook results into the session.
-   * Supports placeholders: {id}, {agent}, {tool}, {cmd}, {stdout}, {stderr}, {exitCode}
+   * Supports placeholders: {id}, {agent}, {tool}, {cmd}, {stdout}, {stderr}, {exitCode}, and {args.<key>}
    * Unavailable values are replaced with empty string.
    */
   inject?: string
@@ -115,8 +115,8 @@ export interface ToolHookWhen {
   /** Slash command name(s) to match. Omitted matches all contexts. */
   slashCommand?: string | string[]
 
-  /** Tool argument filters (only in tool.execute.before). Match by input arguments. */
-  toolArgs?: Record<string, string | string[]>
+  /** Tool argument filters (in tool.execute.before and tool.execute.after). Match by input arguments. */
+  toolArgs?: Record<string, ToolArgMatcher>
 }
 
 /**
@@ -189,6 +189,19 @@ export interface SessionHookWhen {
    */
   rootSessionOnly?: boolean
 }
+
+/** A glob matcher. The `regex` key is intentionally unavailable. */
+export type ToolArgGlobMatcher = { glob: string; regex?: never }
+
+/** A regex matcher. The `glob` key is intentionally unavailable. */
+export type ToolArgRegexMatcher = { regex: string; glob?: never }
+
+/** Exact, list, glob, or regex matching for a tool argument. */
+export type ToolArgMatcher =
+  | string
+  | string[]
+  | ToolArgGlobMatcher
+  | ToolArgRegexMatcher
 
 /**
  * Top-level command hooks configuration
@@ -265,6 +278,9 @@ export interface TemplateContext {
   /** Exit code from command execution (0 = success) */
   exitCode?: number
 
+  /** Tool arguments, available for direct {args.<key>} placeholders */
+  args?: Record<string, unknown>
+
   /** Additional context fields for future expansion */
   [key: string]: unknown
 }
@@ -322,6 +338,6 @@ export interface HookExecutionContext {
   /** Tool call ID provided by OpenCode (if available) */
   callId?: string
 
-  /** Tool arguments (available for tool.execute.before hooks) */
+  /** Tool arguments (available for tool.execute.before and tool.execute.after hooks) */
   toolArgs?: Record<string, unknown>
 }

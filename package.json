@@ -51,12 +51,14 @@
     "@opencode-ai/sdk": "^1.18.29",
     "js-yaml": "^4.3.2",
     "jsonc-parser": "^3.3.1",
+    "picomatch": "^4.0.3",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
     "@types/bun": "latest",
     "@types/js-yaml": "^4.0.9",
+    "@types/picomatch": "^4.0.3",
     "eslint": "^9.39.5",
     "globals": "^16.5.0",
     "jiti": "^2.7.0",

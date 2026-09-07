@@ -1,4 +1,7 @@
 import { describe, it, expect } from "bun:test"
+import { mkdtempSync, rmSync, writeFileSync } from "fs"
+import { tmpdir } from "os"
+import { join } from "path"
 import { executeCommand, executeCommands } from "../src/execution/shell.js"
 
 describe("Shell command execution", () => {
@@ -63,6 +66,40 @@ describe("Shell command execution", () => {
 
       expect(result.success).toBe(true)
       expect(result.stdout).toContain("hello")
+    })
+
+    it("preserves inherited environment variables alongside per-command hook arguments", async () => {
+      const inheritedKey = "OPENCODE_HOOKS_TEST_INHERITED_SENTINEL"
+      const originalInherited = process.env[inheritedKey]
+      const originalArgsFile = process.env.OPENCODE_HOOK_ARGS_FILE
+      const args = {
+        nested: { enabled: true, values: ["one", 2] },
+        shellLooking: "$(touch should-not-exist)",
+      }
+      const tempDirectory = mkdtempSync(join(tmpdir(), "opencode-hooks-shell-"))
+      const argsFile = join(tempDirectory, "args.json")
+      writeFileSync(argsFile, JSON.stringify(args), { mode: 0o600 })
+      process.env[inheritedKey] = "inherited-value"
+
+      try {
+        const result = await executeCommand(
+          `printf '%s\\n' "$${inheritedKey}"; cat "$OPENCODE_HOOK_ARGS_FILE"`,
+          { env: { OPENCODE_HOOK_ARGS_FILE: argsFile } },
+        )
+
+        const [inheritedValue, serializedArgs] = result.stdout.split("\n")
+        expect(inheritedValue).toBe("inherited-value")
+        expect(JSON.parse(serializedArgs)).toEqual(args)
+        expect(process.env[inheritedKey]).toBe("inherited-value")
+        expect(process.env.OPENCODE_HOOK_ARGS_FILE).toBe(originalArgsFile)
+      } finally {
+        if (originalInherited === undefined) {
+          delete process.env[inheritedKey]
+        } else {
+          process.env[inheritedKey] = originalInherited
+        }
+        rmSync(tempDirectory, { recursive: true, force: true })
+      }
     })
   })
 

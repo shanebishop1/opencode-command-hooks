@@ -12,6 +12,7 @@ const notifyConfigError = async (
   configError: string | null,
   sessionId: string | undefined,
   client: OpencodeClient,
+  notifiedConfigErrors: Set<string>,
 ): Promise<void> => {
   if (!configError) return
 
@@ -39,13 +40,21 @@ type ToolArgsCacheEntry = {
   savedAt: number
 }
 
+type PluginCacheState = {
+  toolCallArgsCache: Map<string, ToolArgsCacheEntry>
+  afterHookCallCache: Map<string, number>
+  notifiedConfigErrors: Set<string>
+}
+
 const TOOL_ARGS_TTL_MS = 10 * 60 * 1000
 const TOOL_ARGS_MAX = 1000
 const AFTER_HOOK_DEDUPE_TTL_MS = 60 * 1000
 
-const toolCallArgsCache = new Map<string, ToolArgsCacheEntry>()
-const afterHookCallCache = new Map<string, number>()
-const notifiedConfigErrors = new Set<string>()
+const createPluginCacheState = (): PluginCacheState => ({
+  toolCallArgsCache: new Map(),
+  afterHookCallCache: new Map(),
+  notifiedConfigErrors: new Set(),
+})
 
 type SessionParentId = string | null | undefined
 
@@ -59,69 +68,103 @@ const stripHookProviderOptions = (output: ChatParamsOutput): void => {
   delete output.options.command_hooks
 }
 
-const pruneToolArgsCache = (): void => {
+const getToolCallCacheKey = (
+  sessionId: string | undefined,
+  callId: string | undefined,
+): string | undefined => {
+  if (!sessionId || !callId) return undefined
+  return JSON.stringify([sessionId, callId])
+}
+
+const pruneToolArgsCache = (cache: PluginCacheState): void => {
   const now = Date.now()
 
-  for (const [callId, entry] of toolCallArgsCache) {
+  for (const [callKey, entry] of cache.toolCallArgsCache) {
     if (now - entry.savedAt > TOOL_ARGS_TTL_MS) {
-      toolCallArgsCache.delete(callId)
+      cache.toolCallArgsCache.delete(callKey)
     }
   }
 
-  while (toolCallArgsCache.size > TOOL_ARGS_MAX) {
-    const oldest = toolCallArgsCache.keys().next().value
+  while (cache.toolCallArgsCache.size > TOOL_ARGS_MAX) {
+    const oldest = cache.toolCallArgsCache.keys().next().value
     if (!oldest) break
-    toolCallArgsCache.delete(oldest)
+    cache.toolCallArgsCache.delete(oldest)
   }
 }
 
-const pruneAfterHookCache = (): void => {
+const pruneAfterHookCache = (cache: PluginCacheState): void => {
   const now = Date.now()
-  for (const [callId, seenAt] of afterHookCallCache) {
+  for (const [callKey, seenAt] of cache.afterHookCallCache) {
     if (now - seenAt > AFTER_HOOK_DEDUPE_TTL_MS) {
-      afterHookCallCache.delete(callId)
+      cache.afterHookCallCache.delete(callKey)
     }
   }
 }
 
-const markAfterHookProcessed = (callId: string | undefined): void => {
-  if (!callId) return
-  pruneAfterHookCache()
-  afterHookCallCache.set(callId, Date.now())
+const markAfterHookProcessed = (
+  sessionId: string | undefined,
+  callId: string | undefined,
+  cache: PluginCacheState,
+): void => {
+  const callKey = getToolCallCacheKey(sessionId, callId)
+  if (!callKey) return
+  pruneAfterHookCache(cache)
+  cache.afterHookCallCache.set(callKey, Date.now())
 }
 
-const wasAfterHookProcessed = (callId: string | undefined): boolean => {
-  if (!callId) return false
-  pruneAfterHookCache()
-  const seenAt = afterHookCallCache.get(callId)
+const wasAfterHookProcessed = (
+  sessionId: string | undefined,
+  callId: string | undefined,
+  cache: PluginCacheState,
+): boolean => {
+  const callKey = getToolCallCacheKey(sessionId, callId)
+  if (!callKey) return false
+  pruneAfterHookCache(cache)
+  const seenAt = cache.afterHookCallCache.get(callKey)
   if (!seenAt) return false
   return Date.now() - seenAt <= AFTER_HOOK_DEDUPE_TTL_MS
 }
 
-const storeToolArgs = (callId: string | undefined, args: Record<string, unknown> | undefined): void => {
-  if (!callId || !args) return
-  pruneToolArgsCache()
-  toolCallArgsCache.set(callId, {
+const storeToolArgs = (
+  sessionId: string | undefined,
+  callId: string | undefined,
+  args: Record<string, unknown> | undefined,
+  cache: PluginCacheState,
+): void => {
+  const callKey = getToolCallCacheKey(sessionId, callId)
+  if (!callKey || !args) return
+  pruneToolArgsCache(cache)
+  cache.toolCallArgsCache.set(callKey, {
     args,
     savedAt: Date.now(),
   })
 }
 
-const getToolArgs = (callId: string | undefined): Record<string, unknown> | undefined => {
-  if (!callId) return undefined
-  pruneToolArgsCache()
-  const entry = toolCallArgsCache.get(callId)
+const getToolArgs = (
+  sessionId: string | undefined,
+  callId: string | undefined,
+  cache: PluginCacheState,
+): Record<string, unknown> | undefined => {
+  const callKey = getToolCallCacheKey(sessionId, callId)
+  if (!callKey) return undefined
+  pruneToolArgsCache(cache)
+  const entry = cache.toolCallArgsCache.get(callKey)
   if (!entry) return undefined
   if (Date.now() - entry.savedAt > TOOL_ARGS_TTL_MS) {
-    toolCallArgsCache.delete(callId)
+    cache.toolCallArgsCache.delete(callKey)
     return undefined
   }
   return entry.args
 }
 
-const deleteToolArgs = (callId: string | undefined): void => {
-  if (!callId) return
-  toolCallArgsCache.delete(callId)
+const deleteToolArgs = (
+  sessionId: string | undefined,
+  callId: string | undefined,
+  cache: PluginCacheState,
+): void => {
+  const callKey = getToolCallCacheKey(sessionId, callId)
+  if (!callKey) return
+  cache.toolCallArgsCache.delete(callKey)
 }
 
 
@@ -163,6 +206,7 @@ const handleSessionEvent = async (
   agent: string | undefined,
   client: OpencodeClient,
   projectDirectory: string,
+  cache: PluginCacheState,
   parentId: SessionParentId = undefined,
 ): Promise<void> => {
   if (!sessionId) {
@@ -176,7 +220,7 @@ const handleSessionEvent = async (
 
   try {
     const { config: globalConfig, error: globalConfigError } = await loadGlobalConfig(projectDirectory)
-    await notifyConfigError(globalConfigError, sessionId, client)
+    await notifyConfigError(globalConfigError, sessionId, client, cache.notifiedConfigErrors)
 
     const markdownConfig = { tool: [], session: [] }
     const { config: mergedConfig } = mergeConfigs(globalConfig, markdownConfig)
@@ -219,18 +263,19 @@ const handleToolExecutionHook = async (
   toolArgs: Record<string, unknown> | undefined,
   client: OpencodeClient,
   projectDirectory: string,
+  cache: PluginCacheState,
 ): Promise<void> => {
   if (phase === "before") {
-    storeToolArgs(input.callID, toolArgs)
+    storeToolArgs(input.sessionID, input.callID, toolArgs, cache)
   }
 
   if (phase === "after") {
-    markAfterHookProcessed(input.callID)
+    markAfterHookProcessed(input.sessionID, input.callID, cache)
   }
 
   try {
     const { config: globalConfig, error: globalConfigError } = await loadGlobalConfig(projectDirectory)
-    await notifyConfigError(globalConfigError, input.sessionID, client)
+    await notifyConfigError(globalConfigError, input.sessionID, client, cache.notifiedConfigErrors)
 
     let agentConfig: CommandHooksConfig = { tool: [], session: [] }
     let subagentType: string | undefined
@@ -270,7 +315,7 @@ const handleToolExecutionHook = async (
     logger.error(`Error handling tool.execute.${phase}: ${errorMessage}`)
   } finally {
     if (phase === "after") {
-      deleteToolArgs(input.callID)
+      deleteToolArgs(input.sessionID, input.callID, cache)
     }
   }
 }
@@ -296,6 +341,7 @@ export const CommandHooksPlugin: Plugin = async ({ client, directory }) => {
   const clientLogger = createLogger(client)
   setGlobalLogger(clientLogger)
   const projectDirectory = directory || process.cwd()
+  const cache = createPluginCacheState()
   
   try {
     logger.info("Initializing OpenCode Command Hooks plugin...")
@@ -345,6 +391,7 @@ export const CommandHooksPlugin: Plugin = async ({ client, directory }) => {
                agent,
                client as OpencodeClient,
                projectDirectory,
+               cache,
                parentId,
              )
            }
@@ -362,6 +409,8 @@ export const CommandHooksPlugin: Plugin = async ({ client, directory }) => {
                 agent,
                 client as OpencodeClient,
                 projectDirectory,
+                cache,
+                undefined,
               )
           }
 
@@ -387,19 +436,20 @@ export const CommandHooksPlugin: Plugin = async ({ client, directory }) => {
                return
              }
 
-             if (wasAfterHookProcessed(callId)) {
+             if (wasAfterHookProcessed(sessionId, callId, cache)) {
               logger.debug(`Skipping duplicate after-hook execution for callID: ${callId}`)
-              deleteToolArgs(callId)
+              deleteToolArgs(sessionId, callId, cache)
               return
             }
 
-            const storedToolArgs = getToolArgs(callId)
+            const storedToolArgs = getToolArgs(sessionId, callId, cache)
             await handleToolExecutionHook(
               "after",
               { tool: toolName, sessionID: sessionId, callID: callId },
               storedToolArgs,
               client as OpencodeClient,
               projectDirectory,
+              cache,
             )
           }
        },
@@ -425,6 +475,7 @@ export const CommandHooksPlugin: Plugin = async ({ client, directory }) => {
              output.args,
              client as OpencodeClient,
              projectDirectory,
+             cache,
            )
         },
 
@@ -433,7 +484,7 @@ export const CommandHooksPlugin: Plugin = async ({ client, directory }) => {
          * Runs after a tool completes.
          */
         "tool.execute.after": async (
-          input: { tool: string; sessionID: string; callID: string },
+          input: { tool: string; sessionID: string; callID: string; args?: Record<string, unknown> },
           toolOutput?: { title: string; output: string; metadata: Record<string, unknown> }
         ) => {
           logger.debug(
@@ -442,17 +493,18 @@ export const CommandHooksPlugin: Plugin = async ({ client, directory }) => {
 
            if (!toolOutput) {
             logger.debug(
-              `tool.execute.after for ${input.tool} has no output payload; running hooks with cached args only`
+              `tool.execute.after for ${input.tool} has no output payload; running hooks with input or cached args`
              )
            }
 
-           const storedToolArgs = getToolArgs(input.callID)
+           const storedToolArgs = input.args ?? getToolArgs(input.sessionID, input.callID, cache)
           await handleToolExecutionHook(
             "after",
             input,
             storedToolArgs,
             client as OpencodeClient,
             projectDirectory,
+            cache,
           )
         },
     }

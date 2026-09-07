@@ -162,7 +162,7 @@ describe("tool after hooks", () => {
         {
           id: "after-hook",
           when: { phase: "after", tool: ["bash"] },
-          run: ["echo 'Hook executed'"],
+          run: ["cat \"$OPENCODE_HOOK_ARGS_FILE\""],
           inject: "Tool result: {stdout}",
         },
       ],
@@ -180,8 +180,43 @@ describe("tool after hooks", () => {
 
     expect(promptCalls).toHaveLength(1);
     const promptParts = (promptCalls[0].body as { parts: Array<{ text: string }> }).parts;
-    expect(promptParts[0].text).toContain("Tool result: Hook executed");
+    expect(promptParts[0].text).toBe("Tool result: {}");
     expect(toastCalls).toHaveLength(0);
+  });
+
+  it("uses direct input args for an after-only event", async () => {
+    writeConfig({
+      tool: [
+        {
+          id: "direct-after-args",
+          when: {
+            phase: "after",
+            tool: ["custom-tool"],
+            toolArgs: { target: ["prod"] },
+          },
+          inject: "direct target={args.target}",
+        },
+      ],
+      session: [],
+    });
+
+    const { CommandHooksPlugin } = await import("../src/index.js");
+    const { client, promptCalls } = createMockClient();
+    const plugin = await CommandHooksPlugin({ client } as never);
+
+    await plugin["tool.execute.after"]?.(
+      {
+        tool: "custom-tool",
+        sessionID: "s-direct-args",
+        callID: "c-direct-args",
+        args: { target: "prod" },
+      },
+      undefined as never,
+    );
+
+    expect(promptCalls).toHaveLength(1);
+    const promptParts = (promptCalls[0].body as { parts: Array<{ text: string }> }).parts;
+    expect(promptParts[0].text).toBe("direct target=prod");
   });
 
   it("matches after hooks that require toolArgs when args are available", async () => {
@@ -266,6 +301,260 @@ describe("tool after hooks", () => {
     } as never);
 
     expect(promptCalls).toHaveLength(0);
+  });
+
+  it("scopes cached args and after deduplication by session and call ID", async () => {
+    writeConfig({
+      tool: [
+        {
+          id: "session-scoped-after",
+          when: {
+            phase: "after",
+            tool: ["custom-tool"],
+            toolArgs: { target: ["first", "second"] },
+          },
+          inject: "target={args.target}",
+        },
+      ],
+      session: [],
+    });
+
+    const { CommandHooksPlugin } = await import("../src/index.js");
+    const { client, promptCalls } = createMockClient();
+    const plugin = await CommandHooksPlugin({ client } as never);
+
+    await plugin["tool.execute.before"]?.(
+      { tool: "custom-tool", sessionID: "s-first", callID: "shared-call" },
+      { args: { target: "first" } },
+    );
+
+    await plugin["tool.execute.after"]?.(
+      {
+        tool: "custom-tool",
+        sessionID: "s-second",
+        callID: "shared-call",
+        args: { target: "second" },
+      },
+      undefined as never,
+    );
+
+    await plugin.event?.({
+      event: {
+        type: "tool.result",
+        properties: {
+          name: "custom-tool",
+          sessionID: "s-first",
+          callID: "shared-call",
+        },
+      },
+    } as never);
+
+    const promptTexts = promptCalls.map(
+      (call) => (call.body as { parts: Array<{ text: string }> }).parts[0].text,
+    );
+    expect(promptTexts).toEqual(["target=second", "target=first"]);
+  });
+
+  it("passes generic arguments to before and after hooks without shell interpolation", async () => {
+    writeConfig({
+      tool: [
+        {
+          id: "generic-arguments-before",
+          when: {
+            phase: "before",
+            tool: "custom-tool",
+            toolArgs: {
+              filePath: { glob: "**/*.ts" },
+              command: { regex: "^git\\s+commit" },
+            },
+          },
+          inject: "before path={args.filePath}",
+        },
+        {
+          id: "generic-arguments",
+          when: {
+            phase: "after",
+            tool: "custom-tool",
+            toolArgs: {
+              filePath: { glob: "**/*.ts" },
+              command: { regex: "^git\\s+commit" },
+            },
+          },
+          run: "cat \"$OPENCODE_HOOK_ARGS_FILE\"",
+          inject: "path={args.filePath}; args={stdout}",
+        },
+      ],
+      session: [],
+    });
+
+    const { CommandHooksPlugin } = await import("../src/index.js");
+    const { client, promptCalls } = createMockClient();
+    const plugin = await CommandHooksPlugin({ client } as never);
+    const shellLookingValue = "$(touch should-not-exist)";
+
+    await plugin["tool.execute.before"]?.(
+      { tool: "custom-tool", sessionID: "s-generic", callID: "c-generic" },
+      {
+        args: {
+          filePath: "src/index.ts",
+          command: "git commit -m ok",
+          content: shellLookingValue,
+          nested: { enabled: true },
+        },
+      },
+    );
+    await plugin["tool.execute.after"]?.(
+      { tool: "custom-tool", sessionID: "s-generic", callID: "c-generic" },
+      undefined as never,
+    );
+
+    expect(promptCalls).toHaveLength(2);
+    const beforeParts = (promptCalls[0].body as { parts: Array<{ text: string }> }).parts;
+    const afterParts = (promptCalls[1].body as { parts: Array<{ text: string }> }).parts;
+    expect(beforeParts[0].text).toBe("before path=src/index.ts");
+    const afterPrefix = "path=src/index.ts; args=";
+    expect(afterParts[0].text.startsWith(afterPrefix)).toBe(true);
+    expect(JSON.parse(afterParts[0].text.slice(afterPrefix.length))).toEqual({
+      filePath: "src/index.ts",
+      command: "git commit -m ok",
+      content: shellLookingValue,
+      nested: { enabled: true },
+    });
+    expect(existsSync(join(testDir, "should-not-exist"))).toBe(false);
+  });
+
+  it("isolates complete hook arguments across concurrent plugin executions", async () => {
+    writeConfig({
+      tool: [
+        {
+          id: "concurrent-arguments",
+          when: { phase: "before", tool: "custom-tool" },
+          run: "sleep 0.05; cat \"$OPENCODE_HOOK_ARGS_FILE\"",
+          inject: "{stdout}",
+        },
+      ],
+      session: [],
+    });
+
+    const { CommandHooksPlugin } = await import("../src/index.js");
+    const { client, promptCalls } = createMockClient();
+    const plugin = await CommandHooksPlugin({ client } as never);
+    const firstArgs = {
+      id: "first",
+      nested: { enabled: true, values: ["one", 1] },
+    };
+    const secondArgs = {
+      id: "second",
+      nested: { enabled: false, values: ["two", 2] },
+    };
+
+    await Promise.all([
+      plugin["tool.execute.before"]?.(
+        { tool: "custom-tool", sessionID: "s-concurrent", callID: "c-first" },
+        { args: firstArgs },
+      ),
+      plugin["tool.execute.before"]?.(
+        { tool: "custom-tool", sessionID: "s-concurrent", callID: "c-second" },
+        { args: secondArgs },
+      ),
+    ]);
+
+    const outputs = promptCalls.map((call) => {
+      const parts = (call.body as { parts: Array<{ text: string }> }).parts;
+      return JSON.parse(parts[0].text) as Record<string, unknown>;
+    });
+    expect(outputs).toHaveLength(2);
+    expect(outputs).toEqual(expect.arrayContaining([firstArgs, secondArgs]));
+  });
+
+  it("creates a private argument file and cleans it up after successful commands", async () => {
+    if (process.platform === "win32") return;
+
+    writeConfig({
+      tool: [
+        {
+          id: "argument-file-lifecycle",
+          when: { phase: "before", tool: "custom-tool" },
+          run: "node -e 'const fs=require(\"fs\");const p=process.env.OPENCODE_HOOK_ARGS_FILE;console.log((fs.statSync(p).mode & 0o777).toString(8));console.log(p)'",
+          inject: "{stdout}",
+        },
+      ],
+      session: [],
+    });
+
+    const originalPath = process.env.OPENCODE_HOOK_ARGS_FILE;
+    const { CommandHooksPlugin } = await import("../src/index.js");
+    const { client, promptCalls } = createMockClient();
+    const plugin = await CommandHooksPlugin({ client } as never);
+
+    await plugin["tool.execute.before"]?.(
+      { tool: "custom-tool", sessionID: "s-lifecycle", callID: "c-lifecycle" },
+      { args: { nested: { enabled: true } } },
+    );
+
+    const output = (promptCalls[0].body as { parts: Array<{ text: string }> }).parts[0].text;
+    const [mode, argsFile] = output.trim().split("\n");
+    expect(mode).toBe("600");
+    expect(argsFile).toMatch(/opencode-command-hooks-.*\/args\.json$/);
+    expect(existsSync(argsFile)).toBe(false);
+    expect(process.env.OPENCODE_HOOK_ARGS_FILE).toBe(originalPath);
+  });
+
+  it("cleans up the argument file when a command fails", async () => {
+    writeConfig({
+      tool: [
+        {
+          id: "argument-file-failure-cleanup",
+          when: { phase: "before", tool: "custom-tool" },
+          run: "printf '%s' \"$OPENCODE_HOOK_ARGS_FILE\"; exit 17",
+          inject: "{stdout}",
+        },
+      ],
+      session: [],
+    });
+
+    const { CommandHooksPlugin } = await import("../src/index.js");
+    const { client, promptCalls } = createMockClient();
+    const plugin = await CommandHooksPlugin({ client } as never);
+
+    await plugin["tool.execute.before"]?.(
+      { tool: "custom-tool", sessionID: "s-failure-cleanup", callID: "c-failure-cleanup" },
+      { args: { value: "failure" } },
+    );
+
+    const argsFile = (promptCalls[0].body as { parts: Array<{ text: string }> }).parts[0].text;
+    expect(argsFile).toMatch(/opencode-command-hooks-.*\/args\.json$/);
+    expect(existsSync(argsFile)).toBe(false);
+  });
+
+  it("passes large nested arguments through the file without environment-size limits", async () => {
+    writeConfig({
+      tool: [
+        {
+          id: "large-argument-file",
+          when: { phase: "before", tool: "custom-tool" },
+          run: "wc -c < \"$OPENCODE_HOOK_ARGS_FILE\" | tr -d ' '",
+          inject: "{stdout}",
+        },
+      ],
+      session: [],
+    });
+
+    const largeArgs = {
+      nested: { values: ["one", { two: true }] },
+      payload: "x".repeat(300_000),
+    };
+    const { CommandHooksPlugin } = await import("../src/index.js");
+    const { client, promptCalls } = createMockClient();
+    const plugin = await CommandHooksPlugin({ client } as never);
+
+    await plugin["tool.execute.before"]?.(
+      { tool: "custom-tool", sessionID: "s-large", callID: "c-large" },
+      { args: largeArgs },
+    );
+
+    const output = (promptCalls[0].body as { parts: Array<{ text: string }> }).parts[0].text;
+    expect(Number(output.trim())).toBe(Buffer.byteLength(JSON.stringify(largeArgs)));
   });
 
   it("does not double-run after hooks when tool.execute.after and tool.result both fire", async () => {

@@ -87,6 +87,7 @@ hooks:
 | `run`            | `string` \| `string[]` | Command(s) to execute                                                    |
 | `inject`         | `string`               | Message injected into the session                                        |
 | `toast`          | `object`               | Toast notification configuration                                         |
+| `when.toolArgs`  | `Record<string, string \| string[] \| matcher>` | Exact argument filters, or `{ glob: "..." }` / `{ regex: "..." }` matchers |
 | `overrideGlobal` | `boolean`              | When `true`, suppresses global hooks matching the same event/phase+tool. Must be a JSON boolean (`true`/`false`), not a string. |
 
 ### Toast Configuration
@@ -108,6 +109,7 @@ toast:
 - `{stdout}` - Command stdout (truncated)
 - `{stderr}` - Command stderr (truncated)
 - `{exitCode}` - Command exit code
+- `{args.<key>}` - Direct tool argument value (own properties only; strings, numbers, and booleans as text; arrays and objects as JSON)
 
 ### Complete Example
 
@@ -138,6 +140,11 @@ If `inject` is set, the command output is posted into the session, so your agent
 ### Filter by Tool Arguments
 
 You can set up tool hooks to only trigger on specific arguments via `when.toolArgs`.
+String and string-array values retain exact matching (and `"*"` matches any
+value). Matcher objects support full-string glob matching and JavaScript regex
+search matching. Every configured argument must match, and pattern matchers
+only match arguments whose runtime value is a string. Leading `!` is not an
+implicit negation and leading `#` is not treated as a comment.
 
 ```jsonc
 {
@@ -153,6 +160,32 @@ You can set up tool hooks to only trigger on specific arguments via `when.toolAr
   },
 }
 ```
+
+Matchers work with arbitrary argument names and custom tools:
+
+```yaml
+when:
+  phase: before
+  tool: write_file
+  toolArgs:
+    filePath:
+      glob: "**/*.{ts,js}"
+    content:
+      regex: "TODO"
+```
+
+Argument values are also available in `inject` and `toast` templates through
+direct placeholders such as `{args.filePath}`. Strings, numbers, and booleans
+are rendered as text; arrays and objects are rendered as JSON. Missing and
+`null` values render as empty strings. Argument placeholders are not expanded
+inside `run` commands. Instead, every hook command receives the complete
+argument object in a private temporary JSON file. Its path is available in the
+`OPENCODE_HOOK_ARGS_FILE` environment variable; read it from the command, for
+example with `cat "$OPENCODE_HOOK_ARGS_FILE"`. Hooks without arguments receive
+`{}`. The file is unique to the hook execution and removed after all of its
+commands finish. Supplying an argument that looks like shell syntax does not
+execute it or interpolate it into the command source, and the complete payload
+is not placed in the environment.
 
 ## Features
 

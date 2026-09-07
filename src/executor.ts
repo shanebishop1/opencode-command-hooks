@@ -16,15 +16,21 @@
  */
 
 import type { OpencodeClient } from "@opencode-ai/sdk"
+import { open, mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import type {
    ToolHook,
    SessionHook,
    TemplateContext,
    HookExecutionContext,
-} from "./types/hooks.js"
+   ToolHookWhen,
+   HookExecutionResult,
+ } from "./types/hooks.js"
 import { executeCommands } from "./execution/shell.js"
 import { interpolateTemplate } from "./execution/template.js"
 import { logger } from "./logging.js"
+import { compileToolArgGlob, compileToolArgRegex } from "./matcher.js"
 
 /**
  * Check if a value matches a pattern (string, array of strings, or wildcard)
@@ -34,6 +40,35 @@ export const matches = (pattern: string | string[] | undefined, value: string | 
   if (pattern === "*") return true // Wildcard matches all
   if (Array.isArray(pattern)) return value ? pattern.includes(value) : false
   return value === pattern
+}
+
+const matchesToolArg = (
+  pattern: NonNullable<ToolHookWhen["toolArgs"]>[string],
+  value: unknown,
+): boolean => {
+  if (typeof pattern === "object" && pattern !== null) {
+    if (Array.isArray(pattern)) {
+      return matches(pattern, value as string | undefined)
+    }
+
+    if (typeof value !== "string") return false
+
+    if ("glob" in pattern && pattern.glob !== undefined) {
+      try {
+        return compileToolArgGlob(pattern.glob).test(value)
+      } catch {
+        return false
+      }
+    }
+
+    try {
+      return compileToolArgRegex(pattern.regex).test(value)
+    } catch {
+      return false
+    }
+  }
+
+  return matches(pattern, value as string | undefined)
 }
 
 /**
@@ -95,7 +130,7 @@ export const filterToolHooks = (
 
       for (const [key, expectedValue] of Object.entries(hook.when.toolArgs)) {
         const actualValue = criteria.toolArgs[key]
-        if (!matches(expectedValue, actualValue as string | undefined)) {
+        if (!matchesToolArg(expectedValue, actualValue)) {
           logger.debug(
             `Hook ${hook.id} toolArgs mismatch for ${key}: expected ${JSON.stringify(expectedValue)}, actual ${JSON.stringify(actualValue)}`
           )
@@ -122,6 +157,56 @@ const formatErrorMessage = (hookId: string, error: unknown): string => {
     const errorText =
       error instanceof Error ? error.message : String(error || "Unknown error")
     return `[opencode-command-hooks] Hook "${hookId}" failed: ${errorText}`
+}
+
+type HookArgsFile = {
+  path: string
+  cleanup: () => Promise<void>
+}
+
+const serializeHookArgs = (args: Record<string, unknown> | undefined): string => {
+  if (!args) return "{}"
+
+  try {
+    return JSON.stringify(args) ?? "{}"
+  } catch {
+    return "{}"
+  }
+}
+
+/**
+ * Create a private temporary directory and JSON file for one hook execution.
+ * The directory is 0700 and the file is created exclusively with 0600 mode,
+ * so the path can safely be passed to child processes without exposing the
+ * argument payload through the process environment.
+ */
+const createHookArgsFile = async (
+  args: Record<string, unknown> | undefined,
+): Promise<HookArgsFile> => {
+  const directory = await mkdtemp(join(tmpdir(), "opencode-command-hooks-"))
+  const path = join(directory, "args.json")
+  let fileHandle: Awaited<ReturnType<typeof open>> | undefined
+
+  try {
+    fileHandle = await open(path, "wx", 0o600)
+    await fileHandle.writeFile(serializeHookArgs(args), "utf8")
+    await fileHandle.chmod(0o600)
+    await fileHandle.close()
+    fileHandle = undefined
+
+    return {
+      path,
+      cleanup: async () => {
+        await rm(directory, { recursive: true, force: true })
+      },
+    }
+  } catch (error) {
+    if (fileHandle) {
+      await fileHandle.close().catch(() => undefined)
+    }
+    await rm(directory, { recursive: true, force: true }).catch(() => undefined)
+    throw error
+  }
 }
 
 /**
@@ -214,7 +299,7 @@ const injectMessage = async (
  * @param truncationLimit - Optional truncation limit for command output
  * @returns Promise that resolves when hook execution is complete
  */
-const executeHook = async (
+ const executeHook = async (
    hook: ToolHook | SessionHook,
    context: HookExecutionContext,
    client: OpencodeClient,
@@ -225,7 +310,7 @@ const executeHook = async (
      `Executing ${hookType} hook "${hook.id}"${context.tool ? ` for tool "${context.tool}"` : ""}, truncationLimit: ${truncationLimit}`
    )
 
-   try {
+    try {
      // Execute optional hook commands
      if (truncationLimit !== undefined) {
        logger.debug(`Executing with truncateOutput: ${truncationLimit}`)
@@ -233,16 +318,32 @@ const executeHook = async (
        logger.debug(`Executing with default truncation (30000)`)
      }
 
-      const results = hook.run
-        ? await executeCommands(
+      let results: HookExecutionResult[] = []
+      if (hook.run) {
+        const argsFile = await createHookArgsFile(context.toolArgs)
+        try {
+          results = await executeCommands(
             hook.run,
             hook.id,
             {
               truncateOutput: truncationLimit,
               cwd: context.directory,
+              env: {
+                OPENCODE_HOOK_ARGS_FILE: argsFile.path,
+              },
             },
           )
-       : []
+        } finally {
+          try {
+            await argsFile.cleanup()
+          } catch (cleanupError) {
+            const cleanupMessage = cleanupError instanceof Error
+              ? cleanupError.message
+              : String(cleanupError)
+            logger.error(`Failed to clean up hook argument file: ${cleanupMessage}`)
+          }
+        }
+      }
 
       logger.debug(
         `Hook "${hook.id}" executed ${results.length} command(s)`
@@ -253,12 +354,13 @@ const executeHook = async (
       const templateContext: TemplateContext = {
         id: hook.id,
         agent: context.agent,
-        tool: context.tool,
-        cmd: firstCmd,
-        stdout: lastResult?.stdout,
-        stderr: lastResult?.stderr,
-        exitCode: lastResult?.exitCode,
-      }
+         tool: context.tool,
+         cmd: firstCmd,
+         stdout: lastResult?.stdout,
+         stderr: lastResult?.stderr,
+         exitCode: lastResult?.exitCode,
+         args: context.toolArgs,
+       }
 
       // If inject is configured, prepare and inject the message
       if (hook.inject) {
@@ -293,8 +395,8 @@ const executeHook = async (
        logger.error(
          `Failed to inject error message for hook "${hook.id}": ${injectionErrorMsg}`
        )
-     }
-   }
+    }
+ }
 }
 
 /**
