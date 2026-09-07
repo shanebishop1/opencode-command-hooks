@@ -178,11 +178,11 @@ Argument values are also available in `inject` and `toast` templates through
 direct placeholders such as `{args.filePath}`. Strings, numbers, and booleans
 are rendered as text; arrays and objects are rendered as JSON. Missing and
 `null` values render as empty strings. Argument placeholders are not expanded
-inside `run` commands. Instead, every hook command receives the complete
+inside `run` commands. Instead, every tool-hook command receives the complete
 argument object in a private temporary JSON file. Its path is available in the
 `OPENCODE_HOOK_ARGS_FILE` environment variable; read it from the command, for
-example with `cat "$OPENCODE_HOOK_ARGS_FILE"`. Hooks without arguments receive
-`{}`. The file is unique to the hook execution and removed after all of its
+example with `cat "$OPENCODE_HOOK_ARGS_FILE"`. Tool hooks without arguments receive
+`{}`. The file is unique to the tool-hook execution and removed after all of its
 commands finish. Supplying an argument that looks like shell syntax does not
 execute it or interpolate it into the command source, and the complete payload
 is not placed in the environment.

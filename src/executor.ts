@@ -319,7 +319,7 @@ const injectMessage = async (
      }
 
       let results: HookExecutionResult[] = []
-      if (hook.run) {
+      if (isToolHook(hook) && hook.run) {
         const argsFile = await createHookArgsFile(context.toolArgs)
         try {
           results = await executeCommands(
@@ -343,6 +343,11 @@ const injectMessage = async (
             logger.error(`Failed to clean up hook argument file: ${cleanupMessage}`)
           }
         }
+      } else if (hook.run) {
+        results = await executeCommands(hook.run, hook.id, {
+          truncateOutput: truncationLimit,
+          cwd: context.directory,
+        })
       }
 
       logger.debug(
