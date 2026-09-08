@@ -6,6 +6,12 @@
  */
 
 import { z } from "zod";
+import type {
+  ToolArgGlobMatcher,
+  ToolArgMatcher,
+  ToolArgRegexMatcher,
+} from "./types/hooks.js";
+import { compileToolArgGlob, compileToolArgRegex } from "./matcher.js";
 
 // ============================================================================
 // PRIMITIVE SCHEMAS
@@ -16,6 +22,43 @@ import { z } from "zod";
  */
 const StringOrArray = z.union([z.string(), z.array(z.string())]);
 const RunSchema = z.union([z.string(), z.array(z.string())]);
+
+const GlobMatcherSchema: z.ZodType<ToolArgGlobMatcher> = z
+  .object({ glob: z.string() })
+  .strict()
+  .superRefine(({ glob }, context) => {
+    try {
+      compileToolArgGlob(glob);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Invalid glob pattern: ${message}`,
+      });
+    }
+  });
+
+const RegexMatcherSchema: z.ZodType<ToolArgRegexMatcher> = z
+  .object({ regex: z.string() })
+  .strict()
+  .superRefine(({ regex }, context) => {
+    try {
+      compileToolArgRegex(regex);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Invalid regex pattern: ${message}`,
+      });
+    }
+  });
+
+const ToolArgMatcherSchema: z.ZodType<ToolArgMatcher> = z.union([
+  z.string(),
+  z.array(z.string()),
+  GlobMatcherSchema,
+  RegexMatcherSchema,
+]);
 
 /**
  * Phase for tool hooks: "before" or "after"
@@ -40,7 +83,7 @@ const ToolHookWhenSchema = z.object({
   tool: StringOrArray.optional(),
   callingAgent: StringOrArray.optional(),
   slashCommand: StringOrArray.optional(),
-  toolArgs: z.record(StringOrArray).optional(),
+  toolArgs: z.record(ToolArgMatcherSchema).optional(),
 });
 
 /**
