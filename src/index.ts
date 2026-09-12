@@ -321,21 +321,10 @@ const handleToolExecutionHook = async (
 }
 
 /**
- * OpenCode Command Hooks Plugin
- *
- * Allows users to declaratively attach shell commands to agent/tool/slash-command
- * lifecycle events via configuration in opencode.json or markdown frontmatter.
- *
- * Features:
- * - Tool hooks (before/after tool execution)
- * - Session hooks (on session lifecycle events)
- * - Configuration via global config or per-agent/command markdown
- * - Non-blocking error semantics
- *
- * Architecture:
- * - Simplified event handlers that extract context and call executeHooks
- * - Lightweight in-memory caching for tool args + dedupe
- * - Unified executor handles all hook matching and execution
+ * OpenCode Command Hooks Plugin.
+ * Runs commands before/after tool execution, including task subagent invocations,
+ * and on session.created/session.start (alias) and session.idle from global
+ * or project command-hooks.jsonc and agent markdown frontmatter.
  */
 export const CommandHooksPlugin: Plugin = async ({ client, directory }) => {
   const clientLogger = createLogger(client)
@@ -366,14 +355,7 @@ export const CommandHooksPlugin: Plugin = async ({ client, directory }) => {
         stripHookProviderOptions(output)
       },
 
-       /**
-        * Event hook for session lifecycle events
-        * Supports: session.start, session.idle, tool.result
-        *
-        * Note: The Plugin type from @opencode-ai/plugin may not include session.start
-        * in its event type union, but it is documented as a supported event in the
-        * OpenCode SDK. We use a type assertion to allow this event type.
-        */
+        /** Handle session.created, session.idle, and the legacy tool.result fallback. */
          event: async ({ event }: { event: { type: string; properties?: Record<string, unknown> } }) => {
            // Handle session.created event
            if (event.type === "session.created") {

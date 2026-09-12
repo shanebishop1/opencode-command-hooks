@@ -7,6 +7,8 @@
 
 Use simple configs to declaratively define shell command hooks on tool/subagent invocations. With a single line of config, you can inject a hook's output directly into context for your agent to read.
 
+Configured commands are trusted local code with the host's permissions. Use finite, non-watch commands; there is no built-in timeout. Output truncation happens after command output is captured, so `truncationLimit` is not a memory cap.
+
 ![OpenCode Command Hooks demo](./docs/assets/opencode-command-hooks-demo.gif)
 
 ## Markdown Frontmatter Hooks
@@ -37,12 +39,12 @@ hooks:
 
 1. **Runs automatically** on the configured event
 2. **Executes shell commands** (sequentially, if you pass an array)
-3. **Captures output** (truncated to configured limit, default 30,000 characters)
+3. **Captures output**, then reports it up to the configured limit (default 30,000 characters)
 4. **Optionally reports results** via `inject` (to the session) and/or `toast` (to the UI).
 
 ## Why?
 
-When working with a fleet of subagents, automatic validation of the state of your codebase is really useful. By setting up quality gates (lint/typecheck/test/etc.) or other automation, you can catch and prevent errors quickly and reliably.
+When working with a fleet of subagents, advisory validation of the state of your codebase is really useful. By setting up lint/typecheck/test checks or other automation, you can surface errors quickly and reliably.
 
 Doing this by asking your orchestrator agent to use the bash tool (or call a validator subagent) is non-deterministic and can cost a lot of tokens over time. You could always write your own custom plugin to achieve this automatic validation behavior, but I found myself writing the same boilerplate, error handling, output capture, and session injection logic over and over again.
 
@@ -189,8 +191,8 @@ is not placed in the environment.
 
 ## Features
 
-- Tool hooks (`before`/`after`) and session hooks (`start`/`idle`) via simple JSON/YAML frontmatter config
-  - Hooks are **non-blocking**: failures don’t crash the session/tool.
+- Tool hooks (`before`/`after`, including `task` subagent invocations) and session hooks (`session.created`/`session.start` alias and `session.idle`) via simple JSON/YAML frontmatter config
+  - Hook callbacks await commands; failures do not veto tool execution, stop later commands, or crash the session.
   - Commands run **sequentially**, even if earlier ones fail.
 - Inject bash output into context with `inject` and notify user with `toast`
   - `inject`/`toast` interpolate using the **last command’s** output if `run` is an array.
@@ -241,7 +243,7 @@ Relative hook commands execute from that same OpenCode project directory.
 
 | Option              | Type            | Description                                                                                                                        |
 | ------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `truncationLimit`   | `number`        | Maximum characters to capture from command output. Defaults to 30,000 (matching OpenCode's bash tool). Must be a positive integer. Project config overrides global when both are set. |
+| `truncationLimit`   | `number`        | Maximum characters reported per stdout/stderr after command completion. Defaults to 30,000 (matching OpenCode's bash tool). Must be a positive integer. Project config overrides global when both are set. |
 | `ignoreGlobalConfig`| `boolean`       | When `true`, skip loading `~/.config/opencode/command-hooks.jsonc`. Defaults to `false`. Must be a JSON boolean (`true`/`false`), not a string. |
 | `tool`              | `ToolHook[]`    | Array of tool execution hooks                                                                                                      |
 | `session`           | `SessionHook[]` | Array of session lifecycle hooks                                                                                                   |
@@ -359,9 +361,9 @@ Run validation after certain subagents complete, inject results back into the se
 }
 ```
 
-### Enforce Linting After a Specific `write`
+### Run Linting After a Specific `write`
 
-Tool-arg matching is exact. This example runs only when the tool arg `path` equals `src/index.ts`.
+Tool-arg matching is exact. This example runs only when the tool arg `path` equals `src/index.ts` and reports lint results without enforcing or blocking the write.
 
 ```jsonc
 {
@@ -401,6 +403,8 @@ Tool-arg matching is exact. This example runs only when the tool arg `path` equa
 ```
 
 ### Session Lifecycle Hooks
+
+V1 supports `session.created` (with `session.start` as an alias) and `session.idle` only. The legacy `session.end` and `slashCommand` configuration fields remain accepted for compatibility but are unsupported in V1: slash-command markdown is not loaded and slash-command context is not supplied.
 
 ```jsonc
 {
@@ -502,7 +506,7 @@ export const MyHooks: Plugin = async ({ $, client }) => {
             const stdout = result.stdout?.toString() || "";
             const stderr = result.stderr?.toString() || "";
 
-            // Truncate to 30k chars to match OpenCode's bash tool
+            // After capture, report up to 30k chars to match OpenCode's bash tool
             lastResult = {
               exitCode: result.exitCode ?? 0,
               stdout:

@@ -1,9 +1,7 @@
 /**
- * Markdown configuration parser for loading hooks from agent and slash-command markdown files
+ * Markdown configuration parser for agent markdown hooks.
  *
- * Parses YAML frontmatter from markdown files and extracts command_hooks configuration.
- * Supports both agent markdown files (typically in .opencode/agents/) and slash-command
- * markdown files (typically in .opencode/commands/).
+ * Parses hooks/command_hooks from YAML frontmatter in agent markdown files.
  */
 
 import type { AgentHooks, AgentHookEntry, CommandHooksConfig, ToolHook } from "../types/hooks.js";
