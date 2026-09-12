@@ -10,6 +10,7 @@ import type { AgentHooks, AgentHookEntry, CommandHooksConfig, ToolHook } from ".
 import { ConfigSchema, SimplifiedHookEntrySchema } from "../schemas.js";
 import { load as parseYaml } from "js-yaml";
 import { logger } from "../logging.js";
+import { basename } from "node:path";
 
 
 
@@ -284,8 +285,7 @@ const convertAgentHookEntryToToolHook = (
  * ```
  */
 const extractAgentNameFromPath = (filePath: string): string => {
-  const fileName = filePath.split("/").pop() || "";
-  return fileName.replace(/\.md$/, "");
+  return basename(filePath, ".md");
 }
 
 /**
