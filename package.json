@@ -1,6 +1,6 @@
 {
   "name": "opencode-command-hooks",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "OpenCode plugin for declaratively attaching shell commands to tool, subagent, and session events",
   "type": "module",
   "main": "dist/index.js",
