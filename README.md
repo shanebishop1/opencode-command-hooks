@@ -7,8 +7,6 @@
 
 Use simple configs to declaratively define shell command hooks on tool/subagent invocations. With a single line of config, you can inject a hook's output directly into context for your agent to read.
 
-Configured commands are trusted local code with the host's permissions. Use finite, non-watch commands; there is no built-in timeout. Output truncation happens after command output is captured, so `truncationLimit` is not a memory cap.
-
 ![OpenCode Command Hooks demo](./docs/assets/opencode-command-hooks-demo.gif)
 
 ## Markdown Frontmatter Hooks
@@ -44,7 +42,7 @@ hooks:
 
 ## Why?
 
-When working with a fleet of subagents, advisory validation of the state of your codebase is really useful. By setting up lint/typecheck/test checks or other automation, you can surface errors quickly and reliably.
+When working with a fleet of subagents, automatic validation of the state of your codebase is really useful. By setting up lint/typecheck/test checks or other automation, you can surface errors quickly and reliably.
 
 Doing this by asking your orchestrator agent to use the bash tool (or call a validator subagent) is non-deterministic and can cost a lot of tokens over time. You could always write your own custom plugin to achieve this automatic validation behavior, but I found myself writing the same boilerplate, error handling, output capture, and session injection logic over and over again.
 
@@ -191,8 +189,8 @@ is not placed in the environment.
 
 ## Features
 
-- Tool hooks (`before`/`after`, including `task` subagent invocations) and session hooks (`session.created`/`session.start` alias and `session.idle`) via simple JSON/YAML frontmatter config
-  - Hook callbacks await commands; failures do not veto tool execution, stop later commands, or crash the session.
+- Tool hooks (`before`/`after`) and session hooks (`start`/`idle`) via JSON/YAML config
+  - Hooks wait for commands; failures do not block tool execution.
   - Commands run **sequentially**, even if earlier ones fail.
 - Inject bash output into context with `inject` and notify user with `toast`
   - `inject`/`toast` interpolate using the **last command’s** output if `run` is an array.
@@ -363,7 +361,7 @@ Run validation after certain subagents complete, inject results back into the se
 
 ### Run Linting After a Specific `write`
 
-Tool-arg matching is exact. This example runs only when the tool arg `path` equals `src/index.ts` and reports lint results without enforcing or blocking the write.
+Tool-arg matching is exact. This example runs only when the tool arg `path` equals `src/index.ts`.
 
 ```jsonc
 {
@@ -404,7 +402,7 @@ Tool-arg matching is exact. This example runs only when the tool arg `path` equa
 
 ### Session Lifecycle Hooks
 
-V1 supports `session.created` (with `session.start` as an alias) and `session.idle` only. The legacy `session.end` and `slashCommand` configuration fields remain accepted for compatibility but are unsupported in V1: slash-command markdown is not loaded and slash-command context is not supplied.
+`session.start` aliases `session.created`; `session.end` and slash-command hooks are not supported.
 
 ```jsonc
 {
