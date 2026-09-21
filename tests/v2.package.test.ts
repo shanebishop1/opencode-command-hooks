@@ -22,7 +22,7 @@ describe("dual-host package artifact", () => {
     expect(manifest.name).toBe("opencode-command-hooks")
     expect(manifest.exports["."]).toBeDefined()
     expect(manifest.exports["./server"]).toBeDefined()
-    expect(manifest.engines.opencode).toBe(">=1.18.23")
+    expect(manifest.engines.opencode).toBe(">=1.18.29")
 
     const v2 = await import("opencode-command-hooks")
     const v1 = await import("opencode-command-hooks/server")

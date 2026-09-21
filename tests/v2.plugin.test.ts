@@ -63,6 +63,36 @@ afterEach(async () => {
 })
 
 describe("OpenCode V2 plugin", () => {
+  it("aborts a pending event subscription during cleanup", async () => {
+    const directory = await createProject({})
+    const { context, disposed } = createContext(directory)
+    let subscriptionSignal: AbortSignal | undefined
+    let closed = false
+    context.event.subscribe = ({ signal } = {}) => (async function* () {
+      subscriptionSignal = signal
+      try {
+        await new Promise<void>((_resolve, reject) => {
+          signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true })
+        })
+        yield { type: "session.idle", data: { sessionID: "unexpected" } }
+      } finally {
+        closed = true
+      }
+    })()
+    const errorSpy = spyOn(console, "error").mockImplementation(() => {})
+    try {
+      const cleanup = await createV2Plugin().setup(context)
+      expect(subscriptionSignal?.aborted).toBe(false)
+      await cleanup?.()
+      expect(subscriptionSignal?.aborted).toBe(true)
+      expect(closed).toBe(true)
+      expect(disposed).toEqual(["execute.before", "execute.after"])
+      expect(errorSpy).not.toHaveBeenCalled()
+    } finally {
+      errorSpy.mockRestore()
+    }
+  }, 1_000)
+
   it("registers both tool phases and uses after-event input without a V1 cache", async () => {
     const directory = await createProject({
       tool: [

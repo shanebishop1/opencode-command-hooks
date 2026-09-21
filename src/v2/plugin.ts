@@ -37,7 +37,7 @@ export interface V2Context {
     ) => Promise<{ dispose: () => Promise<void> }>
   }
   event: {
-    subscribe: () => AsyncIterable<V2Event>
+    subscribe: (options?: { signal?: AbortSignal }) => AsyncIterable<V2Event>
   }
   session: {
     get: (input: { sessionID: string }) => Promise<V2SessionInfo>
@@ -108,6 +108,7 @@ export const createV2Plugin = (): V2Plugin => ({
     const activeSubagents = createActiveSubagentTracker()
     let warnedToastUnsupported = false
     let stopped = false
+    const controller = new AbortController()
 
     const notifyConfigError = (error: string | null, directory: string): void => {
       if (!error) return
@@ -270,7 +271,7 @@ export const createV2Plugin = (): V2Plugin => ({
     let iterator: AsyncIterator<V2Event> | undefined
     const eventTask = (async () => {
       try {
-        iterator = ctx.event.subscribe()[Symbol.asyncIterator]()
+        iterator = ctx.event.subscribe({ signal: controller.signal })[Symbol.asyncIterator]()
         while (!stopped) {
           const next = await iterator.next()
           if (next.done) break
@@ -283,6 +284,7 @@ export const createV2Plugin = (): V2Plugin => ({
 
     return async () => {
       stopped = true
+      controller.abort()
       const disposed = Promise.allSettled(registrations.map(registration => registration.dispose()))
       await iterator?.return?.()
       await eventTask
