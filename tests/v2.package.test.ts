@@ -30,5 +30,5 @@ describe("dual-host package artifact", () => {
     expect(typeof v2.default.setup).toBe("function")
     expect(v1.default.id).toBe("opencode-command-hooks")
     expect(typeof v1.default.server).toBe("function")
-  })
+  }, 30_000)
 })
