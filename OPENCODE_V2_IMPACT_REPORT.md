@@ -1,6 +1,15 @@
 # OpenCode 2 Impact and Migration Report
 
-Status: Implemented dual-host beta adapter
+Status: Historical beta migration research; superseded by the stable V2 adapter
+
+Current implementation (2026-09-21): the adapter targets `@opencode/cli@2.0.12`
+and `@opencode/plugin@2.0.12`, with V1 support starting at 1.18.29. Real-host V2
+tests now cover injection, subagents, and plugin removal/reload with a
+deterministic local provider, plus a separate hosted free-model test. See the
+README's OpenCode 2 section for current
+installation and testing instructions. The beta package names, version floors,
+and release recommendations below are retained as historical research, not
+current compatibility guidance.
 Last updated: 2026-08-30
 Doc Class: report
 Doc Type: research
