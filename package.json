@@ -3,21 +3,30 @@
   "version": "0.7.1",
   "description": "OpenCode plugin for declaratively attaching shell commands to tool, subagent, and session events",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/v2.js",
+  "types": "dist/v2.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/v2.d.ts",
+      "import": "./dist/v2.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
     }
   },
   "files": [
     "dist",
+    "index.js",
     "types"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "build:all": "npm run build",
     "test": "bun test",
+    "test:v2": "bun test tests/v2.plugin.test.ts tests/v2.package.test.ts",
+    "test:v2:e2e": "OPENCODE2_E2E=1 bun test tests/e2e.v2.test.ts",
+    "test:v2:e2e:live": "OPENCODE2_E2E=1 OPENCODE2_E2E_LIVE=1 bun test tests/e2e.v2.test.ts",
     "lint": "eslint src tests --ext .ts",
     "typecheck": "tsc --noEmit",
     "ci:check": "npm run lint && npm run typecheck && npm test",
@@ -49,6 +58,7 @@
   "dependencies": {
     "@opencode-ai/plugin": "^1.18.29",
     "@opencode-ai/sdk": "^1.18.29",
+    "@opencode/plugin": "2.0.12",
     "js-yaml": "^4.3.2",
     "jsonc-parser": "^3.3.1",
     "picomatch": "^4.0.3",
@@ -66,6 +76,7 @@
     "typescript-eslint": "^8.69.0"
   },
   "engines": {
-    "bun": ">=1.0.0"
+    "bun": ">=1.0.0",
+    "opencode": ">=1.18.29"
   }
 }

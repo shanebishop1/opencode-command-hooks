@@ -251,13 +251,8 @@ describe("tool after hooks", () => {
 
     const plugin = await CommandHooksPlugin({ client } as never);
 
-    await plugin["tool.execute.before"]?.(
-      { tool: "bash", sessionID: "s2", callID: "c2" },
-      { args: { target: "prod" } },
-    );
-
     await plugin["tool.execute.after"]?.(
-      { tool: "bash", sessionID: "s2", callID: "c2" },
+      { tool: "bash", sessionID: "s2", callID: "c2", args: { target: "prod" } },
       { title: "ok", output: "done", metadata: {} },
     );
 

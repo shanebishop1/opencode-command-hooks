@@ -142,6 +142,7 @@ export const ToolHookSchema = z.object({
 const SessionHookWhenSchema = z.object({
   event: SessionEventSchema,
   agent: StringOrArray.optional(),
+  excludeSubagentWait: z.boolean().optional(),
   rootSessionOnly: z.boolean().optional(),
 });
 

@@ -29,6 +29,7 @@ hooks:
 
 - [Features](#features)
 - [Installation](#installation)
+- [OpenCode 2](#opencode-2)
 - [Configuration](#configuration)
 - [Examples](#examples)
 - [Template Placeholders](#template-placeholders)
@@ -202,13 +203,43 @@ is not placed in the environment.
 
 ## Installation
 
-Add to your `opencode.json`:
+Add to your `opencode.json` (OpenCode V2):
 
 ```jsonc
 {
-  "plugin": ["opencode-command-hooks"],
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": ["opencode-command-hooks"],
 }
 ```
+
+For OpenCode V1, use `"plugin"` instead of `"plugins"`. The supported V1 minimum is 1.18.29, which is also exercised in CI.
+
+## OpenCode 2
+
+The same `opencode-command-hooks` package supports OpenCode V1 and V2. Supported V1 hosts automatically load the package's `./server` export, while OpenCode V2 loads the package root. Existing V1 configuration remains valid when upgrading hosts:
+
+```jsonc
+{
+  "plugin": ["opencode-command-hooks"]
+}
+```
+
+The V2 adapter targets stable `@opencode/cli@2.0.12` and uses the matching `@opencode/plugin@2.0.12` API. OpenCode 2 normalizes the singular V1 `plugin` setting to `plugins`; use `plugins` for new V2 configurations. Verify the plugin ID with `opencode2 api get /api/plugin` after the host finishes activating plugins.
+
+The V2 adapter supports tool before/after hooks, `toolArgs` filters, agent frontmatter hooks, session start/idle hooks, explicit project-directory execution, and injection through synthetic context. Existing V1 config vocabulary remains valid: the V2 `subagent` tool and its `agent` argument are normalized to `task` and `subagent_type` for matching.
+
+V2 server plugins cannot currently show TUI toasts. When a matched hook requests one, the adapter emits one diagnostic and continues command execution and injection. Synthetic injections use `resume: false` so an idle hook does not create an unsolicited model turn.
+
+V2 has two complementary real-host test modes. Both build and install the npm-packed plugin into an isolated project with the pinned stable CLI:
+
+| Command | Model | Coverage |
+| --- | --- | --- |
+| `npm run test:v2:e2e` | Deterministic local responses | Tool/session hooks, model-visible injection, real subagent frontmatter hooks, root/child idle filtering, and cleanup across plugin removal/reload |
+| `npm run test:v2:e2e:live` | Hosted OpenCode free model | Real model-selected shell execution, before/after and session hooks, and persisted synthetic injection |
+
+The deterministic suite needs npm registry access for installation but no model credentials or hosted model. The live suite waits for the host's model catalog and selects an available, tool-capable, zero-cost `opencode/*-free` model. Set `OPENCODE2_E2E_MODEL=opencode/<model>-free` to choose another advertised free model; paid models are rejected, and user credentials/config are not inherited. Live failures remain failures rather than silently skipping or falling back to a stub. Both modes run in PR and release CI, with the live PR check reported separately so provider outages are distinguishable from deterministic regressions.
+
+Use `OPENCODE2_CLI_VERSION=<version>` with either E2E command to check another V2 host release. Update the CLI pin and matching plugin dependency together when advancing the supported version. `npm run test:v2` runs adapter/package tests without a host; ordinary `npm test` skips the opt-in host suites. The separate V1 suite (`npm run test:v1:e2e`) uses a hosted credential-free model or `OPENCODE_E2E_MODEL`.
 
 ## Configuration
 
@@ -415,7 +446,7 @@ Tool-arg matching is exact. This example runs only when the tool arg `path` equa
     },
     {
       "id": "session-idle",
-      "when": { "event": "session.idle" },
+      "when": { "event": "session.idle", "excludeSubagentWait": true },
       "run": ["notify-user.sh 'Waiting for input'"],
     },
   ],
@@ -447,6 +478,12 @@ child sessions through OpenCode's `parentID`; it does not guarantee that no
 background work remains or that OpenCode is specifically waiting for user input.
 If session lookup fails, hooks run without root filtering rather than being
 silently dropped.
+
+`excludeSubagentWait` is opt-in. When true, that `session.idle` hook also waits
+until all active `task` subagent calls for the root session have completed. Other
+idle hooks still run while the parent is waiting on a subagent. This is separate
+from `rootSessionOnly`: one filters child-session events, while the other filters
+parent idle events during active subagent calls.
 
 ---
 
