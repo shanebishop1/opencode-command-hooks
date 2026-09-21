@@ -6,6 +6,12 @@
  */
 
 import { z } from "zod";
+import type {
+  ToolArgGlobMatcher,
+  ToolArgMatcher,
+  ToolArgRegexMatcher,
+} from "./types/hooks.js";
+import { compileToolArgGlob, compileToolArgRegex } from "./matcher.js";
 
 // ============================================================================
 // PRIMITIVE SCHEMAS
@@ -17,16 +23,55 @@ import { z } from "zod";
 const StringOrArray = z.union([z.string(), z.array(z.string())]);
 const RunSchema = z.union([z.string(), z.array(z.string())]);
 
+const GlobMatcherSchema: z.ZodType<ToolArgGlobMatcher> = z
+  .object({ glob: z.string() })
+  .strict()
+  .superRefine(({ glob }, context) => {
+    try {
+      compileToolArgGlob(glob);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Invalid glob pattern: ${message}`,
+      });
+    }
+  });
+
+const RegexMatcherSchema: z.ZodType<ToolArgRegexMatcher> = z
+  .object({ regex: z.string() })
+  .strict()
+  .superRefine(({ regex }, context) => {
+    try {
+      compileToolArgRegex(regex);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Invalid regex pattern: ${message}`,
+      });
+    }
+  });
+
+const ToolArgMatcherSchema: z.ZodType<ToolArgMatcher> = z.union([
+  z.string(),
+  z.array(z.string()),
+  GlobMatcherSchema,
+  RegexMatcherSchema,
+]);
+
 /**
  * Phase for tool hooks: "before" or "after"
  */
 const PhaseSchema = z.enum(["before", "after"]);
 
 /**
- * Session event types
- * Note: "session.start" maps to "session.created" internally
+ * Session event types.
+ * Note: "session.start" maps to "session.created" internally.
  */
-const SessionEventSchema = z.enum(["session.created", "session.idle", "session.end", "session.start"]);
+const SessionEventSchema = z
+  .enum(["session.created", "session.idle", "session.end", "session.start"])
+  .describe("V1 dispatches created/start alias and idle; session.end is unsupported.");
 
 // ============================================================================
 // TOOL HOOK SCHEMAS
@@ -39,8 +84,8 @@ const ToolHookWhenSchema = z.object({
   phase: PhaseSchema,
   tool: StringOrArray.optional(),
   callingAgent: StringOrArray.optional(),
-  slashCommand: StringOrArray.optional(),
-  toolArgs: z.record(StringOrArray).optional(),
+  slashCommand: StringOrArray.optional().describe("Legacy field; unsupported by V1."),
+  toolArgs: z.record(ToolArgMatcherSchema).optional(),
 });
 
 /**
@@ -73,8 +118,8 @@ export const SimplifiedHookEntrySchema = z
  * Tool hook configuration
  *
  * Runs shell command(s) before or after a tool execution. Hooks can be filtered
- * by tool name, calling agent, and slash command context. Results can optionally
- * be injected into the session as messages.
+ * by tool name and calling agent. Results can optionally be injected into the
+ * session as messages.
  */
 export const ToolHookSchema = z.object({
     id: z.string().min(1, "Hook ID must not be empty"),
@@ -104,7 +149,7 @@ const SessionHookWhenSchema = z.object({
 /**
  * Session hook configuration
  *
- * Runs shell command(s) on session lifecycle events (start, idle, end).
+ * Runs shell command(s) on session lifecycle events (start, idle).
  * Can be filtered by agent name. Results can optionally be injected into
  * the session as messages.
  */
@@ -126,8 +171,8 @@ export const SessionHookSchema = z.object({
 /**
  * Top-level command hooks configuration
  *
- * This is the root configuration object that appears in opencode.json/.opencode.jsonc
- * under the "command_hooks" key, or in YAML frontmatter of agent/slash-command markdown.
+ * This is the root configuration object in global/project command-hooks.jsonc or
+ * YAML frontmatter of agent markdown.
  */
 export const ConfigSchema = z.object({
   truncationLimit: z.number().int().positive().optional(),

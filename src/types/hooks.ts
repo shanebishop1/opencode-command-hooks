@@ -1,12 +1,11 @@
 /**
- * Type definitions for command hooks configuration
- * Supports tool hooks and session hooks with flexible matching and injection
+ * Type definitions for command hooks configuration.
+ * Supports tool and session hooks with flexible matching and injection.
  *
- * Hooks allow users to declaratively attach shell commands to agent/tool/slash-command
- * lifecycle events. They can be defined in:
- * - Global config in opencode.json/.opencode.jsonc
+ * Hooks allow users to declaratively attach shell commands to tool, subagent, and
+ * session events. They can be defined in:
+ * - Global/project command-hooks.jsonc
  * - Per-agent YAML frontmatter in agent markdown
- * - Per-slash-command YAML frontmatter in command markdown
  */
 
 /**
@@ -51,8 +50,8 @@ export interface AgentHookEntry {
  * Tool hook configuration
  *
  * Runs shell command(s) before or after a tool execution. Hooks can be filtered
- * by tool name, calling agent, and slash command context. Results can optionally
- * be injected into the session as messages.
+ * by tool name and calling agent. Results can optionally be injected into the
+ * session as messages.
  */
 export interface ToolHook {
   /** Unique hook identifier. Must be unique within config source. */
@@ -66,7 +65,7 @@ export interface ToolHook {
 
   /**
    * Optional template for injecting hook results into the session.
-   * Supports placeholders: {id}, {agent}, {tool}, {cmd}, {stdout}, {stderr}, {exitCode}
+   * Supports placeholders: {id}, {agent}, {tool}, {cmd}, {stdout}, {stderr}, {exitCode}, and {args.<key>}
    * Unavailable values are replaced with empty string.
    */
   inject?: string
@@ -112,17 +111,17 @@ export interface ToolHookWhen {
    */
   callingAgent?: string | string[]
 
-  /** Slash command name(s) to match. Omitted matches all contexts. */
+  /** Legacy slash-command name(s) to match; retained for compatibility but unsupported by V1. */
   slashCommand?: string | string[]
 
-  /** Tool argument filters (only in tool.execute.before). Match by input arguments. */
-  toolArgs?: Record<string, string | string[]>
+  /** Tool argument filters (in tool.execute.before and tool.execute.after). Match by input arguments. */
+  toolArgs?: Record<string, ToolArgMatcher>
 }
 
 /**
  * Session hook configuration
  *
- * Runs shell command(s) on session lifecycle events (start, idle, end).
+ * Runs shell command(s) on session lifecycle events (start, idle).
  * Can be filtered by agent name. Results can optionally be injected into
  * the session as messages.
  */
@@ -173,7 +172,8 @@ export interface SessionHook {
 export interface SessionHookWhen {
   /**
    * Session lifecycle event type.
-   * "session.start" (alias for "session.created"), "session.idle", "session.end"
+   * "session.start" (alias for "session.created"), "session.idle", and the
+   * legacy "session.end" event. The legacy event is unsupported by V1.
    */
   event: "session.created" | "session.idle" | "session.end" | "session.start"
 
@@ -193,14 +193,27 @@ export interface SessionHookWhen {
   rootSessionOnly?: boolean
 }
 
+/** A glob matcher. The `regex` key is intentionally unavailable. */
+export type ToolArgGlobMatcher = { glob: string; regex?: never }
+
+/** A regex matcher. The `glob` key is intentionally unavailable. */
+export type ToolArgRegexMatcher = { regex: string; glob?: never }
+
+/** Exact, list, glob, or regex matching for a tool argument. */
+export type ToolArgMatcher =
+  | string
+  | string[]
+  | ToolArgGlobMatcher
+  | ToolArgRegexMatcher
+
 /**
  * Top-level command hooks configuration
  *
- * Root configuration object in opencode.json/.opencode.jsonc under "command_hooks" key,
- * or in YAML frontmatter of agent/slash-command markdown.
+ * Root configuration object in global/project command-hooks.jsonc, or in YAML
+ * frontmatter of agent markdown.
  */
 export interface CommandHooksConfig {
-  /** Truncation limit for command output in characters. Defaults to 30,000. */
+  /** Maximum reported characters per stdout/stderr after completion. Defaults to 30,000. */
   truncationLimit?: number
 
   /** When true, ignore ~/.config/opencode/command-hooks.jsonc entirely. */
@@ -268,6 +281,9 @@ export interface TemplateContext {
   /** Exit code from command execution (0 = success) */
   exitCode?: number
 
+  /** Tool arguments, available for direct {args.<key>} placeholders */
+  args?: Record<string, unknown>
+
   /** Additional context fields for future expansion */
   [key: string]: unknown
 }
@@ -325,6 +341,6 @@ export interface HookExecutionContext {
   /** Tool call ID provided by OpenCode (if available) */
   callId?: string
 
-  /** Tool arguments (available for tool.execute.before hooks) */
+  /** Tool arguments (available for tool.execute.before and tool.execute.after hooks) */
   toolArgs?: Record<string, unknown>
 }

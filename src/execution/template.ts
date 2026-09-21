@@ -13,6 +13,7 @@
  * - {stdout} - command stdout (if available)
  * - {stderr} - command stderr (if available)
  * - {exitCode} - command exit code (if available)
+ * - {args.<key>} - direct tool argument value (if available; own properties only)
  */
 
 import type { TemplateContext } from "../types/hooks.js"
@@ -26,13 +27,19 @@ import { logger, isDebugEnabled } from "../logging.js"
  * @param value - The value to replace with (undefined becomes empty string)
  * @returns The template with the placeholder replaced
  */
-const replacePlaceholder = (template: string, placeholder: string, value: unknown): string => {
-  // Convert value to string, handling undefined/null
-  const stringValue = value === undefined || value === null ? "" : String(value)
-
-  // Create regex to match {placeholder} globally
-  const regex = new RegExp(`\\{${placeholder}\\}`, "g")
-  return template.replace(regex, stringValue)
+const formatTemplateValue = (value: unknown): string => {
+  if (value === undefined || value === null) return ""
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value)
+  }
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value) ?? ""
+    } catch {
+      return ""
+    }
+  }
+  return String(value)
 }
 
 /**
@@ -46,6 +53,7 @@ const replacePlaceholder = (template: string, placeholder: string, value: unknow
  * - {stdout} - command stdout (optional)
  * - {stderr} - command stderr (optional)
  * - {exitCode} - command exit code (optional)
+ * - {args.<key>} - direct tool argument value (optional)
  *
  * Missing values are replaced with empty strings. The function never throws
  * and always returns a valid string.
@@ -91,15 +99,24 @@ export const interpolateTemplate = (template: string | undefined, context: Templ
 
   let result = template
 
-  // Replace all placeholders
-  // Order doesn't matter since each placeholder is unique
-  result = replacePlaceholder(result, "id", context.id)
-  result = replacePlaceholder(result, "agent", context.agent)
-  result = replacePlaceholder(result, "tool", context.tool)
-  result = replacePlaceholder(result, "cmd", context.cmd)
-  result = replacePlaceholder(result, "stdout", context.stdout)
-  result = replacePlaceholder(result, "stderr", context.stderr)
-  result = replacePlaceholder(result, "exitCode", context.exitCode)
+  const args = context.args
+  result = result.replace(
+    /\{(id|agent|tool|cmd|stdout|stderr|exitCode|args\.[^{}]+)\}/g,
+    (_placeholder, name: string) => {
+      if (name.startsWith("args.")) {
+        const key = name.slice("args.".length)
+        if (
+          !args ||
+          !Object.prototype.hasOwnProperty.call(args, key)
+        ) {
+          return ""
+        }
+        return formatTemplateValue(args[key])
+      }
+
+      return formatTemplateValue(context[name])
+    },
+  )
 
     if (isDebugEnabled()) {
       logger.debug(`Template interpolation complete, result length: ${result.length}`)

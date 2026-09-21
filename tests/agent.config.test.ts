@@ -4,6 +4,7 @@ import { writeFile, rm, mkdir, mkdtemp } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { realpathSync } from "fs";
+import { filterToolHooks } from "../src/executor";
 
 describe("Agent Configuration", () => {
   let testRootDir: string;
@@ -473,6 +474,33 @@ hooks:
         process.chdir(originalCwd);
       }
     });
+
+    for (const agentDirectory of ["agent", "agents"]) {
+      it(`should scope discovered simplified hooks to engineer in .opencode/${agentDirectory}`, async () => {
+        const projectDirectory = testProjectDir;
+        const fixturePath = join(import.meta.dir, "fixtures", "agents", "engineer.md");
+        const agentPath = join(projectDirectory, ".opencode", agentDirectory, "engineer.md");
+        const fixture = await Bun.file(fixturePath).text();
+        await writeFile(agentPath, fixture);
+
+        const config = await loadAgentConfig("engineer", projectDirectory);
+        const matchingHooks = filterToolHooks(config.tool ?? [], {
+          phase: "after",
+          toolName: "task",
+          callingAgent: "engineer",
+          slashCommand: undefined,
+        });
+        const nonmatchingHooks = filterToolHooks(config.tool ?? [], {
+          phase: "after",
+          toolName: "task",
+          callingAgent: "different-agent",
+          slashCommand: undefined,
+        });
+
+        expect(matchingHooks).toHaveLength(2);
+        expect(nonmatchingHooks).toHaveLength(0);
+      });
+    }
 
     it("should load simplified hooks with only after hooks", async () => {
       const agentPath = join(testProjectDir, ".opencode", "agent", "after-only.md");

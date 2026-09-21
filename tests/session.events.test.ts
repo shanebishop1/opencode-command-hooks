@@ -86,6 +86,32 @@ describe("session event hooks", () => {
     expect(promptCalls).toHaveLength(1);
   });
 
+  it("runs session commands without a tool-hook argument environment", async () => {
+    const originalArgsFile = process.env.OPENCODE_HOOK_ARGS_FILE;
+    process.env.OPENCODE_HOOK_ARGS_FILE = "inherited-session-value";
+
+    try {
+      const { promptCalls } = await dispatchIdle(
+        { id: "root-session" },
+        [{
+          id: "idle-command",
+          when: { event: "session.idle" },
+          run: `printf '%s' "$OPENCODE_HOOK_ARGS_FILE"`,
+          inject: "{stdout}",
+        }],
+      );
+
+      const parts = (promptCalls[0].body as { parts: Array<{ text: string }> }).parts;
+      expect(parts[0].text).toBe("inherited-session-value");
+    } finally {
+      if (originalArgsFile === undefined) {
+        delete process.env.OPENCODE_HOOK_ARGS_FILE;
+      } else {
+        process.env.OPENCODE_HOOK_ARGS_FILE = originalArgsFile;
+      }
+    }
+  });
+
   it("skips a default session.idle hook for a child session", async () => {
     const { promptCalls, sessionGetCalls } = await dispatchIdle(
       { id: "child-session", parentID: "root-session" },

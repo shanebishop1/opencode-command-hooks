@@ -7,6 +7,8 @@
 
 Use simple configs to declaratively define shell command hooks on tool/subagent invocations. With a single line of config, you can inject a hook's output directly into context for your agent to read.
 
+![OpenCode Command Hooks demo](./docs/assets/opencode-command-hooks-demo.gif)
+
 ## Markdown Frontmatter Hooks
 
 Define hooks in just a couple lines of markdown frontmatter. Putting them here is also really nice because you can see your entire agent's config in one place.
@@ -36,12 +38,12 @@ hooks:
 
 1. **Runs automatically** on the configured event
 2. **Executes shell commands** (sequentially, if you pass an array)
-3. **Captures output** (truncated to configured limit, default 30,000 characters)
+3. **Captures output**, then reports it up to the configured limit (default 30,000 characters)
 4. **Optionally reports results** via `inject` (to the session) and/or `toast` (to the UI).
 
 ## Why?
 
-When working with a fleet of subagents, automatic validation of the state of your codebase is really useful. By setting up quality gates (lint/typecheck/test/etc.) or other automation, you can catch and prevent errors quickly and reliably.
+When working with a fleet of subagents, automatic validation of the state of your codebase is really useful. By setting up lint/typecheck/test checks or other automation, you can surface errors quickly and reliably.
 
 Doing this by asking your orchestrator agent to use the bash tool (or call a validator subagent) is non-deterministic and can cost a lot of tokens over time. You could always write your own custom plugin to achieve this automatic validation behavior, but I found myself writing the same boilerplate, error handling, output capture, and session injection logic over and over again.
 
@@ -86,6 +88,7 @@ hooks:
 | `run`            | `string` \| `string[]` | Command(s) to execute                                                    |
 | `inject`         | `string`               | Message injected into the session                                        |
 | `toast`          | `object`               | Toast notification configuration                                         |
+| `when.toolArgs`  | `Record<string, string \| string[] \| matcher>` | Exact argument filters, or `{ glob: "..." }` / `{ regex: "..." }` matchers |
 | `overrideGlobal` | `boolean`              | When `true`, suppresses global hooks matching the same event/phase+tool. Must be a JSON boolean (`true`/`false`), not a string. |
 
 ### Toast Configuration
@@ -107,6 +110,7 @@ toast:
 - `{stdout}` - Command stdout (truncated)
 - `{stderr}` - Command stderr (truncated)
 - `{exitCode}` - Command exit code
+- `{args.<key>}` - Direct tool argument value (own properties only; strings, numbers, and booleans as text; arrays and objects as JSON)
 
 ### Complete Example
 
@@ -137,6 +141,11 @@ If `inject` is set, the command output is posted into the session, so your agent
 ### Filter by Tool Arguments
 
 You can set up tool hooks to only trigger on specific arguments via `when.toolArgs`.
+String and string-array values retain exact matching (and `"*"` matches any
+value). Matcher objects support full-string glob matching and JavaScript regex
+search matching. Every configured argument must match, and pattern matchers
+only match arguments whose runtime value is a string. Leading `!` is not an
+implicit negation and leading `#` is not treated as a comment.
 
 ```jsonc
 {
@@ -153,10 +162,36 @@ You can set up tool hooks to only trigger on specific arguments via `when.toolAr
 }
 ```
 
+Matchers work with arbitrary argument names and custom tools:
+
+```yaml
+when:
+  phase: before
+  tool: write_file
+  toolArgs:
+    filePath:
+      glob: "**/*.{ts,js}"
+    content:
+      regex: "TODO"
+```
+
+Argument values are also available in `inject` and `toast` templates through
+direct placeholders such as `{args.filePath}`. Strings, numbers, and booleans
+are rendered as text; arrays and objects are rendered as JSON. Missing and
+`null` values render as empty strings. Argument placeholders are not expanded
+inside `run` commands. Instead, every tool-hook command receives the complete
+argument object in a private temporary JSON file. Its path is available in the
+`OPENCODE_HOOK_ARGS_FILE` environment variable; read it from the command, for
+example with `cat "$OPENCODE_HOOK_ARGS_FILE"`. Tool hooks without arguments receive
+`{}`. The file is unique to the tool-hook execution and removed after all of its
+commands finish. Supplying an argument that looks like shell syntax does not
+execute it or interpolate it into the command source, and the complete payload
+is not placed in the environment.
+
 ## Features
 
-- Tool hooks (`before`/`after`) and session hooks (`start`/`idle`) via simple JSON/YAML frontmatter config
-  - Hooks are **non-blocking**: failures don’t crash the session/tool.
+- Tool hooks (`before`/`after`) and session hooks (`start`/`idle`) via JSON/YAML config
+  - Hooks wait for commands; failures do not block tool execution.
   - Commands run **sequentially**, even if earlier ones fail.
 - Inject bash output into context with `inject` and notify user with `toast`
   - `inject`/`toast` interpolate using the **last command’s** output if `run` is an array.
@@ -237,7 +272,7 @@ Relative hook commands execute from that same OpenCode project directory.
 
 | Option              | Type            | Description                                                                                                                        |
 | ------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `truncationLimit`   | `number`        | Maximum characters to capture from command output. Defaults to 30,000 (matching OpenCode's bash tool). Must be a positive integer. Project config overrides global when both are set. |
+| `truncationLimit`   | `number`        | Maximum characters reported per stdout/stderr after command completion. Defaults to 30,000 (matching OpenCode's bash tool). Must be a positive integer. Project config overrides global when both are set. |
 | `ignoreGlobalConfig`| `boolean`       | When `true`, skip loading `~/.config/opencode/command-hooks.jsonc`. Defaults to `false`. Must be a JSON boolean (`true`/`false`), not a string. |
 | `tool`              | `ToolHook[]`    | Array of tool execution hooks                                                                                                      |
 | `session`           | `SessionHook[]` | Array of session lifecycle hooks                                                                                                   |
@@ -355,7 +390,7 @@ Run validation after certain subagents complete, inject results back into the se
 }
 ```
 
-### Enforce Linting After a Specific `write`
+### Run Linting After a Specific `write`
 
 Tool-arg matching is exact. This example runs only when the tool arg `path` equals `src/index.ts`.
 
@@ -397,6 +432,8 @@ Tool-arg matching is exact. This example runs only when the tool arg `path` equa
 ```
 
 ### Session Lifecycle Hooks
+
+`session.start` aliases `session.created`; `session.end` and slash-command hooks are not supported.
 
 ```jsonc
 {
@@ -504,7 +541,7 @@ export const MyHooks: Plugin = async ({ $, client }) => {
             const stdout = result.stdout?.toString() || "";
             const stderr = result.stderr?.toString() || "";
 
-            // Truncate to 30k chars to match OpenCode's bash tool
+            // After capture, report up to 30k chars to match OpenCode's bash tool
             lastResult = {
               exitCode: result.exitCode ?? 0,
               stdout:
