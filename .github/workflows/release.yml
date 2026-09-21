@@ -63,8 +63,11 @@ jobs:
       - name: Pack dry-run
         run: npm pack --dry-run
 
-      - name: Test packed package in OpenCode 2
+      - name: Test packed package in OpenCode 2 with a deterministic provider
         run: npm run test:v2:e2e
+
+      - name: Test packed package in OpenCode 2 with a hosted free model
+        run: npm run test:v2:e2e:live
 
   publish-npm:
     needs: verify

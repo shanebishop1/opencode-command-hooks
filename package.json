@@ -26,6 +26,7 @@
     "test": "bun test",
     "test:v2": "bun test tests/v2.plugin.test.ts tests/v2.package.test.ts",
     "test:v2:e2e": "OPENCODE2_E2E=1 bun test tests/e2e.v2.test.ts",
+    "test:v2:e2e:live": "OPENCODE2_E2E=1 OPENCODE2_E2E_LIVE=1 bun test tests/e2e.v2.test.ts",
     "lint": "eslint src tests --ext .ts",
     "typecheck": "tsc --noEmit",
     "ci:check": "npm run lint && npm run typecheck && npm test",
