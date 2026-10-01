@@ -28,6 +28,10 @@ const E2E_MODEL = HOSTED_MODEL || "local/deterministic"
 const PROVIDER_FIXTURE = resolve(import.meta.dir, "fixtures", "local-openai-server.ts")
 let providerProcess: Bun.ReadableSubprocess | undefined
 let providerUrl = ""
+// A long-lived server, like the TUI, so hooks that run after the session goes
+// idle are not cut short by a one-shot `opencode run` exiting.
+let serverProcess: Bun.ReadableSubprocess | undefined
+let serverUrl = ""
 
 function createTestSandbox(): void {
   // Canonical paths keep tool permissions inside the project when tmpdir is a symlink (macOS).
@@ -89,6 +93,38 @@ async function waitForModelContext(text: string, timeoutMs = 10000): Promise<str
     await new Promise(resolve => setTimeout(resolve, 500))
   }
   return content
+}
+
+async function readUntil(stream: ReadableStream<Uint8Array>, pattern: RegExp, timeoutMs: number): Promise<string> {
+  const reader = stream.getReader()
+  const decoder = new TextDecoder()
+  const deadline = Date.now() + timeoutMs
+  let output = ""
+  try {
+    while (Date.now() < deadline) {
+      const chunk = await Promise.race([
+        reader.read(),
+        new Promise<undefined>(resolve => setTimeout(resolve, deadline - Date.now())),
+      ])
+      if (!chunk || chunk.done) break
+      output += decoder.decode(chunk.value)
+      const match = output.match(pattern)
+      if (match?.[1]) return match[1]
+    }
+  } finally {
+    reader.releaseLock()
+  }
+  throw new Error(`Timed out waiting for ${pattern}:\n${output}`)
+}
+
+async function startServer(): Promise<void> {
+  serverProcess = Bun.spawn(["opencode", "serve", "--hostname", "127.0.0.1", "--port", "0"], {
+    cwd: TEST_CONFIG_DIR,
+    env: getOpenCodeEnvironment(),
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  serverUrl = await readUntil(serverProcess.stdout, /listening on (http:\/\/\S+)/, 60_000)
 }
 
 async function startLocalProvider(): Promise<void> {
@@ -334,7 +370,7 @@ async function waitForMinimumLineCount(
  * Run OpenCode with a prompt and capture its successful output.
  */
 async function runOpenCode(prompt: string): Promise<string> {
-  const result = await runOpenCodeCommand(["-m", E2E_MODEL, "run", prompt])
+  const result = await runOpenCodeCommand(["run", "--attach", serverUrl, "--dir", TEST_CONFIG_DIR, "-m", E2E_MODEL, prompt])
   await new Promise(resolve => setTimeout(resolve, 2000))
   return `${result.stdout}${result.stderr}`
 }
@@ -362,14 +398,29 @@ describe.skipIf(!E2E_ENABLED)("V1 headless real-host E2E", () => {
 
     // Enable the plugin in the test opencode config
     writeTestOpencodeConfig()
+    // The server discovers agents at startup.
+    writeTestAgent("e2e-worker", `---
+description: E2E worker that returns a fixed response
+mode: subagent
+model: ${E2E_MODEL}
+---
+
+Reply exactly WORKER_DONE.
+`)
+    await startServer()
   }, 120_000)
 
-  afterAll(() => {
-    if (providerProcess?.exitCode === null) providerProcess.kill(9)
+  afterAll(async () => {
+    for (const child of [serverProcess, providerProcess]) {
+      if (child?.exitCode === null) {
+        child.kill(9)
+        await child.exited
+      }
+    }
     if (TEST_SANDBOX_DIR) {
       rmSync(TEST_SANDBOX_DIR, { recursive: true, force: true })
     }
-  })
+  }, 30_000)
 
   it("runs one write after-hook transaction with isolated observable evidence", async () => {
     const uniqueId = generateUniqueId()
@@ -426,15 +477,6 @@ describe.skipIf(!E2E_ENABLED)("V1 headless real-host E2E", () => {
     const runSubagent = () => runOpenCode(
       "Use the task tool to invoke the e2e-worker subagent. Ask it to reply exactly WORKER_DONE, then reply exactly PARENT_DONE. V2_E2E_SUBAGENT_ROOT"
     )
-
-    writeTestAgent("e2e-worker", `---
-description: E2E worker that returns a fixed response
-mode: subagent
-model: ${E2E_MODEL}
----
-
-Reply exactly WORKER_DONE.
-`)
 
     try {
       writeTestConfig({
