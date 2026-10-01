@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test"
 import { $ } from "bun"
 import { existsSync } from "fs"
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "fs/promises"
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "fs/promises"
 import { tmpdir } from "os"
 import { join, resolve } from "path"
 
@@ -232,7 +232,8 @@ const runHost = async (host: Host) => {
 
 describe.skipIf(!enabled)("package-name installs across OpenCode hosts", () => {
   beforeAll(async () => {
-    workspace = await mkdtemp(join(tmpdir(), "opencode-hooks-hosts-"))
+    // Canonical paths keep each host in one project location when tmpdir is a symlink (macOS).
+    workspace = await realpath(await mkdtemp(join(tmpdir(), "opencode-hooks-hosts-")))
     provider = Bun.spawn([process.execPath, providerFixture, "0"], { stdout: "pipe", stderr: "ignore" })
     providerUrl = await readUntil(provider.stdout, /READY (http:\/\/\S+)/, 10_000)
     await startRegistry()

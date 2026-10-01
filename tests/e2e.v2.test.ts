@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test"
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "fs/promises"
+import { access, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "fs/promises"
 import { tmpdir } from "os"
 import { join, resolve } from "path"
 import { $ } from "bun"
@@ -369,7 +369,8 @@ const startHost = async (): Promise<{ process: Bun.ReadableSubprocess; url: stri
 
 describe.skipIf(!enabled)("OpenCode V2 deterministic and opt-in hosted/free-model real-host E2E", () => {
   beforeAll(async () => {
-    projectDirectory = await mkdtemp(join(tmpdir(), "opencode-hooks-v2-e2e-"))
+    // Canonical paths keep the host and CLI in one location when tmpdir is a symlink (macOS).
+    projectDirectory = await realpath(await mkdtemp(join(tmpdir(), "opencode-hooks-v2-e2e-")))
     configPath = join(projectDirectory, "opencode.jsonc")
     hooksPath = join(projectDirectory, ".opencode", "command-hooks.jsonc")
     homeDirectory = join(projectDirectory, "home")
