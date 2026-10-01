@@ -15,7 +15,8 @@ import { mergeConfigs } from "./merge.js";
 import { join, dirname } from "path";
 import { homedir } from "os";
 import { stat } from "fs/promises";
-import JsoncParser, { type ParseError } from "jsonc-parser";
+import * as JsoncParser from "jsonc-parser";
+import type { ParseError } from "jsonc-parser";
 import { logger } from "../logging.js";
 
 /**

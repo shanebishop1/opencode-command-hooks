@@ -68,6 +68,19 @@ describe("Shell command execution", () => {
       expect(result.stdout).toContain("hello")
     })
 
+    it("executes in an explicit working directory", async () => {
+      const directory = mkdtempSync(join(tmpdir(), "opencode-hooks-cwd-"))
+
+      try {
+        const result = await executeCommand("pwd", { cwd: directory })
+
+        expect(result.success).toBe(true)
+        expect(result.stdout?.trim()).toBe(directory)
+      } finally {
+        rmSync(directory, { recursive: true, force: true })
+      }
+    })
+
     it("preserves inherited environment variables alongside per-command hook arguments", async () => {
       const inheritedKey = "OPENCODE_HOOKS_TEST_INHERITED_SENTINEL"
       const originalInherited = process.env[inheritedKey]

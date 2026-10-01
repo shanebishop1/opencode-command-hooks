@@ -3,21 +3,31 @@
   "version": "0.7.1",
   "description": "OpenCode plugin for declaratively attaching shell commands to tool, subagent, and session events",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/entry.js",
+  "types": "dist/entry.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/entry.d.ts",
+      "import": "./dist/entry.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
     }
   },
   "files": [
     "dist",
+    "index.js",
+    "server.js",
     "types"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "build:all": "npm run build",
     "test": "bun test",
+    "test:v2": "bun test tests/v2.plugin.test.ts tests/v2.package.test.ts",
+    "test:v2:e2e": "OPENCODE2_E2E=1 bun test tests/e2e.v2.test.ts",
+    "test:v2:e2e:live": "OPENCODE2_E2E=1 OPENCODE2_E2E_LIVE=1 bun test tests/e2e.v2.test.ts",
     "lint": "eslint src tests --ext .ts",
     "typecheck": "tsc --noEmit",
     "ci:check": "npm run lint && npm run typecheck && npm test",
@@ -26,7 +36,8 @@
     "typecheck:bun-run": "bun run src/index.ts",
     "test:v1:e2e": "npm run build && OPENCODE_E2E=1 bun test tests/e2e.v1-headless.test.ts",
     "dev": "tsc --watch",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "test:hosts:e2e": "OPENCODE_HOSTS_E2E=1 bun test tests/e2e.hosts.test.ts"
   },
   "keywords": [
     "opencode",

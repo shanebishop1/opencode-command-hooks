@@ -210,6 +210,8 @@ Add to your `opencode.json`:
 }
 ```
 
+This works unchanged on OpenCode 1.x and OpenCode 2 (which also accepts `"plugins"`). On OpenCode 2, hooks cannot show toasts yet; everything else works the same.
+
 ## Configuration
 
 ### Config Locations
@@ -415,7 +417,7 @@ Tool-arg matching is exact. This example runs only when the tool arg `path` equa
     },
     {
       "id": "session-idle",
-      "when": { "event": "session.idle" },
+      "when": { "event": "session.idle", "excludeSubagentWait": true },
       "run": ["notify-user.sh 'Waiting for input'"],
     },
   ],
@@ -447,6 +449,12 @@ child sessions through OpenCode's `parentID`; it does not guarantee that no
 background work remains or that OpenCode is specifically waiting for user input.
 If session lookup fails, hooks run without root filtering rather than being
 silently dropped.
+
+`excludeSubagentWait` is opt-in. When true, that `session.idle` hook also waits
+until all active `task` subagent calls for the root session have completed. Other
+idle hooks still run while the parent is waiting on a subagent. This is separate
+from `rootSessionOnly`: one filters child-session events, while the other filters
+parent idle events during active subagent calls.
 
 ---
 
