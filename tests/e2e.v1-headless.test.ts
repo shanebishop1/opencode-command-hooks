@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test"
-import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, statSync, unlinkSync, rmSync } from "fs"
-import { join } from "path"
+import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, realpathSync, statSync, unlinkSync, rmSync } from "fs"
+import { join, resolve } from "path"
 import { tmpdir } from "os"
 import { $ } from "bun"
 
@@ -21,10 +21,17 @@ const LOG_WINDOW_MS = 15 * 60 * 1000
 const LOG_FALLBACK_FILES = 3
 const OPENCODE_COMMAND_TIMEOUT_MS = 110_000
 const E2E_ENABLED = process.env.OPENCODE_E2E === "1"
-let E2E_MODEL = process.env.OPENCODE_E2E_MODEL ?? ""
+// Hosted models are opt-in; by default a deterministic local provider drives
+// the real host so results never depend on an external model service.
+const HOSTED_MODEL = process.env.OPENCODE_E2E_MODEL ?? ""
+const E2E_MODEL = HOSTED_MODEL || "local/deterministic"
+const PROVIDER_FIXTURE = resolve(import.meta.dir, "fixtures", "local-openai-server.ts")
+let providerProcess: Bun.ReadableSubprocess | undefined
+let providerUrl = ""
 
 function createTestSandbox(): void {
-  TEST_SANDBOX_DIR = mkdtempSync(join(tmpdir(), "opencode-command-hooks-e2e-"))
+  // Canonical paths keep tool permissions inside the project when tmpdir is a symlink (macOS).
+  TEST_SANDBOX_DIR = realpathSync(mkdtempSync(join(tmpdir(), "opencode-command-hooks-e2e-")))
   TEST_CONFIG_DIR = join(TEST_SANDBOX_DIR, "project")
   TEST_OPENCODE_SUBDIR = join(TEST_CONFIG_DIR, ".opencode")
   TEST_OPENCODE_CONFIG = join(TEST_CONFIG_DIR, "opencode.jsonc")
@@ -66,17 +73,38 @@ function formatOpenCodeCommand(args: string[]): string {
   return ["opencode", ...args].map(argument => JSON.stringify(argument)).join(" ")
 }
 
-function selectFreeOpenCodeModel(output: string): string {
-  const models = output
-    .split("\n")
-    .map(line => line.trim())
-    .filter(line => line.startsWith("opencode/") && line.endsWith("-free"))
-  const model = ["opencode/mimo-v2.5-free", "opencode/north-mini-code-free"]
-    .find(candidate => models.includes(candidate)) ?? models[0]
-  if (!model) {
-    throw new Error(`OpenCode did not advertise a credential-free model:\n${output}`)
+const providerLogPath = () => join(TEST_SANDBOX_DIR, "provider.jsonl")
+
+/**
+ * Wait until text appears in model context: the local provider's request log,
+ * or the host log when a hosted model is used.
+ */
+async function waitForModelContext(text: string, timeoutMs = 10000): Promise<string> {
+  if (HOSTED_MODEL) return waitForLogMatch(content => content.includes(text), timeoutMs)
+  const start = Date.now()
+  let content = ""
+  while (Date.now() - start < timeoutMs) {
+    content = existsSync(providerLogPath()) ? readFileSync(providerLogPath(), "utf-8") : ""
+    if (content.includes(text)) return text
+    await new Promise(resolve => setTimeout(resolve, 500))
   }
-  return model
+  return content
+}
+
+async function startLocalProvider(): Promise<void> {
+  providerProcess = Bun.spawn([process.execPath, PROVIDER_FIXTURE, "0", providerLogPath()], { stdout: "pipe", stderr: "ignore" })
+  const reader = providerProcess.stdout.getReader()
+  const decoder = new TextDecoder()
+  let output = ""
+  const deadline = Date.now() + 10_000
+  while (!providerUrl && Date.now() < deadline) {
+    const chunk = await reader.read()
+    if (chunk.done) break
+    output += decoder.decode(chunk.value)
+    providerUrl = output.match(/READY (http:\/\/\S+)/)?.[1] ?? ""
+  }
+  reader.releaseLock()
+  if (!providerUrl) throw new Error(`Local provider did not start:\n${output}`)
 }
 
 function formatOpenCodeCommandError(
@@ -222,9 +250,18 @@ function writeTestOpencodeConfig(): void {
   if (!existsSync(TEST_CONFIG_DIR)) {
     mkdirSync(TEST_CONFIG_DIR, { recursive: true })
   }
-  const pluginConfig = {
-    // OpenCode V1 must select the package's ./server export instead of its V2 root.
+  const pluginConfig: Record<string, unknown> = {
     plugin: [TEST_PLUGIN_DIR],
+  }
+  if (!HOSTED_MODEL) {
+    pluginConfig.provider = {
+      local: {
+        npm: "@ai-sdk/openai-compatible",
+        name: "Deterministic local provider",
+        options: { baseURL: `${providerUrl}/v1` },
+        models: { deterministic: { name: "Deterministic", tool_call: true } },
+      },
+    }
   }
   writeFileSync(TEST_OPENCODE_CONFIG, JSON.stringify(pluginConfig, null, 2))
 }
@@ -321,16 +358,14 @@ describe.skipIf(!E2E_ENABLED)("V1 headless real-host E2E", () => {
 
     // Verify the executable works in the same isolated environment as the tests.
     await runOpenCodeCommand(["--version"])
-    if (!E2E_MODEL) {
-      const models = await runOpenCodeCommand(["models", "opencode"])
-      E2E_MODEL = selectFreeOpenCodeModel(models.stdout)
-    }
+    if (!HOSTED_MODEL) await startLocalProvider()
 
     // Enable the plugin in the test opencode config
     writeTestOpencodeConfig()
   }, 120_000)
 
   afterAll(() => {
+    if (providerProcess?.exitCode === null) providerProcess.kill(9)
     if (TEST_SANDBOX_DIR) {
       rmSync(TEST_SANDBOX_DIR, { recursive: true, force: true })
     }
@@ -367,12 +402,11 @@ describe.skipIf(!E2E_ENABLED)("V1 headless real-host E2E", () => {
 
     try {
       const opencodeResponse = await runOpenCode(
-        `Use the write tool, not bash, to create ${writtenFileName} with exactly this content and no trailing newline: ${writtenContent}`
+        `Use the write tool, not bash, to create ${writtenFileName} with exactly this content and no trailing newline: ${writtenContent} E2E_WRITE_FILE=${writtenFileName} E2E_WRITE_CONTENT=${writtenContent}`
       )
       expect(await waitForFileContent(writtenFilePath, writtenContent)).toBe(writtenContent)
       expect(await waitForFileContent(hookProofFilePath, hookProofContent)).toBe(hookProofContent)
-      const logContent = await waitForLogMatch(content => content.includes(injectedMarker))
-      expect(logContent).toContain(injectedMarker)
+      expect(await waitForModelContext(injectedMarker)).toContain(injectedMarker)
       expect(opencodeResponse).not.toContain(toastMarker)
     } finally {
       for (const filePath of [writtenFilePath, hookProofFilePath]) {
@@ -390,7 +424,7 @@ describe.skipIf(!E2E_ENABLED)("V1 headless real-host E2E", () => {
     const rootOnlyFilePath = join(TEST_CONFIG_DIR, rootOnlyFileName)
     const allSessionsFilePath = join(TEST_CONFIG_DIR, allSessionsFileName)
     const runSubagent = () => runOpenCode(
-      "Use the task tool to invoke the e2e-worker subagent. Ask it to reply exactly WORKER_DONE, then reply exactly PARENT_DONE."
+      "Use the task tool to invoke the e2e-worker subagent. Ask it to reply exactly WORKER_DONE, then reply exactly PARENT_DONE. V2_E2E_SUBAGENT_ROOT"
     )
 
     writeTestAgent("e2e-worker", `---
@@ -416,12 +450,16 @@ Reply exactly WORKER_DONE.
       await runSubagent()
       expect(await waitForMinimumLineCount(rootOnlyFilePath, 1)).toBe(1)
 
-      const logContent = getRecentLogContent()
-      const childCreation = logContent
-        .split("\n")
-        .find(line => line.includes("message=created") && line.includes("agent=e2e-worker"))
-      expect(childCreation).toBeDefined()
-      expect(childCreation).not.toContain("parentID=undefined")
+      if (HOSTED_MODEL) {
+        const childCreation = (await waitForLogMatch(content => content.includes("agent=e2e-worker")))
+          .split("\n")
+          .find(line => line.includes("message=created") && line.includes("agent=e2e-worker"))
+        expect(childCreation).toBeDefined()
+        expect(childCreation).not.toContain("parentID=undefined")
+      } else {
+        // The child session's own model request proves the subagent ran.
+        expect(await waitForModelContext("V2_E2E_SUBAGENT_CHILD")).toContain("V2_E2E_SUBAGENT_CHILD")
+      }
 
       writeTestConfig({
         session: [

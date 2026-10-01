@@ -27,12 +27,17 @@ const toolDetails = (tool: unknown): { name: string; schema: JsonObject } => {
   }
 }
 
-const chooseTool = (tools: unknown[], mode: "shell" | "subagent"): { name: string; schema: JsonObject } | undefined => {
-  const details = tools.map(toolDetails)
-  // OpenCode V2 names its shell tool `shell`; V1 names it `bash`.
-  const expectedNames = mode === "subagent" ? ["subagent"] : ["shell", "bash"]
-  return details.find(tool => expectedNames.includes(tool.name))
+type ToolMode = "shell" | "subagent" | "write"
+
+// OpenCode V2 names these tools `shell` and `subagent`; V1 names them `bash` and `task`.
+const toolNames: Record<ToolMode, string[]> = {
+  shell: ["shell", "bash"],
+  subagent: ["subagent", "task"],
+  write: ["write"],
 }
+
+const chooseTool = (tools: unknown[], mode: ToolMode): { name: string; schema: JsonObject } | undefined =>
+  tools.map(toolDetails).find(tool => toolNames[mode].includes(tool.name))
 
 const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`
 
@@ -42,6 +47,17 @@ const shellArguments = (schema: JsonObject, target: string): Record<string, unkn
   if ("command" in properties) args.command = `printf V2_MODEL_SHELL > ${shellQuote(target)}`
   if ("description" in properties) args.description = "Write the deterministic E2E marker"
   if ("timeout" in properties) args.timeout = 10_000
+  return args
+}
+
+const writeArguments = (schema: JsonObject, prompt: string): Record<string, unknown> => {
+  const properties = asObject(schema.properties)
+  const args: Record<string, unknown> = {}
+  const filePath = prompt.match(/E2E_WRITE_FILE=([^\s"\\]+)/)?.[1] ?? "e2e-write.txt"
+  const content = prompt.match(/E2E_WRITE_CONTENT=([^\s"\\]+)/)?.[1] ?? "E2E_WRITE"
+  if ("filePath" in properties) args.filePath = filePath
+  if ("path" in properties) args.path = filePath
+  if ("content" in properties) args.content = content
   return args
 }
 
@@ -101,8 +117,9 @@ const server = Bun.serve({
     const hasToolMessage = messages.some(message => asObject(message).role === "tool")
     const isSubagent = prompt.includes("V2_E2E_SUBAGENT_ROOT") && !hasToolMessage
     const isShell = prompt.includes("V2_E2E_SHELL") && !hasToolMessage
-    const mode = isSubagent ? "subagent" : isShell ? "shell" : "text"
-    const selected = mode === "subagent" || mode === "shell" ? chooseTool(tools, mode) : undefined
+    const isWrite = prompt.includes("E2E_WRITE_FILE=") && !hasToolMessage
+    const mode: ToolMode | "text" = isSubagent ? "subagent" : isShell ? "shell" : isWrite ? "write" : "text"
+    const selected = mode === "text" ? undefined : chooseTool(tools, mode)
     const target = prompt.match(/V2_E2E_SHELL_FILE=([^\s"\\]+)/)?.[1] ?? "v2-e2e-model.txt"
     const id = `e2e-call-${++callNumber}`
     const toolCall = selected && mode !== "text"
@@ -111,7 +128,13 @@ const server = Bun.serve({
           type: "function",
           function: {
             name: selected.name,
-            arguments: JSON.stringify(mode === "shell" ? shellArguments(selected.schema, target) : subagentArguments(selected.schema)),
+            arguments: JSON.stringify(
+              mode === "shell"
+                ? shellArguments(selected.schema, target)
+                : mode === "write"
+                  ? writeArguments(selected.schema, prompt)
+                  : subagentArguments(selected.schema),
+            ),
           },
         }
       : undefined
