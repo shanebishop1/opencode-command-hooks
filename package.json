@@ -60,7 +60,6 @@
   "dependencies": {
     "@opencode-ai/plugin": "^1.18.29",
     "@opencode-ai/sdk": "^1.18.29",
-    "@opencode/plugin": "2.0.12",
     "js-yaml": "^4.3.2",
     "jsonc-parser": "^3.3.1",
     "picomatch": "^4.0.3",
