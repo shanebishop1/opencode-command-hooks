@@ -14,6 +14,7 @@ describe("dual-host package artifact", () => {
     const manifest = await Bun.file("package.json").json() as {
       name: string
       exports: Record<string, unknown>
+      engines: Record<string, string>
     }
     const files = pack.files.map(file => file.path)
 
@@ -22,6 +23,8 @@ describe("dual-host package artifact", () => {
     for (const file of ["dist/entry.js", "dist/server.js", "index.js", "server.js"]) {
       expect(files).toContain(file)
     }
+    // An engines range would make older V1 hosts skip the plugin.
+    expect(manifest.engines.opencode).toBeUndefined()
 
     // V1 1.3.4+ and V2 both resolve `./server` first: V1 reads `server`, and
     // V2's schema requires a plain object with `setup`.
