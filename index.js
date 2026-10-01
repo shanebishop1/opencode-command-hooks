@@ -1,1 +1,1 @@
-export { default } from "./dist/v2.js"
+export { default } from "./dist/entry.js"

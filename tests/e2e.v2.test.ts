@@ -172,7 +172,7 @@ const pluginIsLoaded = async (): Promise<boolean | undefined> => {
   try {
     const response = await fetch(`${hostUrl}/api/plugin`, { headers: apiHeaders(), signal: AbortSignal.timeout(2_000) })
     if (!response.ok) return undefined
-    return (await response.text()).includes("opencode-command-hooks.v2")
+    return (await response.text()).includes("\"opencode-command-hooks\"")
   } catch {
     return undefined
   }
