@@ -29,8 +29,9 @@ const toolDetails = (tool: unknown): { name: string; schema: JsonObject } => {
 
 const chooseTool = (tools: unknown[], mode: "shell" | "subagent"): { name: string; schema: JsonObject } | undefined => {
   const details = tools.map(toolDetails)
-  const expectedName = mode === "subagent" ? "subagent" : "shell"
-  return details.find(tool => tool.name === expectedName)
+  // OpenCode V2 names its shell tool `shell`; V1 names it `bash`.
+  const expectedNames = mode === "subagent" ? ["subagent"] : ["shell", "bash"]
+  return details.find(tool => expectedNames.includes(tool.name))
 }
 
 const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`
