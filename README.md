@@ -29,7 +29,6 @@ hooks:
 
 - [Features](#features)
 - [Installation](#installation)
-- [OpenCode 2](#opencode-2)
 - [Configuration](#configuration)
 - [Examples](#examples)
 - [Template Placeholders](#template-placeholders)
@@ -203,43 +202,15 @@ is not placed in the environment.
 
 ## Installation
 
-Add to your `opencode.json` (OpenCode V2):
+Add to your `opencode.json`:
 
 ```jsonc
 {
-  "$schema": "https://opencode.ai/config.json",
-  "plugins": ["opencode-command-hooks"],
+  "plugin": ["opencode-command-hooks"],
 }
 ```
 
-For OpenCode V1, use `"plugin"` instead of `"plugins"`. Every OpenCode 1.x release is supported.
-
-## OpenCode 2
-
-The same `opencode-command-hooks` package supports OpenCode V1 and V2, and each host selects the right adapter automatically. OpenCode V2 and V1 1.3.4+ load the package's `./server` export, which carries both adapters; earlier V1 releases load the package root. Existing V1 configuration remains valid when upgrading hosts:
-
-```jsonc
-{
-  "plugin": ["opencode-command-hooks"]
-}
-```
-
-The V2 adapter targets stable `@opencode/cli@2.0.12` and uses the matching `@opencode/plugin@2.0.12` API. OpenCode 2 normalizes the singular V1 `plugin` setting to `plugins`; use `plugins` for new V2 configurations. Verify the `opencode-command-hooks` plugin ID with `opencode api get /api/plugin` after the host finishes activating plugins.
-
-The V2 adapter supports tool before/after hooks, `toolArgs` filters, agent frontmatter hooks, session start/idle hooks, explicit project-directory execution, and injection through synthetic context. Existing V1 config vocabulary remains valid: the V2 `subagent` tool and its `agent` argument are normalized to `task` and `subagent_type` for matching.
-
-V2 server plugins cannot currently show TUI toasts. When a matched hook requests one, the adapter emits one diagnostic and continues command execution and injection. Synthetic injections use `resume: false` so an idle hook does not create an unsolicited model turn.
-
-V2 has two complementary real-host test modes. Both build and install the npm-packed plugin into an isolated project with the pinned stable CLI:
-
-| Command | Model | Coverage |
-| --- | --- | --- |
-| `npm run test:v2:e2e` | Deterministic local responses | Tool/session hooks, model-visible injection, real subagent frontmatter hooks, root/child idle filtering, and cleanup across plugin removal/reload |
-| `npm run test:v2:e2e:live` | Hosted OpenCode free model | Real model-selected shell execution, before/after and session hooks, and persisted synthetic injection |
-
-The deterministic suite needs npm registry access for installation but no model credentials or hosted model. The live suite waits for the host's model catalog and selects an available, tool-capable, zero-cost `opencode/*-free` model. Set `OPENCODE2_E2E_MODEL=opencode/<model>-free` to choose another advertised free model; paid models are rejected, and user credentials/config are not inherited. Live failures remain failures rather than silently skipping or falling back to a stub. Both modes run in PR and release CI, with the live PR check reported separately so provider outages are distinguishable from deterministic regressions.
-
-Use `OPENCODE2_CLI_VERSION=<version>` with either E2E command to check another V2 host release. Update the CLI pin and matching plugin dependency together when advancing the supported version. `npm run test:hosts:e2e` publishes the packed plugin to a local registry and installs it by package name in V1 1.3.3, V1 1.3.4, and the latest V1 and V2 hosts, which is the only path that exercises the entrypoint each host selects. `npm run test:v2` runs adapter/package tests without a host; ordinary `npm test` skips the opt-in host suites. The separate V1 suite (`npm run test:v1:e2e`) drives the host with the same deterministic local provider; set `OPENCODE_E2E_MODEL` to run it against a hosted model instead.
+This works unchanged on OpenCode 1.x and OpenCode 2 (which also accepts `"plugins"`). On OpenCode 2, hooks cannot show toasts yet; everything else works the same.
 
 ## Configuration
 
